@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export const BRIDGE_URL = 'http://127.0.0.1:8787'
 
@@ -10,7 +10,7 @@ export interface AccountMeta { id: string; label: string; type: AccountType; tra
 
 export interface BridgeStatus {
   accounts: AccountMeta[]
-  telegram: { connected: boolean; error: string; channels: string[] }
+  telegram: { connected: boolean; error: string; channels: string[]; postTargets?: string[] }
 }
 
 export interface LivePosition {
@@ -83,4 +83,29 @@ export function useBridge(): BridgeState {
     return () => clearInterval(id)
   }, [poll])
   return { ...state, refresh: poll }
+}
+
+/** Tin từ các kênh Telegram, kéo mỗi 5 giây; chỉ hỏi những tin sau tin cuối đã có. Dùng chung cho Tín hiệu và Tin tức. */
+export function useTelegramMessages(enabled: boolean): TgMessage[] {
+  const [messages, setMessages] = useState<TgMessage[]>([])
+  const last = useRef(0)
+  useEffect(() => {
+    if (!enabled) return
+    let stop = false
+    const pull = async () => {
+      try {
+        const fresh = await bridgeGet<TgMessage[]>(`/telegram/messages?after=${last.current}`)
+        if (stop || !fresh.length) return
+        last.current = Math.max(...fresh.map((m) => m.date))
+        setMessages((old) => {
+          const seen = new Set(old.map((m) => m.channel + ':' + m.id))
+          return [...old, ...fresh.filter((m) => !seen.has(m.channel + ':' + m.id))]
+        })
+      } catch { /* bridge tạm mất, lần sau thử lại */ }
+    }
+    pull()
+    const id = setInterval(pull, 5000)
+    return () => { stop = true; clearInterval(id) }
+  }, [enabled])
+  return messages
 }

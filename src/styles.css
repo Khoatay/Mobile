@@ -194,3 +194,33 @@ tfoot td { border-top: 1px solid var(--axis); border-bottom: none; }
 .chip.trade { outline: 1px solid var(--accent); }
 .ticket-line { margin: 12px 0 8px; }
 td .led { display: inline-block; margin-right: 4px; }
+.brand small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.nav-group { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.nav-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 4px 10px; }
+.sidebar { overflow-y: auto; }
+input.check { width: auto; accent-color: var(--accent); }
+.inline.wrap { white-space: normal; align-items: flex-start; }
+textarea { font: inherit; color: var(--ink); background: var(--page); border: 1px solid var(--axis); border-radius: 6px; padding: 9px; width: 100%; resize: vertical; }
+.cal-day { margin-bottom: 12px; }
+.cal-date { font-weight: 600; margin: 10px 0 4px; text-transform: capitalize; }
+.cal-time { width: 64px; text-align: left; }
+.cal-ccy { width: 52px; }
+.cal-impact { width: 96px; color: var(--ink-2); }
+tr.past { opacity: 0.45; }
+.post { border-top: 1px solid var(--hair); padding: 10px 0; }
+.post header { display: flex; gap: 10px; align-items: baseline; margin-bottom: 4px; }
+.msg.wide { max-width: none; color: var(--ink); font-size: 13.5px; }
+.share { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 420px); gap: 16px; align-items: start; }
+@media (max-width: 1050px) { .share { grid-template-columns: minmax(0, 1fr); } }
+.banner { width: 100%; aspect-ratio: 1; border-radius: 10px; border: 1px solid var(--border); display: block; }
+.empty-banner { display: grid; place-items: center; color: var(--muted); background: var(--surface); }
+.banner-wrap { position: sticky; top: 24px; }
+.send-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hair); }
+.swatches { display: flex; gap: 8px; margin-top: 6px; }
+.swatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--surface); padding: 0; }
+.swatch.active { box-shadow: 0 0 0 2px var(--ink); }
+.guide { border-top: 1px solid var(--hair); padding: 10px 0; }
+.guide summary { cursor: pointer; font-weight: 600; }
+.guide p, .guide li { color: var(--ink-2); max-width: 78ch; }
+.video { width: 100%; max-width: 560px; aspect-ratio: 16 / 9; border: 0; border-radius: 8px; margin-top: 8px; display: block; }
+a { color: var(--accent); }

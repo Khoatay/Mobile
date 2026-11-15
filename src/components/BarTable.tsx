@@ -2,7 +2,7 @@ import type { Group } from '../lib/stats'
 import { pct, signed } from '../lib/format'
 
 /** Bảng kèm thanh lãi/lỗ quanh trục 0: thanh sang phải là lãi, sang trái là lỗ. */
-export default function BarTable({ title, rows, note }: { title: string; rows: Group[]; note?: string }) {
+export default function BarTable({ title, rows, note, simple, valueLabel = 'Lãi/lỗ ròng' }: { title: string; rows: Group[]; note?: string; simple?: boolean; valueLabel?: string }) {
   const max = Math.max(1, ...rows.map((r) => Math.abs(r.net)))
   const hasPos = rows.some((r) => r.net > 0)
   const hasNeg = rows.some((r) => r.net < 0)
@@ -17,11 +17,11 @@ export default function BarTable({ title, rows, note }: { title: string; rows: G
       ) : (
         <table className="bars">
           <thead>
-            <tr><th /><th aria-hidden /><th className="num">Lãi/lỗ ròng</th><th className="num">Lệnh</th><th className="num">Thắng</th></tr>
+            <tr><th /><th aria-hidden /><th className="num">{valueLabel}</th>{!simple && <><th className="num">Lệnh</th><th className="num">Thắng</th></>}</tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.key} title={`${r.key}: ${signed(r.net)} · ${r.n} lệnh · thắng ${pct(r.winRate)}`}>
+              <tr key={r.key} title={simple ? `${r.key}: ${signed(r.net)}` : `${r.key}: ${signed(r.net)} · ${r.n} lệnh · thắng ${pct(r.winRate)}`}>
                 <th scope="row">{r.key}</th>
                 <td className="bar-cell" aria-hidden>
                   <div className="bar-track" style={{ '--zero': `${zero}%` } as React.CSSProperties}>
@@ -34,8 +34,7 @@ export default function BarTable({ title, rows, note }: { title: string; rows: G
                   </div>
                 </td>
                 <td className="num strong">{signed(r.net)}</td>
-                <td className="num">{r.n}</td>
-                <td className="num">{pct(r.winRate, 0)}</td>
+                {!simple && <><td className="num">{r.n}</td><td className="num">{pct(r.winRate, 0)}</td></>}
               </tr>
             ))}
           </tbody>

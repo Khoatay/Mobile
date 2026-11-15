@@ -5,7 +5,9 @@ FX Desk bridge: chương trình nền chạy trên máy Windows có cài MT5.
   cài ở thư mục riêng (một bản MT5 chỉ đăng nhập được một tài khoản tại một thời điểm).
 - Mật khẩu view (investor) là đủ để xem. Muốn vào lệnh từ app thì tài khoản đó phải dùng mật khẩu
   giao dịch và bật "allow_trading": true; mặc định là tắt.
-- Nghe các kênh Telegram bạn chọn bằng tài khoản Telegram của bạn.
+- Nghe các kênh Telegram bạn chọn bằng tài khoản Telegram của bạn, và gửi bài (chữ kèm ảnh) lên
+  những nhóm bạn liệt kê trong "post_targets". Không gửi được tới nơi nào ngoài danh sách đó.
+- Lấy lịch kinh tế trong tuần.
 - Chỉ mở cổng trên 127.0.0.1 và chỉ trả lời trang web chạy trên chính máy này.
 
 Dùng:
@@ -15,6 +17,8 @@ Dùng:
     python bridge.py                       (chạy)
 """
 import asyncio
+import base64
+import io
 import json
 import multiprocessing as mp
 import sys
@@ -24,6 +28,7 @@ from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
 
 HERE = Path(__file__).resolve().parent
 CONFIG_PATH = HERE / "config.json"
@@ -348,6 +353,9 @@ class Telegram:
         self.lock = threading.Lock()
         self.messages = []
         self.channels = []
+        self.targets = {}
+        self.loop = None
+        self.tg = None
         self.connected = False
         self.error = "Chưa cấu hình Telegram"
 
@@ -366,9 +374,9 @@ class Telegram:
             self.messages.append({"channel": title, "id": msg.id, "date": int(msg.date.timestamp()), "text": text})
             del self.messages[:-5000]
 
-    async def resolve(self, client):
+    async def resolve(self, client, names):
         """Chấp nhận @username, link t.me, id số, hoặc đúng tên hiển thị của kênh."""
-        wanted = [str(c).strip() for c in self.cfg.get("channels", []) if str(c).strip()]
+        wanted = [str(c).strip() for c in names or [] if str(c).strip()]
         by_title = {}
         async for d in client.iter_dialogs():
             by_title[d.name.strip().lower()] = d.entity
@@ -392,8 +400,9 @@ class Telegram:
         if not await client.is_user_authorized():
             self.error = "Chưa đăng nhập Telegram. Chạy: python bridge.py login"
             return
-        entities = await self.resolve(client)
-        if not entities:
+        entities = await self.resolve(client, self.cfg.get("channels"))
+        targets = await self.resolve(client, self.cfg.get("post_targets"))
+        if not entities and not targets:
             self.error = "Không tìm thấy kênh nào trong config.json"
             return
         titles = {e.id: get_display_name(e) for e in entities}
@@ -402,16 +411,44 @@ class Telegram:
             async for m in client.iter_messages(e, limit=limit):
                 self.add(titles[e.id], m)
 
-        @client.on(events.NewMessage(chats=entities))
-        async def on_message(event):
-            chat = await event.get_chat()
-            self.add(titles.get(chat.id, get_display_name(chat)), event.message)
+        if entities:
+            @client.on(events.NewMessage(chats=entities))
+            async def on_message(event):
+                chat = await event.get_chat()
+                self.add(titles.get(chat.id, get_display_name(chat)), event.message)
 
         self.channels = list(titles.values())
+        self.targets = {get_display_name(e): e for e in targets}
+        self.loop, self.tg = asyncio.get_running_loop(), client
         self.connected, self.error = True, ""
         print(f"[telegram] Đang nghe {len(entities)} kênh: {', '.join(self.channels)}")
+        if self.targets:
+            print(f"[telegram] Được phép gửi bài tới: {', '.join(self.targets)}")
         await client.run_until_disconnected()
         self.connected, self.error = False, "Mất kết nối Telegram"
+
+    def send(self, target, text, image=None):
+        """Gửi bài tới một nhóm trong post_targets. Chú thích ảnh của Telegram tối đa 1024 ký tự."""
+        if not self.connected:
+            raise RuntimeError(self.error or "Telegram chưa kết nối")
+        if target not in self.targets:
+            raise ValueError(f"'{target}' không nằm trong post_targets của config.json")
+        entity, client = self.targets[target], self.tg
+
+        async def go():
+            if image:
+                photo = io.BytesIO(image)
+                photo.name = "fxdesk.png"
+                short = len(text) <= 1024
+                await client.send_file(entity, photo, caption=text if short else None)
+                if not short:
+                    await client.send_message(entity, text)
+            else:
+                await client.send_message(entity, text)
+
+        asyncio.run_coroutine_threadsafe(go(), self.loop).result(90)
+        print(f"[telegram] Đã gửi bài tới {target}")
+        return {"sent": True, "target": target}
 
     def start(self):
         if not self.enabled():
@@ -447,10 +484,49 @@ class Telegram:
             return sorted((m for m in self.messages if m["date"] > after), key=lambda m: m["date"])
 
 
+# ------------------------------------------------------------------- Lịch kinh tế
+
+class Calendar:
+    """Lịch kinh tế tuần này từ nguồn công khai của Forex Factory. Giữ lại 1 giờ vì nguồn giới hạn số lần gọi."""
+
+    URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.at = 0.0
+        self.events = []
+
+    def get(self):
+        with self.lock:
+            if self.events and time.time() - self.at < 3600:
+                return self.events
+            try:
+                with urlopen(Request(self.URL, headers={"User-Agent": "fxdesk-bridge"}), timeout=15) as r:
+                    raw = json.loads(r.read().decode("utf-8"))
+                self.events = [{
+                    "title": e.get("title", ""), "currency": e.get("country", ""), "date": e.get("date", ""),
+                    "impact": e.get("impact", ""), "forecast": e.get("forecast", ""), "previous": e.get("previous", ""),
+                } for e in raw]
+                self.at = time.time()
+            except Exception as e:
+                if not self.events:
+                    raise RuntimeError(f"Không tải được lịch kinh tế: {e}")
+            return self.events
+
+
 # ---------------------------------------------------------------------------- HTTP
 
 def make_handler(accounts, tg):
     by_id = {a.id: a for a in accounts}
+    calendar = Calendar()
+
+    def send_post(body):
+        image = str(body.get("image") or "")
+        data = base64.b64decode(image.split(",", 1)[-1]) if image else None
+        text = str(body.get("text") or "").strip()
+        if not text and not data:
+            raise ValueError("Bài gửi đang trống")
+        return tg.send(str(body["target"]), text, data)
 
     def pick(q):
         """Tài khoản theo ?account=...; không ghi thì lấy tài khoản đầu tiên (dùng cho nến và tỷ giá)."""
@@ -522,12 +598,13 @@ def make_handler(accounts, tg):
             url = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(url.query).items()}
             routes = {
-                "/status": lambda: {"accounts": parallel(lambda a: a.info()), "telegram": {"connected": tg.connected, "error": tg.error, "channels": tg.channels}},
+                "/status": lambda: {"accounts": parallel(lambda a: a.info()), "telegram": {"connected": tg.connected, "error": tg.error, "channels": tg.channels, "postTargets": list(tg.targets)}},
                 "/accounts": lambda: parallel(snapshot),
                 "/history": lambda: pick(q).call("history", int(q.get("days", 90))),
                 "/candles": lambda: pick(q).call("candles", q["symbol"], q.get("tf", "H1"), int(q.get("count", 300))),
                 "/prices": lambda: pick(q).call("prices", [s for s in q.get("symbols", "").split(",") if s]),
                 "/telegram/messages": lambda: tg.since(int(q.get("after", 0))),
+                "/calendar": calendar.get,
             }
             if url.path not in routes:
                 return self.send(404, {"error": "Không có đường dẫn này"})
@@ -538,12 +615,17 @@ def make_handler(accounts, tg):
             if not self.local_only() or self.headers.get("X-FXDesk") != "1":
                 return self.send(403, {"error": "Chỉ chấp nhận yêu cầu từ FX Desk trên chính máy này"})
             url = urlparse(self.path)
+            size = int(self.headers.get("Content-Length") or 0)
+            if size > 8_000_000:
+                return self.send(400, {"error": "Dữ liệu gửi lên quá lớn"})
             try:
-                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                body = json.loads(self.rfile.read(size) or b"{}")
             except ValueError:
                 return self.send(400, {"error": "Dữ liệu gửi lên không phải JSON"})
             if url.path == "/order":
                 self.answer(lambda: pick({"account": str(body["account"])}).call("order", body))
+            elif url.path == "/telegram/send":
+                self.answer(lambda: send_post(body))
             elif url.path == "/close":
                 self.answer(lambda: pick({"account": str(body["account"])}).call("close", int(body["ticket"])))
             else:

@@ -103,7 +103,7 @@ function OrderTicket({ accounts, trades, settings, onDone }: { accounts: LiveAcc
           </select>
         </Field>
         <Field label="Cặp tiền"><select value={symbol} onChange={(e) => { setSymbol(e.target.value); setSl(NaN); setTp(NaN); setLotInput(NaN) }}>{PAIRS.map((p) => <option key={p}>{p}</option>)}</select></Field>
-        <Field label="Chiều">
+        <Field group label="Chiều">
           <div className="seg">
             <button className={side === 'buy' ? 'active' : ''} aria-pressed={side === 'buy'} onClick={() => setSide('buy')}>Buy</button>
             <button className={side === 'sell' ? 'active' : ''} aria-pressed={side === 'sell'} onClick={() => setSide('sell')}>Sell</button>

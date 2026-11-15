@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { bridgeGet, type BridgeState, type Candle, type TgMessage } from '../lib/bridge'
 import { pct, signed } from '../lib/format'
 import {
@@ -19,38 +19,24 @@ const ADVICE: Record<Verdict, string> = {
 const TREND: Record<Trend, string> = { up: '↑ Tăng', down: '↓ Giảm', flat: '→ Đi ngang' }
 const fmtTime = (ms: number) => new Date(ms).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 
-export default function Signals({ bridge, settings }: { bridge: BridgeState; settings: Settings }) {
-  const [messages, setMessages] = useState<TgMessage[]>([])
+export default function Signals({ bridge, settings, messages: live }: { bridge: BridgeState; settings: Settings; messages: TgMessage[] }) {
+  const [demoList, setDemoList] = useState<TgMessage[]>([])
   const [demo, setDemo] = useState(false)
   const [hours, setHours] = useState(24)
   const [trends, setTrends] = useState<Record<string, Trend | null>>({})
   const [outcomes, setOutcomes] = useState<Map<string, { outcome: Outcome; r: number }>>(new Map())
   const [scoring, setScoring] = useState('')
   const [now, setNow] = useState(Date.now())
-  const lastDate = useRef(0)
   const tgOn = !!bridge.status?.telegram.connected
   const mt5On = bridge.accounts.length > 0
+  const messages = demo ? demoList : live
 
-  // Kéo tin mới mỗi 5 giây; chỉ hỏi những tin sau tin cuối đã có.
+  // Đồng hồ cho cửa sổ thời gian; tin mới về cũng làm màn hình tính lại.
   useEffect(() => {
-    if (!tgOn || demo) return
-    let stop = false
-    const pull = async () => {
-      try {
-        const fresh = await bridgeGet<TgMessage[]>(`/telegram/messages?after=${lastDate.current}`)
-        if (stop || !fresh.length) return
-        lastDate.current = Math.max(...fresh.map((m) => m.date))
-        setMessages((old) => {
-          const seen = new Set(old.map((m) => m.channel + ':' + m.id))
-          return [...old, ...fresh.filter((m) => !seen.has(m.channel + ':' + m.id))]
-        })
-      } catch { /* bridge tạm mất, lần sau thử lại */ }
-      setNow(Date.now())
-    }
-    pull()
-    const id = setInterval(pull, 5000)
-    return () => { stop = true; clearInterval(id) }
-  }, [tgOn, demo])
+    const id = setInterval(() => setNow(Date.now()), 15000)
+    return () => clearInterval(id)
+  }, [])
+  useEffect(() => setNow(Date.now()), [live.length])
 
   const signals = useMemo(() => messages.map(parseSignal).filter((s): s is Signal => s !== null).sort((a, b) => b.time - a.time), [messages])
   const active = useMemo(() => signals.filter((s) => now - s.time <= hours * 3_600_000), [signals, now, hours])
@@ -93,7 +79,7 @@ export default function Signals({ bridge, settings }: { bridge: BridgeState; set
     <>
       <h1>Tín hiệu Telegram</h1>
       {demo ? (
-        <p className="notice">Đang xem tin mẫu. <button className="ghost" onClick={() => { setDemo(false); setMessages([]); lastDate.current = 0 }}>Thoát tin mẫu</button></p>
+        <p className="notice">Đang xem tin mẫu. <button className="ghost" onClick={() => setDemo(false)}>Thoát tin mẫu</button></p>
       ) : tgOn ? (
         <p className="notice">✓ Đang nghe {bridge.status!.telegram.channels.length} kênh: {bridge.status!.telegram.channels.join(', ')}</p>
       ) : (
@@ -105,7 +91,7 @@ export default function Signals({ bridge, settings }: { bridge: BridgeState; set
             <li>Chạy <code>python bridge.py login</code>, nhập số điện thoại và mã xác nhận. Lệnh này in ra danh sách kênh bạn đang tham gia.</li>
             <li>Chép tên các kênh muốn theo dõi vào <code>channels</code>, rồi chạy lại <code>python bridge.py</code>.</li>
           </ol>
-          <button onClick={() => { setDemo(true); setNow(Date.now()); setMessages(demoMessages(Date.now())) }}>Xem thử với tin mẫu</button>
+          <button onClick={() => { setDemo(true); setNow(Date.now()); setDemoList(demoMessages(Date.now())) }}>Xem thử với tin mẫu</button>
         </section>
       )}
 
