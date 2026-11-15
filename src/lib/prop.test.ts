@@ -30,6 +30,12 @@ describe('evaluateProp', () => {
     expect(s.dailyRemaining).toBe(5000)
     expect(s.totalRemaining).toBe(7000)
   })
+  it('lãi/lỗ đang treo từ MT5 được tính vào cả hai giới hạn', () => {
+    const s = evaluateProp([mk(5, -3000), mk(9, -1000)], cfg, now, -1500)
+    expect(s.dailyUsed).toBe(2500)
+    expect(s.dailyRemaining).toBe(2500)
+    expect(s.totalRemaining).toBe(4500)
+  })
   it('vi phạm lỗ ngày', () => {
     const s = evaluateProp([mk(5, -3000), mk(5, -2000, 14)], cfg, now)
     expect(s.state).toBe('failed')

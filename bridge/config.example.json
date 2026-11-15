@@ -1,0 +1,15 @@
+{
+  "port": 8787,
+  "mt5": {
+    "login": 12345678,
+    "password": "MAT_KHAU_VIEW_INVESTOR",
+    "server": "TenServer-Demo",
+    "terminal_path": ""
+  },
+  "telegram": {
+    "api_id": 0,
+    "api_hash": "",
+    "channels": ["@ten_kenh_cong_khai", "Tên kênh đúng như hiện trong Telegram"],
+    "history_per_channel": 200
+  }
+}

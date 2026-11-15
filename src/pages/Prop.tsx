@@ -3,6 +3,7 @@ import { Field, Num, Tile } from '../components/Field'
 import { money, signed } from '../lib/format'
 import { DEFAULT_PROP, evaluateProp, PRESETS, type PropConfig } from '../lib/prop'
 import { usePersistent } from '../lib/store'
+import type { LiveAccount } from '../lib/bridge'
 import type { Settings, Trade } from '../lib/types'
 
 function Meter({ label, used, limit, kind, detail }: { label: string; used: number; limit: number; kind: 'loss' | 'gain'; detail: string }) {
@@ -29,12 +30,14 @@ const STATE = {
   active: { text: '● Đang trong giới hạn', cls: 'state' },
 }
 
-export default function Prop({ trades, settings }: { trades: Trade[]; settings: Settings }) {
+export default function Prop({ trades, settings, account }: { trades: Trade[]; settings: Settings; account: LiveAccount | null }) {
   const [cfg, setCfg] = usePersistent<PropConfig>('fx.prop', DEFAULT_PROP)
   const set = (p: Partial<PropConfig>) => setCfg({ ...cfg, ...p, preset: 'preset' in p ? p.preset! : 'custom' })
   const ccy = settings.accountCcy
   const nowServer = Date.now() + settings.serverOffset * 3_600_000
-  const s = useMemo(() => evaluateProp(trades, cfg, nowServer), [trades, cfg, Math.floor(nowServer / 60000)])
+  const floating = account?.profit ?? 0
+  const s = useMemo(() => evaluateProp(trades, cfg, nowServer, floating), [trades, cfg, Math.floor(nowServer / 60000), floating])
+  const drift = account ? account.balance - s.balance : 0
 
   const riskPerTrade = (s.balance * settings.riskPct) / 100
   const lossesLeft = riskPerTrade > 0 && Number.isFinite(s.room) ? Math.floor(s.room / riskPerTrade + 1e-9) : null
@@ -42,10 +45,17 @@ export default function Prop({ trades, settings }: { trades: Trade[]; settings: 
   return (
     <>
       <h1>Theo dõi luật quỹ</h1>
-      <p className="warn">
-        ⚠ Chỉ tính trên lệnh đã đóng trong Nhật ký. Quỹ tính cả lãi/lỗ đang treo (equity), nên con số ở đây có thể lạc quan hơn thực tế khi bạn còn lệnh mở.
-        Thông số mẫu lấy từ các trang đánh giá bên thứ ba, hãy đối chiếu với điều khoản tài khoản của bạn và sửa lại nếu khác.
-      </p>
+      {account ? (
+        <p className="notice">
+          ✓ Đang đọc trực tiếp tài khoản {account.login}: lãi/lỗ đang treo {signed(floating)} {ccy} đã được tính vào giới hạn.
+          {Math.abs(drift) > 1 && ` ⚠ Số dư trên MT5 (${money(account.balance)}) lệch ${signed(drift)} so với Nhật ký; hãy đồng bộ lịch sử ở trang Tài khoản và kiểm tra vốn ban đầu, ngày bắt đầu.`}
+        </p>
+      ) : (
+        <p className="warn">
+          ⚠ Chưa kết nối MT5, nên chỉ tính trên lệnh đã đóng trong Nhật ký. Quỹ tính cả lãi/lỗ đang treo (equity), con số ở đây có thể lạc quan hơn thực tế khi bạn còn lệnh mở.
+        </p>
+      )}
+      <p className="muted small">Thông số mẫu lấy từ các trang đánh giá bên thứ ba, hãy đối chiếu với điều khoản tài khoản của bạn và sửa lại nếu khác.</p>
 
       <section className="card">
         <div className="prop-form">

@@ -77,8 +77,9 @@ export const dayKey = (ms: number) => new Date(ms).toISOString().slice(0, 10)
 /**
  * Đánh giá theo LỆNH ĐÃ ĐÓNG, gom theo ngày máy chủ. Không thấy lãi/lỗ đang treo trong ngày,
  * nên có thể bỏ sót vi phạm xảy ra giữa phiên rồi hồi lại. `nowServer` là giờ máy chủ hiện tại.
+ * `floating` là lãi/lỗ đang treo đọc trực tiếp từ MT5 (nếu có), được cộng vào lỗ hôm nay và lỗ tổng.
  */
-export function evaluateProp(trades: Trade[], cfg: PropConfig, nowServer: number): PropStatus {
+export function evaluateProp(trades: Trade[], cfg: PropConfig, nowServer: number, floating = 0): PropStatus {
   const size = cfg.accountSize
   const from = cfg.startDate ? Date.parse(cfg.startDate + 'T00:00:00Z') : -Infinity
   const used = trades.filter((t) => t.closeTime >= from).sort((a, b) => a.closeTime - b.closeTime)
@@ -120,11 +121,11 @@ export function evaluateProp(trades: Trade[], cfg: PropConfig, nowServer: number
   const todayRow = days.find((d) => d.date === today)
   const todayNet = todayRow?.net ?? 0
   const dailyLimit = limitFor(todayRow?.startBalance ?? balance)
-  const dailyUsed = Math.max(0, -todayNet)
+  const dailyUsed = Math.max(0, -(todayNet + floating))
   const dailyRemaining = dailyLimit > 0 ? Math.max(0, dailyLimit - dailyUsed) : Infinity
   // Trong ngày, sàn trailing vẫn theo đỉnh cuối ngày hôm trước.
   const floor = floorFor(todayRow ? Math.max(size, ...days.filter((d) => d.date < today).map((d) => d.endBalance)) : peak)
-  const totalRemaining = maxLossLimit > 0 ? Math.max(0, balance - floor) : Infinity
+  const totalRemaining = maxLossLimit > 0 ? Math.max(0, balance + floating - floor) : Infinity
   const pnl = balance - size
   const target = (size * cfg.targetPct) / 100
   const tradingDays = openDays.size

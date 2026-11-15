@@ -2,3 +2,8 @@ node_modules
 dist
 *.local
 .DS_Store
+
+# Bridge: thông tin đăng nhập và phiên Telegram không được đưa lên git
+bridge/config.json
+bridge/*.session*
+__pycache__
