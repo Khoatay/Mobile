@@ -4,10 +4,11 @@ import type { Trade } from './types'
 
 /**
  * Ghép deal thô thành lệnh đã đóng, theo positionId.
- * id dùng chung dạng "mt5:<position>" với file báo cáo HTML, nên hai nguồn không tạo lệnh trùng.
+ * id dùng chung dạng "mt5:<tài khoản>:<position>" với file báo cáo HTML, nên hai nguồn không tạo lệnh trùng,
+ * và hai tài khoản ở hai broker không đè lên nhau khi trùng số position.
  * SL/TP lấy từ lệnh mở vị thế, tức mức đặt ban đầu.
  */
-export function dealsToTrades(deals: Mt5Deal[], orders: Mt5Order[]): Trade[] {
+export function dealsToTrades(deals: Mt5Deal[], orders: Mt5Order[], account?: string): Trade[] {
   const groups = new Map<number, Mt5Deal[]>()
   for (const d of deals) {
     if ((d.type !== 0 && d.type !== 1) || !d.positionId) continue
@@ -34,7 +35,7 @@ export function dealsToTrades(deals: Mt5Deal[], orders: Mt5Order[]): Trade[] {
     const sum = (f: (d: Mt5Deal) => number) => g.reduce((s, d) => s + f(d), 0)
     const order = firstOrder.get(pos)
     out.push({
-      id: `mt5:${pos}`,
+      id: account ? `mt5:${account}:${pos}` : `mt5:${pos}`,
       ticket: String(pos),
       symbol: normalizeSymbol(ins[0].symbol),
       side: ins[0].type === 0 ? 'buy' : 'sell',
@@ -49,6 +50,7 @@ export function dealsToTrades(deals: Mt5Deal[], orders: Mt5Order[]): Trade[] {
       swap: Math.round(sum((d) => d.swap) * 100) / 100,
       profit: Math.round(sum((d) => d.profit) * 100) / 100,
       source: 'mt5',
+      ...(account ? { account } : {}),
     })
   }
   return out.sort((a, b) => a.closeTime - b.closeTime)

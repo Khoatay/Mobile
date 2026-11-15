@@ -97,6 +97,10 @@ describe('parseReport', () => {
     expect(a.openTime).toBe(Date.UTC(2026, 0, 5, 9, 15))
     expect(b).toMatchObject({ symbol: 'XAUUSD', side: 'sell', sl: 0, profit: -1500, swap: -3.2 })
   })
+  it('MT5: lấy số tài khoản từ đầu báo cáo, id trùng với lệnh đồng bộ qua bridge', () => {
+    const withAcc = MT5.replace('<table>', '<table><tr><th colspan="4">Account:</th><th colspan="10"><b>5550001 (USD, Demo-Server, real, Hedge)</b></th></tr>')
+    expect(parseReport(withAcc).trades[0]).toMatchObject({ id: 'mt5:5550001:1001', account: '5550001' })
+  })
   it('MT5 mã hoá UTF-16LE có BOM', () => {
     const bytes = new Uint8Array(2 + MT5.length * 2)
     bytes.set([0xff, 0xfe])

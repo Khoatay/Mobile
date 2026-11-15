@@ -114,13 +114,27 @@ function mt4Row(c: string[]): Raw | null {
   }
 }
 
+/** Báo cáo MT5 có dòng "Account: 12345678 (USD, Server, ...)". */
+function reportAccount(rows: string[][]): string | undefined {
+  for (const r of rows.slice(0, 15)) {
+    const at = r.findIndex((c) => /^account:?$/i.test(c))
+    const m = at >= 0 ? r[at + 1]?.match(/^\d{3,}/) : null
+    if (m) return m[0]
+  }
+  return undefined
+}
+
 function parseHtml(text: string): ParseResult {
   const rows = htmlRows(text)
   const warnings: string[] = []
+  const account = reportAccount(rows)
   for (const [fmt, fn] of [['mt5', mt5Row], ['mt4', mt4Row]] as const) {
     const raws = rows.map(fn).filter((r): r is Raw => r !== null)
     if (raws.length === 0) continue
-    const trades = raws.map((r) => toTrade(r, fmt)).filter((t): t is Trade => t !== null)
+    const trades = raws
+      .map((r) => toTrade(r, fmt))
+      .filter((t): t is Trade => t !== null)
+      .map((t) => (fmt === 'mt5' && account ? { ...t, id: `mt5:${account}:${t.ticket}`, account } : t))
     if (trades.length < raws.length) warnings.push(`Bỏ qua ${raws.length - trades.length} dòng không đọc được số liệu.`)
     return { trades, format: fmt, warnings }
   }

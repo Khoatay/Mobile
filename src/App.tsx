@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useBridge } from './lib/bridge'
 import { useSettings, useTrades } from './lib/store'
 import Calculator from './pages/Calculator'
@@ -23,6 +23,13 @@ export default function App() {
   const [settings, patchSettings] = useSettings()
   const [trades, setTrades] = useTrades()
   const bridge = useBridge()
+  // Tên hiển thị cho từng tài khoản: nhãn đặt trong bridge nếu có, không thì là số tài khoản.
+  const labels = useMemo(() => {
+    const out: Record<string, string> = {}
+    for (const t of trades) if (t.account) out[t.account] = t.account
+    for (const m of bridge.metas) out[m.id] = m.label
+    return out
+  }, [trades, bridge.metas])
 
   return (
     <div className="app">
@@ -37,15 +44,16 @@ export default function App() {
           ))}
         </nav>
         <p className="side-note bridge-state">
-          <span className={bridge.account ? 'led on' : 'led'} /> {bridge.account ? 'MT5 đã kết nối' : bridge.online ? 'Bridge chạy, MT5 chưa nối' : 'Bridge chưa chạy'}
+          <span className={bridge.accounts.length ? 'led on' : 'led'} />{' '}
+          {!bridge.online ? 'Bridge chưa chạy' : `${bridge.accounts.length}/${bridge.metas.length} tài khoản MT5 đã nối`}
         </p>
         <p className="side-note plain">Dữ liệu chỉ lưu trên trình duyệt của máy này.</p>
       </aside>
       <main className="main">
         {tab === 'calc' && <Calculator settings={settings} patch={patchSettings} />}
-        {tab === 'journal' && <Journal trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} />}
-        {tab === 'stats' && <Dashboard trades={trades} settings={settings} goJournal={() => setTab('journal')} />}
-        {tab === 'prop' && <Prop trades={trades} settings={settings} account={bridge.account} />}
+        {tab === 'journal' && <Journal trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} labels={labels} />}
+        {tab === 'stats' && <Dashboard trades={trades} settings={settings} labels={labels} goJournal={() => setTab('journal')} />}
+        {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} labels={labels} />}
         {tab === 'account' && <Account bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} />}
         {tab === 'signals' && <Signals bridge={bridge} settings={settings} />}
       </main>

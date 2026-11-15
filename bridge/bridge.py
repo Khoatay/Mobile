@@ -1,7 +1,10 @@
 """
 FX Desk bridge: chương trình nền chạy trên máy Windows có cài MT5.
 
-- Đọc tài khoản MT5 bằng mật khẩu view (investor): chỉ đọc, không đặt lệnh.
+- Đọc nhiều tài khoản MT5 cùng lúc. Mỗi tài khoản chạy trong một tiến trình riêng, nối với một bản MT5
+  cài ở thư mục riêng (một bản MT5 chỉ đăng nhập được một tài khoản tại một thời điểm).
+- Mật khẩu view (investor) là đủ để xem. Muốn vào lệnh từ app thì tài khoản đó phải dùng mật khẩu
+  giao dịch và bật "allow_trading": true; mặc định là tắt.
 - Nghe các kênh Telegram bạn chọn bằng tài khoản Telegram của bạn.
 - Chỉ mở cổng trên 127.0.0.1 và chỉ trả lời trang web chạy trên chính máy này.
 
@@ -13,6 +16,7 @@ Dùng:
 """
 import asyncio
 import json
+import multiprocessing as mp
 import sys
 import threading
 import time
@@ -59,6 +63,8 @@ class Mt5:
                 self.error = "Chưa điền mt5.login trong config.json"
                 return False
             kwargs = dict(login=int(self.cfg["login"]), password=str(self.cfg.get("password", "")), server=str(self.cfg.get("server", "")))
+            if self.cfg.get("portable"):
+                kwargs["portable"] = True
             path = self.cfg.get("terminal_path")
             ok = mt5.initialize(path, **kwargs) if path else mt5.initialize(**kwargs)
             self.connected = bool(ok)
@@ -166,6 +172,170 @@ class Mt5:
                 if tick is not None and tick.bid > 0:
                     out[s] = {"bid": tick.bid, "ask": tick.ask, "time": tick.time}
             return out
+
+
+    # ------------------------------------------------------------- vào / đóng lệnh
+
+    def _tradable(self):
+        if not self.cfg.get("allow_trading"):
+            raise ValueError('Tài khoản này chưa bật "allow_trading" trong config.json')
+        if not self.ensure():
+            raise RuntimeError(self.error)
+
+    def _filling(self, info):
+        mt5 = self.mt5
+        mode = int(getattr(info, "filling_mode", 0))
+        return mt5.ORDER_FILLING_FOK if mode & 1 else mt5.ORDER_FILLING_IOC if mode & 2 else mt5.ORDER_FILLING_RETURN
+
+    def _send(self, request):
+        """Luôn hỏi MT5 kiểm tra trước (order_check) rồi mới gửi thật."""
+        mt5 = self.mt5
+        check = mt5.order_check(request)
+        if check is None or check.retcode not in (0, mt5.TRADE_RETCODE_DONE):
+            raise RuntimeError(f"MT5 không chấp nhận lệnh: {check.comment if check else mt5.last_error()}")
+        result = mt5.order_send(request)
+        if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+            raise RuntimeError(f"Lệnh không khớp: {(str(result.retcode) + ' ' + result.comment) if result else mt5.last_error()}")
+        print(f"[lệnh] tài khoản {self.cfg.get('login')}: {request['symbol']} {request['volume']} lot, deal {result.deal}, giá {result.price}")
+        return {"order": result.order, "deal": result.deal, "price": result.price, "volume": result.volume}
+
+    def order(self, p):
+        """Lệnh thị trường. Bắt buộc có stop loss đúng phía, khối lượng không vượt max_lot của tài khoản."""
+        with self.lock:
+            self._tradable()
+            mt5 = self.mt5
+            side = p.get("side")
+            if side not in ("buy", "sell"):
+                raise ValueError("side phải là buy hoặc sell")
+            volume, sl, tp = float(p.get("volume") or 0), float(p.get("sl") or 0), float(p.get("tp") or 0)
+            max_lot = float(self.cfg.get("max_lot", 1.0))
+            if not 0 < volume <= max_lot:
+                raise ValueError(f"Khối lượng phải lớn hơn 0 và không quá max_lot = {max_lot}")
+            if sl <= 0:
+                raise ValueError("Bắt buộc phải có stop loss")
+            name = self.resolve(str(p.get("symbol", "")))
+            if not name:
+                raise ValueError(f"Broker không có mã {p.get('symbol')}")
+            info, tick = mt5.symbol_info(name), mt5.symbol_info_tick(name)
+            if info is None or tick is None or tick.ask <= 0:
+                raise RuntimeError(f"Không có giá cho {name}")
+            buy = side == "buy"
+            price = tick.ask if buy else tick.bid
+            if (sl >= price) if buy else (sl <= price):
+                raise ValueError(f"Stop loss {sl} nằm sai phía so với giá {price}")
+            if tp and ((tp <= price) if buy else (tp >= price)):
+                raise ValueError(f"Take profit {tp} nằm sai phía so với giá {price}")
+            step = info.volume_step or 0.01
+            volume = round(int(volume / step + 1e-9) * step, 8)
+            if volume < info.volume_min:
+                raise ValueError(f"Khối lượng nhỏ hơn mức tối thiểu {info.volume_min} của {name}")
+            return self._send({
+                "action": mt5.TRADE_ACTION_DEAL, "symbol": name, "volume": volume,
+                "type": mt5.ORDER_TYPE_BUY if buy else mt5.ORDER_TYPE_SELL, "price": price,
+                "sl": sl, "tp": tp, "deviation": 20, "magic": 20261115, "comment": "FX Desk",
+                "type_time": mt5.ORDER_TIME_GTC, "type_filling": self._filling(info),
+            })
+
+    def close(self, ticket):
+        with self.lock:
+            self._tradable()
+            mt5 = self.mt5
+            found = mt5.positions_get(ticket=int(ticket)) or ()
+            if not found:
+                raise ValueError(f"Không thấy lệnh đang mở số {ticket}")
+            pos = found[0]
+            info, tick = mt5.symbol_info(pos.symbol), mt5.symbol_info_tick(pos.symbol)
+            if info is None or tick is None:
+                raise RuntimeError(f"Không có giá cho {pos.symbol}")
+            was_buy = pos.type == 0
+            return self._send({
+                "action": mt5.TRADE_ACTION_DEAL, "symbol": pos.symbol, "volume": pos.volume, "position": pos.ticket,
+                "type": mt5.ORDER_TYPE_SELL if was_buy else mt5.ORDER_TYPE_BUY, "price": tick.bid if was_buy else tick.ask,
+                "deviation": 20, "magic": 20261115, "comment": "FX Desk close",
+                "type_time": mt5.ORDER_TIME_GTC, "type_filling": self._filling(info),
+            })
+
+
+def worker_main(cfg, conn):
+    """Tiến trình con: giữ một kết nối MT5 và làm lần lượt từng yêu cầu gửi qua ống."""
+    m = Mt5(cfg)
+    m.connect()
+    while True:
+        try:
+            method, args = conn.recv()
+        except (EOFError, KeyboardInterrupt):
+            return
+        try:
+            conn.send(("ok", getattr(m, method)(*args)))
+        except (KeyError, ValueError) as e:
+            conn.send(("bad", str(e)))
+        except Exception as e:
+            conn.send(("err", str(e)))
+
+
+class Account:
+    """Một tài khoản MT5 = một tiến trình con. Tiến trình chính chỉ chuyển yêu cầu."""
+
+    TYPES = ("real", "prop", "copy", "demo")
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.id = str(cfg.get("id") or cfg.get("login"))
+        self.label = str(cfg.get("label") or self.id)
+        self.type = cfg.get("type") if cfg.get("type") in self.TYPES else "real"
+        self.tradable = bool(cfg.get("allow_trading"))
+        self.lock = threading.Lock()
+        self.last = {"connected": False, "error": "Đang kết nối…"}
+        self.start()
+
+    def start(self):
+        self.conn, child = mp.Pipe()
+        self.proc = mp.Process(target=worker_main, args=(self.cfg, child), daemon=True)
+        self.proc.start()
+
+    def _call(self, method, args, timeout):
+        if not self.proc.is_alive():
+            self.start()
+        self.conn.send((method, args))
+        if not self.conn.poll(timeout):
+            self.proc.kill()
+            raise RuntimeError("MT5 không trả lời, đang khởi động lại kết nối")
+        kind, value = self.conn.recv()
+        if kind == "bad":
+            raise ValueError(value)
+        if kind == "err":
+            raise RuntimeError(value)
+        return value
+
+    def call(self, method, *args, timeout=60):
+        with self.lock:
+            return self._call(method, args, timeout)
+
+    def info(self):
+        """Không chờ nếu tài khoản đang bận (ví dụ MT5 còn đang mở): trả trạng thái gần nhất."""
+        if self.lock.acquire(timeout=0.3):
+            try:
+                self.last = self._call("status", (), 20)
+            except Exception as e:
+                self.last = {"connected": False, "error": str(e)}
+            finally:
+                self.lock.release()
+        return {"id": self.id, "label": self.label, "type": self.type, "tradable": self.tradable, **self.last}
+
+
+def load_accounts(cfg):
+    raw = cfg.get("accounts") or ([cfg["mt5"]] if cfg.get("mt5", {}).get("login") else [])
+    raw = [a for a in raw if a.get("login")]
+    paths = [str(a.get("terminal_path") or "").lower() for a in raw]
+    if len(set(paths)) < len(paths):
+        sys.exit(
+            "Mỗi tài khoản cần một bản MT5 ở thư mục riêng: hãy điền terminal_path khác nhau cho từng tài khoản.\n"
+            "Cách làm: cài MT5 thêm lần nữa vào thư mục khác, hoặc sao chép cả thư mục MT5 rồi đặt \"portable\": true."
+        )
+    ids = [str(a.get("id") or a.get("login")) for a in raw]
+    if len(set(ids)) < len(ids):
+        sys.exit("Có hai tài khoản trùng id/login trong config.json.")
+    return [Account(a) for a in raw]
 
 
 # ------------------------------------------------------------------------ Telegram
@@ -279,7 +449,36 @@ class Telegram:
 
 # ---------------------------------------------------------------------------- HTTP
 
-def make_handler(mt5, tg):
+def make_handler(accounts, tg):
+    by_id = {a.id: a for a in accounts}
+
+    def pick(q):
+        """Tài khoản theo ?account=...; không ghi thì lấy tài khoản đầu tiên (dùng cho nến và tỷ giá)."""
+        if q.get("account"):
+            if q["account"] not in by_id:
+                raise ValueError(f"Không có tài khoản {q['account']}")
+            return by_id[q["account"]]
+        if not accounts:
+            raise RuntimeError("Chưa khai báo tài khoản MT5 nào trong config.json")
+        return accounts[0]
+
+    def snapshot(a):
+        try:
+            return {"id": a.id, "label": a.label, "type": a.type, "tradable": a.tradable, "connected": True, "error": "", **a.call("account")}
+        except Exception as e:
+            return {"id": a.id, "label": a.label, "type": a.type, "tradable": a.tradable, "connected": False, "error": str(e)}
+
+    def parallel(fn):
+        out = [None] * len(accounts)
+        def run(i):
+            out[i] = fn(accounts[i])
+        threads = [threading.Thread(target=run, args=(i,)) for i in range(len(accounts))]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        return out
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
@@ -299,35 +498,56 @@ def make_handler(mt5, tg):
             origin = self.headers.get("Origin")
             if origin and urlparse(origin).hostname in LOCAL_HOSTS:
                 self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, X-FXDesk")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                 self.send_header("Vary", "Origin")
             self.end_headers()
             self.wfile.write(data)
+
+        def answer(self, fn):
+            try:
+                body = fn()
+            except (KeyError, ValueError) as e:
+                return self.send(400, {"error": str(e)})
+            except Exception as e:
+                return self.send(503, {"error": str(e)})
+            self.send(200, body)
+
+        def do_OPTIONS(self):
+            self.send(200 if self.local_only() else 403, {})
 
         def do_GET(self):
             if not self.local_only():
                 return self.send(403, {"error": "Chỉ chấp nhận yêu cầu từ chính máy này"})
             url = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(url.query).items()}
+            routes = {
+                "/status": lambda: {"accounts": parallel(lambda a: a.info()), "telegram": {"connected": tg.connected, "error": tg.error, "channels": tg.channels}},
+                "/accounts": lambda: parallel(snapshot),
+                "/history": lambda: pick(q).call("history", int(q.get("days", 90))),
+                "/candles": lambda: pick(q).call("candles", q["symbol"], q.get("tf", "H1"), int(q.get("count", 300))),
+                "/prices": lambda: pick(q).call("prices", [s for s in q.get("symbols", "").split(",") if s]),
+                "/telegram/messages": lambda: tg.since(int(q.get("after", 0))),
+            }
+            if url.path not in routes:
+                return self.send(404, {"error": "Không có đường dẫn này"})
+            self.answer(routes[url.path])
+
+        def do_POST(self):
+            # Tiêu đề riêng buộc trình duyệt hỏi trước (preflight), nên form trên trang web lạ không gửi lệnh được.
+            if not self.local_only() or self.headers.get("X-FXDesk") != "1":
+                return self.send(403, {"error": "Chỉ chấp nhận yêu cầu từ FX Desk trên chính máy này"})
+            url = urlparse(self.path)
             try:
-                if url.path == "/status":
-                    body = {"mt5": mt5.status(), "telegram": {"connected": tg.connected, "error": tg.error, "channels": tg.channels}}
-                elif url.path == "/account":
-                    body = mt5.account()
-                elif url.path == "/history":
-                    body = mt5.history(int(q.get("days", 90)))
-                elif url.path == "/candles":
-                    body = mt5.candles(q["symbol"], q.get("tf", "H1"), int(q.get("count", 300)))
-                elif url.path == "/prices":
-                    body = mt5.prices([s for s in q.get("symbols", "").split(",") if s])
-                elif url.path == "/telegram/messages":
-                    body = tg.since(int(q.get("after", 0)))
-                else:
-                    return self.send(404, {"error": "Không có đường dẫn này"})
-            except (KeyError, ValueError) as e:
-                return self.send(400, {"error": str(e)})
-            except Exception as e:
-                return self.send(503, {"error": str(e)})
-            self.send(200, body)
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            except ValueError:
+                return self.send(400, {"error": "Dữ liệu gửi lên không phải JSON"})
+            if url.path == "/order":
+                self.answer(lambda: pick({"account": str(body["account"])}).call("order", body))
+            elif url.path == "/close":
+                self.answer(lambda: pick({"account": str(body["account"])}).call("close", int(body["ticket"])))
+            else:
+                self.send(404, {"error": "Không có đường dẫn này"})
 
     return Handler
 
@@ -337,11 +557,12 @@ def main():
     tg = Telegram(cfg.get("telegram"))
     if len(sys.argv) > 1 and sys.argv[1] == "login":
         return tg.login()
-    mt5 = Mt5(cfg.get("mt5"))
-    print("[mt5] Đã kết nối" if mt5.connect() else f"[mt5] {mt5.error}")
+    accounts = load_accounts(cfg)
+    for a in accounts:
+        print(f"[mt5] {a.label} ({a.type}){' — CHO PHÉP VÀO LỆNH' if a.tradable else ''}: đang kết nối…")
     tg.start()
     port = int(cfg.get("port", 8787))
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(mt5, tg))
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(accounts, tg))
     print(f"FX Desk bridge đang chạy tại http://127.0.0.1:{port} (Ctrl+C để dừng)")
     try:
         server.serve_forever()

@@ -1,11 +1,34 @@
 {
   "port": 8787,
-  "mt5": {
-    "login": 12345678,
-    "password": "MAT_KHAU_VIEW_INVESTOR",
-    "server": "TenServer-Demo",
-    "terminal_path": ""
-  },
+  "accounts": [
+    {
+      "label": "FTMO 100K",
+      "type": "prop",
+      "login": 11111111,
+      "password": "MAT_KHAU_VIEW_INVESTOR",
+      "server": "FTMO-Server",
+      "terminal_path": "C:\\MT5\\FTMO\\terminal64.exe"
+    },
+    {
+      "label": "Tài khoản thật",
+      "type": "real",
+      "login": 22222222,
+      "password": "MAT_KHAU_GIAO_DICH_NEU_MUON_VAO_LENH",
+      "server": "Broker-Live",
+      "terminal_path": "C:\\MT5\\Real\\terminal64.exe",
+      "allow_trading": false,
+      "max_lot": 1.0
+    },
+    {
+      "label": "Copy trade (nguồn)",
+      "type": "copy",
+      "login": 33333333,
+      "password": "MAT_KHAU_VIEW_INVESTOR",
+      "server": "Broker-Live",
+      "terminal_path": "C:\\MT5\\Copy\\terminal64.exe",
+      "portable": true
+    }
+  ],
   "telegram": {
     "api_id": 0,
     "api_hash": "",

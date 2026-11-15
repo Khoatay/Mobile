@@ -1,9 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Field, Num, Tile } from '../components/Field'
 import { money, signed } from '../lib/format'
 import { DEFAULT_PROP, evaluateProp, PRESETS, type PropConfig } from '../lib/prop'
 import { usePersistent } from '../lib/store'
-import type { LiveAccount } from '../lib/bridge'
+import type { BridgeState } from '../lib/bridge'
 import type { Settings, Trade } from '../lib/types'
 
 function Meter({ label, used, limit, kind, detail }: { label: string; used: number; limit: number; kind: 'loss' | 'gain'; detail: string }) {
@@ -30,10 +30,20 @@ const STATE = {
   active: { text: '● Đang trong giới hạn', cls: 'state' },
 }
 
-export default function Prop({ trades, settings, account }: { trades: Trade[]; settings: Settings; account: LiveAccount | null }) {
-  const [cfg, setCfg] = usePersistent<PropConfig>('fx.prop', DEFAULT_PROP)
+export const ALL = '*'
+
+export default function Prop({ trades: allTrades, settings, bridge, labels }: { trades: Trade[]; settings: Settings; bridge: BridgeState; labels: Record<string, string> }) {
+  // Mỗi tài khoản có bộ luật riêng; "*" là toàn bộ Nhật ký không tách tài khoản.
+  const [configs, setConfigs] = usePersistent<Record<string, PropConfig>>('fx.props', {})
+  const ids = Object.keys(labels)
+  const [picked, setPicked] = useState<string | null>(null)
+  const key = picked ?? bridge.metas.find((m) => m.type === 'prop')?.id ?? ALL
+  const cfg = configs[key] ?? DEFAULT_PROP
+  const setCfg = (c: PropConfig) => setConfigs({ ...configs, [key]: c })
+  const trades = useMemo(() => (key === ALL ? allTrades : allTrades.filter((t) => t.account === key)), [allTrades, key])
+  const account = bridge.accounts.find((a) => a.id === key) ?? null
   const set = (p: Partial<PropConfig>) => setCfg({ ...cfg, ...p, preset: 'preset' in p ? p.preset! : 'custom' })
-  const ccy = settings.accountCcy
+  const ccy = account?.currency ?? settings.accountCcy
   const nowServer = Date.now() + settings.serverOffset * 3_600_000
   const floating = account?.profit ?? 0
   const s = useMemo(() => evaluateProp(trades, cfg, nowServer, floating), [trades, cfg, Math.floor(nowServer / 60000), floating])
@@ -52,13 +62,21 @@ export default function Prop({ trades, settings, account }: { trades: Trade[]; s
         </p>
       ) : (
         <p className="warn">
-          ⚠ Chưa kết nối MT5, nên chỉ tính trên lệnh đã đóng trong Nhật ký. Quỹ tính cả lãi/lỗ đang treo (equity), con số ở đây có thể lạc quan hơn thực tế khi bạn còn lệnh mở.
+          ⚠ {key === ALL ? 'Đang gộp mọi lệnh trong Nhật ký' : 'Tài khoản này chưa kết nối MT5'}, nên chỉ tính trên lệnh đã đóng. Quỹ tính cả lãi/lỗ đang treo (equity), con số ở đây có thể lạc quan hơn thực tế khi bạn còn lệnh mở.
         </p>
       )}
       <p className="muted small">Thông số mẫu lấy từ các trang đánh giá bên thứ ba, hãy đối chiếu với điều khoản tài khoản của bạn và sửa lại nếu khác.</p>
 
       <section className="card">
         <div className="prop-form">
+          {ids.length > 0 && (
+            <Field label="Tài khoản">
+              <select value={key} onChange={(e) => setPicked(e.target.value)}>
+                {ids.map((id) => <option key={id} value={id}>{labels[id]}</option>)}
+                <option value={ALL}>Toàn bộ Nhật ký (không tách)</option>
+              </select>
+            </Field>
+          )}
           <Field label="Chương trình">
             <select value={cfg.preset} onChange={(e) => {
               const p = PRESETS.find((x) => x.id === e.target.value)

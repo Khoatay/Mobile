@@ -14,10 +14,12 @@ const RANGES = [
   { id: '365', label: '1 năm', days: 365 },
 ]
 
-export default function Dashboard({ trades, settings, goJournal }: { trades: Trade[]; settings: Settings; goJournal: () => void }) {
+export default function Dashboard({ trades, settings, labels, goJournal }: { trades: Trade[]; settings: Settings; labels: Record<string, string>; goJournal: () => void }) {
   const [range, setRange] = useState('all')
   const [symbol, setSymbol] = useState('')
   const [side, setSide] = useState('')
+  const [account, setAccount] = useState('')
+  const accountIds = useMemo(() => [...new Set(trades.map((t) => t.account).filter((a): a is string => !!a))].sort(), [trades])
   const ccy = settings.accountCcy
 
   const symbols = useMemo(() => [...new Set(trades.map((t) => t.symbol))].sort(), [trades])
@@ -26,8 +28,8 @@ export default function Dashboard({ trades, settings, goJournal }: { trades: Tra
     // Mốc tính từ lệnh gần nhất, để file lịch sử cũ vẫn lọc được.
     const latest = Math.max(0, ...trades.map((t) => t.closeTime))
     const from = days ? latest - days * 86_400_000 : -Infinity
-    return trades.filter((t) => t.closeTime >= from && (!symbol || t.symbol === symbol) && (!side || t.side === side))
-  }, [trades, range, symbol, side])
+    return trades.filter((t) => t.closeTime >= from && (!symbol || t.symbol === symbol) && (!side || t.side === side) && (!account || t.account === account))
+  }, [trades, range, symbol, side, account])
   const s = useMemo(() => computeStats(filtered, settings.serverOffset), [filtered, settings.serverOffset])
 
   if (trades.length === 0)
@@ -50,6 +52,12 @@ export default function Dashboard({ trades, settings, goJournal }: { trades: Tra
             <button key={r.id} className={range === r.id ? 'active' : ''} aria-pressed={range === r.id} onClick={() => setRange(r.id)}>{r.label}</button>
           ))}
         </div>
+        {accountIds.length > 0 && (
+          <select aria-label="Tài khoản" value={account} onChange={(e) => setAccount(e.target.value)}>
+            <option value="">Mọi tài khoản</option>
+            {accountIds.map((a) => <option key={a} value={a}>{labels[a] ?? a}</option>)}
+          </select>
+        )}
         <select aria-label="Cặp tiền" value={symbol} onChange={(e) => setSymbol(e.target.value)}>
           <option value="">Mọi cặp</option>
           {symbols.map((x) => <option key={x}>{x}</option>)}

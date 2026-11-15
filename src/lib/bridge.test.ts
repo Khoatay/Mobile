@@ -19,6 +19,7 @@ describe('dealsToTrades', () => {
     expect(t).toHaveLength(1)
     expect(t[0]).toMatchObject({ id: 'mt5:77', symbol: 'EURUSD', side: 'buy', volume: 0.2, openTime: 1_000_000, closeTime: 3_000_000, sl: 1.075, tp: 1.1, profit: 300, swap: -1, commission: -1.5 })
     expect(t[0].closePrice).toBeCloseTo(1.095)
+    expect(dealsToTrades(deals, [], '5550001')[0]).toMatchObject({ id: 'mt5:5550001:77', account: '5550001' })
   })
 })
 

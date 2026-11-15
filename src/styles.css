@@ -190,3 +190,7 @@ code { background: var(--raised); padding: 1px 5px; border-radius: 4px; font-siz
 .chip.against { outline: 1px solid var(--neg); }
 .msg { white-space: pre-wrap; color: var(--ink-2); font-size: 12.5px; max-width: 420px; }
 td.top { vertical-align: top; }
+tfoot td { border-top: 1px solid var(--axis); border-bottom: none; }
+.chip.trade { outline: 1px solid var(--accent); }
+.ticket-line { margin: 12px 0 8px; }
+td .led { display: inline-block; margin-right: 4px; }

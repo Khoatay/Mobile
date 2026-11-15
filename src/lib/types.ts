@@ -19,6 +19,8 @@ export interface Trade {
   swap: number
   profit: number
   source: 'mt5' | 'mt4' | 'csv' | 'manual' | 'demo'
+  /** Số tài khoản MT5 (login), nếu biết. Dùng để tách thống kê và luật quỹ theo tài khoản. */
+  account?: string
   setup?: string
   note?: string
 }

@@ -8,7 +8,8 @@ Công cụ cho người giao dịch forex, chạy trên trình duyệt máy tín
 - **Nhật ký lệnh**: import báo cáo HTML của MT5 và MT4, hoặc CSV; nhập tay; gắn setup và ghi chú; xuất CSV.
 - **Thống kê**: lãi/lỗ ròng, tỷ lệ thắng, profit factor, kỳ vọng, sụt giảm lớn nhất, R trung bình, đường lãi/lỗ luỹ kế, và phân tích theo cặp, phiên, ngày trong tuần, thời gian giữ lệnh, chiều lệnh, setup.
 - **Luật quỹ**: theo dõi mục tiêu lãi, giới hạn lỗ ngày và lỗ tổng cho FTMO, The5ers, TenTrade hoặc luật tự đặt. Chỉ tính trên lệnh đã đóng, và thông số mẫu cần được đối chiếu với điều khoản của quỹ.
-- **Tài khoản MT5** (cần bridge): đọc số dư, equity, lệnh đang mở bằng mật khẩu view; đưa lịch sử lệnh vào Nhật ký; cập nhật tỷ giá cho Tính lot. Khi đã kết nối, Luật quỹ tính cả lãi/lỗ đang treo.
+- **Tài khoản MT5** (cần bridge): xem nhiều tài khoản cùng lúc (thật, quỹ, copy trade, demo) với số dư, equity, lệnh đang mở; đưa lịch sử lệnh vào Nhật ký; cập nhật tỷ giá cho Tính lot. Thống kê và Luật quỹ tách được theo từng tài khoản, và Luật quỹ tính cả lãi/lỗ đang treo.
+- **Vào lệnh từ app** (mặc định tắt): lệnh thị trường với stop loss bắt buộc, lot tự tính theo % rủi ro, và nút đóng lệnh. Chỉ dùng được với tài khoản đã bật riêng trong bridge.
 - **Tín hiệu Telegram** (cần bridge): đọc lệnh từ các kênh bạn chọn, gom theo cặp tiền, đánh giá độ trùng khớp giữa các kênh và với xu hướng H4, và chấm thành tích từng kênh bằng dữ liệu giá từ MT5.
 
 ## Chạy
@@ -34,7 +35,9 @@ python bridge.py login                  # chỉ khi dùng Telegram: đăng nhậ
 python bridge.py
 ```
 
-- **MT5**: điền số tài khoản, mật khẩu view (investor) và tên máy chủ. Mật khẩu view chỉ cho xem, không đặt lệnh được.
+- **MT5**: khai báo từng tài khoản trong `accounts`: nhãn, loại (`real`, `prop`, `copy`, `demo`), số tài khoản, mật khẩu view (investor), tên máy chủ và `terminal_path`. Mật khẩu view chỉ cho xem, không đặt lệnh được.
+- **Mỗi tài khoản cần một bản MT5 ở thư mục riêng**, vì một bản MT5 chỉ đăng nhập được một tài khoản tại một thời điểm. Cài MT5 thêm lần nữa vào thư mục khác (bộ cài của mỗi quỹ thường đã vào thư mục riêng), hoặc sao chép cả thư mục MT5 và đặt `"portable": true`.
+- **Vào lệnh**: chỉ với tài khoản có `"allow_trading": true` và dùng mật khẩu giao dịch thay cho mật khẩu view. `max_lot` (mặc định 1.0) là trần khối lượng mỗi lệnh. Bridge từ chối lệnh không có stop loss, và luôn để MT5 kiểm tra lệnh trước khi gửi. Hãy thử trên tài khoản demo trước, và kiểm tra điều khoản của quỹ về việc đặt lệnh bằng phần mềm ngoài.
 - **Telegram**: lấy `api_id` và `api_hash` tại my.telegram.org, rồi điền tên các kênh vào `channels`. Bridge đọc bằng tài khoản Telegram của bạn, nên chỉ thấy kênh công khai hoặc kênh bạn đã tham gia.
 - `config.json` và file phiên Telegram chứa thông tin đăng nhập; chúng đã được loại khỏi git. Đừng gửi cho ai.
 

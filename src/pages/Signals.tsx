@@ -29,7 +29,7 @@ export default function Signals({ bridge, settings }: { bridge: BridgeState; set
   const [now, setNow] = useState(Date.now())
   const lastDate = useRef(0)
   const tgOn = !!bridge.status?.telegram.connected
-  const mt5On = !!bridge.account
+  const mt5On = bridge.accounts.length > 0
 
   // Kéo tin mới mỗi 5 giây; chỉ hỏi những tin sau tin cuối đã có.
   useEffect(() => {

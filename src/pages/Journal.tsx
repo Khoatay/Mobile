@@ -13,6 +13,7 @@ interface Props {
   setTrades: (t: Trade[]) => void
   settings: Settings
   patch: (p: Partial<Settings>) => void
+  labels: Record<string, string>
 }
 
 const FORMAT_NAME = { mt5: 'MT5', mt4: 'MT4', csv: 'CSV', unknown: 'không rõ' }
@@ -20,7 +21,8 @@ const PAGE = 100
 
 const blank = { symbol: 'EURUSD', side: 'buy' as Side, volume: 0.1, openTime: '', closeTime: '', openPrice: NaN, closePrice: NaN, sl: NaN, profit: NaN }
 
-export default function Journal({ trades, setTrades, settings, patch }: Props) {
+export default function Journal({ trades, setTrades, settings, patch, labels }: Props) {
+  const hasAccounts = trades.some((t) => t.account)
   const [messages, setMessages] = useState<{ ok: boolean; text: string }[]>([])
   const [dragging, setDragging] = useState(false)
   const [filter, setFilter] = useState('')
@@ -75,9 +77,9 @@ export default function Journal({ trades, setTrades, settings, patch }: Props) {
   const rows = useMemo(() => {
     const f = filter.trim().toUpperCase()
     return trades
-      .filter((t) => !f || t.symbol.includes(f) || (t.setup ?? '').toUpperCase().includes(f) || (t.note ?? '').toUpperCase().includes(f))
+      .filter((t) => !f || t.symbol.includes(f) || (t.setup ?? '').toUpperCase().includes(f) || (t.note ?? '').toUpperCase().includes(f) || (t.account ? (labels[t.account] ?? t.account).toUpperCase().includes(f) : false))
       .sort((a, b) => b.closeTime - a.closeTime)
-  }, [trades, filter])
+  }, [trades, filter, labels])
 
   return (
     <>
@@ -133,7 +135,7 @@ export default function Journal({ trades, setTrades, settings, patch }: Props) {
         <div className="card-head">
           <h3>{rows.length} lệnh đã đóng</h3>
           <div className="actions">
-            <input className="search" placeholder="Lọc theo cặp, setup, ghi chú" value={filter} onChange={(e) => { setFilter(e.target.value); setShown(PAGE) }} />
+            <input className="search" placeholder="Lọc theo cặp, tài khoản, setup, ghi chú" value={filter} onChange={(e) => { setFilter(e.target.value); setShown(PAGE) }} />
             <label className="inline">Múi giờ máy chủ: UTC+
               <input className="tiny" type="number" value={settings.serverOffset} onChange={(e) => patch({ serverOffset: e.target.valueAsNumber || 0 })} />
             </label>
@@ -149,7 +151,7 @@ export default function Journal({ trades, setTrades, settings, patch }: Props) {
             <table className="trades">
               <thead>
                 <tr>
-                  <th>Đóng lúc</th><th>Cặp</th><th>Chiều</th><th className="num">Lot</th><th className="num">Giá mở</th>
+                  <th>Đóng lúc</th>{hasAccounts && <th>Tài khoản</th>}<th>Cặp</th><th>Chiều</th><th className="num">Lot</th><th className="num">Giá mở</th>
                   <th className="num">Giá đóng</th><th className="num">Lãi/lỗ ròng</th><th className="num">R</th><th>Setup</th><th>Ghi chú</th><th />
                 </tr>
               </thead>
@@ -160,6 +162,7 @@ export default function Journal({ trades, setTrades, settings, patch }: Props) {
                   return (
                     <tr key={t.id}>
                       <td className="nowrap" title={`Mở: ${fmtServerTime(t.openTime)} (giờ máy chủ)`}>{fmtServerTime(t.closeTime).slice(0, 16)}</td>
+                      {hasAccounts && <td className="nowrap">{t.account ? labels[t.account] ?? t.account : '–'}</td>}
                       <td>{t.symbol}</td>
                       <td>{t.side === 'buy' ? 'Buy' : 'Sell'}</td>
                       <td className="num">{t.volume.toFixed(2)}</td>
