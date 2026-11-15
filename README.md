@@ -7,6 +7,7 @@ Công cụ cho người giao dịch forex, chạy trên trình duyệt máy tín
 - **Tính lot**: từ số dư, % rủi ro và stop loss (theo pip hoặc theo giá) ra khối lượng lệnh, giá trị pip, ký quỹ và R:R. Hỗ trợ 28 cặp tiền, vàng, bạc, và tài khoản không phải USD.
 - **Nhật ký lệnh**: import báo cáo HTML của MT5 và MT4, hoặc CSV; nhập tay; gắn setup và ghi chú; xuất CSV.
 - **Thống kê**: lãi/lỗ ròng, tỷ lệ thắng, profit factor, kỳ vọng, sụt giảm lớn nhất, R trung bình, đường lãi/lỗ luỹ kế, và phân tích theo cặp, phiên, ngày trong tuần, thời gian giữ lệnh, chiều lệnh, setup.
+- **Luật quỹ**: theo dõi mục tiêu lãi, giới hạn lỗ ngày và lỗ tổng cho FTMO, The5ers, TenTrade hoặc luật tự đặt. Chỉ tính trên lệnh đã đóng, và thông số mẫu cần được đối chiếu với điều khoản của quỹ.
 
 ## Chạy
 

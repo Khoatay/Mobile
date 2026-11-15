@@ -3,11 +3,13 @@ import { useSettings, useTrades } from './lib/store'
 import Calculator from './pages/Calculator'
 import Journal from './pages/Journal'
 import Dashboard from './pages/Dashboard'
+import Prop from './pages/Prop'
 
 const TABS = [
   { id: 'calc', label: 'Tính lot' },
   { id: 'journal', label: 'Nhật ký lệnh' },
   { id: 'stats', label: 'Thống kê' },
+  { id: 'prop', label: 'Luật quỹ' },
 ] as const
 type Tab = (typeof TABS)[number]['id']
 
@@ -34,6 +36,7 @@ export default function App() {
         {tab === 'calc' && <Calculator settings={settings} patch={patchSettings} />}
         {tab === 'journal' && <Journal trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} />}
         {tab === 'stats' && <Dashboard trades={trades} settings={settings} goJournal={() => setTab('journal')} />}
+        {tab === 'prop' && <Prop trades={trades} settings={settings} />}
       </main>
     </div>
   )
