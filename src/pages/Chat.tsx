@@ -106,10 +106,10 @@ export default function Chat({ bridge, trades, infos }: { bridge: BridgeState; t
     } finally { setBusy(false) }
   }
 
-  if (!bridge.online) return (<><h1>Vịt Vàng Talk</h1><AiSetup online={false} /></>)
+  if (!bridge.online) return (<><h1>Golden Duck Talk</h1><AiSetup online={false} /></>)
   return (
     <>
-      <h1>Vịt Vàng Talk</h1>
+      <h1>Golden Duck Talk</h1>
       <p className="muted">Trò chuyện với nhân vật AI do chính bạn tạo: tính cách, phẩm giá, cách nói chuyện và kiến thức trade đều do bạn dạy.</p>
       {ai && !ai.configured && <AiSetup online />}
       {err && <p className="notice bad">⚠ {err}</p>}
