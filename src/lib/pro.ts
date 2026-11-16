@@ -12,7 +12,7 @@ export const PRO_FEATURES: ProFeature[] = [
 ]
 
 /** Mặc định: bảo vệ tài khoản, copy lệnh và đăng tín hiệu từ AI là Pro, còn lại miễn phí. */
-export const DEFAULT_PRO_FEATURES = ['guard', 'copier', 'copy-ai']
+export const DEFAULT_PRO_FEATURES = ['copier', 'copy-ai']
 
 /** Tab nào đang bị khoá với người dùng hiện tại. */
 export function lockedTabs(proFeatures: string[], isPro: boolean): Set<string> {
