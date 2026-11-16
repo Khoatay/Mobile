@@ -21,6 +21,10 @@ import News from './pages/News'
 import Offers from './pages/Offers'
 import Shop from './pages/Shop'
 import Community from './pages/Community'
+import ProPage from './pages/ProPage'
+import { ProLockPage } from './components/ProGate'
+import { lockedTabs, PRO_FEATURES } from './lib/pro'
+import type { SignalDraft } from './lib/share'
 import ProfilePage from './pages/Profile'
 import Personalize from './pages/Personalize'
 import Prop from './pages/Prop'
@@ -31,7 +35,7 @@ const GROUPS = [
   { title: 'Giao dịch', tone: 'gold', tabs: [['calc', 'Tính lot', 'calc'], ['account', 'Tài khoản', 'terminal'], ['prop', 'Quỹ', 'shield']] },
   { title: 'Phân tích', tone: 'sky', tabs: [['journal', 'Nhật ký lệnh', 'journal'], ['stats', 'Thống kê', 'chart'], ['learn', 'Học kiến thức', 'bulb'], ['ai', 'Phân tích AI', 'sparkle'], ['signals', 'Tín hiệu Telegram', 'send'], ['news', 'Tin tức', 'news']] },
   { title: 'Cộng đồng', tone: 'mint', tabs: [['offers', 'Ưu đãi', 'gift'], ['shop', 'Cửa hàng', 'bag'], ['community', 'Nhóm cộng đồng', 'users'], ['share', 'Chia sẻ cộng đồng', 'megaphone']] },
-  { title: 'Cá nhân', tone: 'lilac', tabs: [['ledger', 'Thu chi đầu tư', 'coins'], ['guides', 'Hướng dẫn', 'book'], ['profile', 'Hồ sơ', 'user'], ['me', 'Cá nhân hoá', 'palette']] },
+  { title: 'Cá nhân', tone: 'lilac', tabs: [['pro', 'Gói Pro', 'crown'], ['ledger', 'Thu chi đầu tư', 'coins'], ['guides', 'Hướng dẫn', 'book'], ['profile', 'Hồ sơ', 'user'], ['me', 'Cá nhân hoá', 'palette']] },
 ] as const
 type Tab = (typeof GROUPS)[number]['tabs'][number][0]
 
@@ -51,6 +55,11 @@ export default function App() {
     return EDITION === 'trader' ? { ...base, ...pack.brand, accent: stored.accentCustom ? stored.accent : pack.brand.accent } : base
   }, [stored, pack.brand])
   const links = useMemo(() => partnerLinks(pack.partners), [pack.partners])
+  const locked = useMemo(() => lockedTabs(pack.proFeatures, isPro), [pack.proFeatures, isPro])
+  const featureLocked = (id: string) => !isPro && pack.proFeatures.includes(id)
+  // Lệnh từ trang Phân tích AI chuyển sang trang Chia sẻ để đăng thành tín hiệu.
+  const [draft, setDraft] = useState<(SignalDraft & { credit: string }) | null>(null)
+  const lockOf = (t: string) => PRO_FEATURES.find((f) => f.tab === t && pack.proFeatures.includes(f.id))?.id ?? ''
   const bridge = useBridge()
   const [storedUser, setUser] = usePersistent<UserProfile>('fx.user', DEFAULT_USER)
   const user = useMemo(() => ({ ...DEFAULT_USER, ...storedUser }), [storedUser])
@@ -87,7 +96,7 @@ export default function App() {
               <div className="nav-title">{g.title}</div>
               {g.tabs.map(([id, label, icon]) => (
                 <button key={id} className={tab === id ? 'nav active' : 'nav'} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
-                  <span className="nav-label"><span className="nav-icon"><Icon name={icon as IconName} /></span>{label}</span>
+                  <span className="nav-label"><span className="nav-icon"><Icon name={icon as IconName} /></span>{label}{locked.has(id) && <span className="nav-lock" aria-label="Cần Pro">🔒</span>}</span>
                   {id === 'journal' && trades.length > 0 && <span className="count">{trades.length}</span>}
                 </button>
               ))}
@@ -118,18 +127,19 @@ export default function App() {
         {tab === 'stats' && <Dashboard trades={trades} settings={settings} infos={infos} goJournal={() => setTab('journal')} />}
         {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} infos={infos} goAccounts={() => setTab('account')} links={links} />}
         {tab === 'account' && <Account bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} infos={infos} setInfo={setInfo} links={links} />}
-        {tab === 'signals' && <Signals bridge={bridge} settings={settings} messages={messages} />}
-        {tab === 'learn' && <Learn bridge={bridge} />}
-        {tab === 'ai' && <Analyze bridge={bridge} settings={settings} />}
+        {tab === 'signals' && (locked.has('signals') ? <ProLockPage feature={lockOf('signals')} onOpenPro={() => setTab('pro')} /> : <Signals bridge={bridge} settings={settings} messages={messages} />)}
+        {tab === 'learn' && (locked.has('learn') ? <ProLockPage feature={lockOf('learn')} onOpenPro={() => setTab('pro')} /> : <Learn bridge={bridge} />)}
+        {tab === 'ai' && (locked.has('ai') ? <ProLockPage feature={lockOf('ai')} onOpenPro={() => setTab('pro')} /> : <Analyze bridge={bridge} settings={settings} shareLocked={featureLocked('copy-ai')} onShare={(d) => { if (featureLocked('copy-ai')) { setTab('pro'); return } setDraft(d); setTab('share') }} />)}
         {tab === 'news' && <News bridge={bridge} messages={messages} />}
         {tab === 'ledger' && <Ledger bridge={bridge} settings={settings} labels={labels} infos={infos} />}
-        {tab === 'share' && <Share bridge={bridge} trades={trades} settings={settings} profile={profile} labels={labels} infos={infos} user={user} messages={messages} isPro={isPro} proUrl={pack.proUrl} />}
+        {tab === 'share' && <Share bridge={bridge} trades={trades} settings={settings} profile={profile} labels={labels} infos={infos} user={user} messages={messages} locked={featureLocked} onOpenPro={() => setTab('pro')} draft={draft} onDraftUsed={() => setDraft(null)} />}
         {tab === 'offers' && <Offers links={links} bridge={bridge} disclaimer={profile.disclaimer} pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'shop' && <Shop pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'community' && <Community pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'profile' && <ProfilePage user={user} setUser={setUser} trades={trades} />}
         {tab === 'guides' && <Guides links={links} />}
-        {tab === 'me' && <Personalize profile={profile} setProfile={setProfile} pack={pack} setPack={setPack} canEdit={canEdit} />}
+        {tab === 'me' && <Personalize profile={profile} setProfile={setProfile} canEdit={canEdit} />}
+        {tab === 'pro' && <ProPage pack={pack} setPack={canEdit ? setPack : null} profile={profile} setProfile={setProfile} isPro={isPro} goTab={(t) => setTab(t as Tab)} />}
       </main>
     </div>
     </>

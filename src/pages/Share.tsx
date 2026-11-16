@@ -7,7 +7,10 @@ import { bridgePost, type BridgeState } from '../lib/bridge'
 import { PAIRS } from '../lib/forex'
 import { signed } from '../lib/format'
 import { fmtServerTime } from '../lib/parse'
-import { drawBanner, PERIODS, periodTrades, resultPost, signalPost, statsPost, type Period, type Post, type Profile } from '../lib/share'
+import { drawBanner, PERIODS, periodTrades, resultPost, signalPost, statsPost, type Period, type Post, type Profile, type SignalDraft } from '../lib/share'
+import { ProNote } from '../components/ProGate'
+import { usePersistent } from '../lib/store'
+import { BIAS_TEXT, type AnalysisResult } from '../lib/kb'
 import { loadImage } from '../lib/images'
 import { parseSignal, type Signal } from '../lib/signals'
 import type { TgMessage } from '../lib/bridge'
@@ -15,10 +18,15 @@ import type { UserProfile } from '../lib/user'
 import { netOf, type Settings, type Side, type Trade } from '../lib/types'
 
 type Kind = 'signal' | 'result' | 'stats'
-interface Props { bridge: BridgeState; trades: Trade[]; settings: Settings; profile: Profile; labels: Record<string, string>; infos: InfoMap; user: UserProfile; messages: TgMessage[]; isPro: boolean; proUrl: string }
+interface Props { bridge: BridgeState; trades: Trade[]; settings: Settings; profile: Profile; labels: Record<string, string>; infos: InfoMap; user: UserProfile; messages: TgMessage[]; locked: (feature: string) => boolean; onOpenPro: () => void; draft: (SignalDraft & { credit: string }) | null; onDraftUsed: () => void }
 
-export default function Share({ bridge, trades, settings, profile, labels, infos, user, messages, isPro, proUrl }: Props) {
-  const [source, setSource] = useState<'own' | 'telegram'>('own')
+export default function Share({ bridge, trades, settings, profile, labels, infos, user, messages, locked, onOpenPro, draft, onDraftUsed }: Props) {
+  const [source, setSource] = useState<'own' | 'telegram' | 'ai'>('own')
+  const [analyses] = usePersistent<Record<string, AnalysisResult>>('fx.analyses', {})
+  // Lệnh agent đề xuất ở trang Phân tích AI, mới nhất trước.
+  const aiTrades = useMemo(() => Object.values(analyses).filter((r) => r.analysis.has_trade && r.analysis.trade.entry != null && r.analysis.trade.sl != null).sort((a, b) => b.at - a.at), [analyses])
+  const [aiPicked, setAiPicked] = useState('')
+  const [aiCredit, setAiCredit] = useState('')
   const [credit, setCredit] = useState(true)
   const [picked, setPicked] = useState('')
   const [avatarImg, setAvatarImg] = useState<HTMLImageElement | null>(null)
@@ -33,6 +41,31 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
     setTp1(sg.tps[0] ?? NaN); setTp2(sg.tps[1] ?? NaN)
   }
   const pickedSignal = tgSignals.find((x) => x.id === picked)
+  function fill(d: SignalDraft) {
+    setKind('signal'); setSymbol(d.symbol); setSide(d.side); setEntry(d.entry); setSl(d.sl)
+    setTp1(d.tps[0] ?? NaN); setTp2(d.tps[1] ?? NaN); setNote(d.note)
+  }
+  const aiDraft = (r: AnalysisResult): SignalDraft & { credit: string } => {
+    const t = r.analysis.trade
+    return {
+      symbol: r.symbol, side: t.side === 'sell' ? 'sell' : 'buy', entry: t.entry!, sl: t.sl!, tps: [t.tp1, t.tp2].filter((x): x is number => x != null),
+      note: [r.analysis.summary.replace(/^\(Phân tích mẫu, không phải AI thật\)\s*/, ''), t.invalidation ? `Lệnh mất hiệu lực khi: ${t.invalidation}` : ''].filter(Boolean).join('\n'),
+      credit: `Phân tích bởi agent theo bộ quy tắc "${r.playbook}" · xu hướng chính ${BIAS_TEXT[r.analysis.main_trend].replace(/^\S+\s/, '').toLowerCase()}`,
+    }
+  }
+  function applyAi(symbol: string) {
+    setAiPicked(symbol)
+    const r = aiTrades.find((x) => x.symbol === symbol)
+    if (!r) return
+    const d = aiDraft(r)
+    fill(d); setAiCredit(d.credit)
+  }
+  // Lệnh chuyển từ trang Phân tích AI (nút "Đăng thành tín hiệu").
+  useEffect(() => {
+    if (!draft) return
+    setSource('ai'); setAiPicked(draft.symbol); fill(draft); setAiCredit(draft.credit)
+    onDraftUsed()
+  }, [draft])
   const [kind, setKind] = useState<Kind>('signal')
   const [symbol, setSymbol] = useState('XAUUSD')
   const [side, setSide] = useState<Side>('buy')
@@ -60,7 +93,7 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
   const post: Post | null = useMemo(() => {
     if (kind === 'signal') {
       if (![entry, sl].every(Number.isFinite)) return null
-      const src = source === 'telegram' && credit && pickedSignal ? `Nguồn tham khảo: ${pickedSignal.channel}` : ''
+      const src = !credit ? '' : source === 'telegram' && pickedSignal ? `Nguồn tham khảo: ${pickedSignal.channel}` : source === 'ai' && aiCredit ? aiCredit : ''
       return signalPost({ symbol, side, entry, sl, tps: [tp1, tp2].filter(Number.isFinite), note: [note, src].filter(Boolean).join('\n') }, profile)
     }
     if (kind === 'result') {
@@ -70,7 +103,7 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
     const pool = trades.filter((t) => inScope(scope, t.account, infos))
     const list = periodTrades(pool, period, Date.now() + settings.serverOffset * 3_600_000)
     return list.length ? statsPost(list, scope ? `${PERIODS[period]} · ${scopeLabel(scope, infos)}` : PERIODS[period], ccy, profile) : null
-  }, [kind, symbol, side, entry, sl, tp1, tp2, note, tradeId, period, scope, infos, trades, recent, profile, ccy, settings.serverOffset, source, credit, pickedSignal])
+  }, [kind, symbol, side, entry, sl, tp1, tp2, note, tradeId, period, scope, infos, trades, recent, profile, ccy, settings.serverOffset, source, credit, pickedSignal, aiCredit])
 
   // Nội dung bài tự viết lại khi dữ liệu đổi; sau đó người dùng sửa tay được.
   useEffect(() => { setCaption(post?.caption ?? '') }, [post])
@@ -120,16 +153,29 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
               <div className="source-row">
                 <div className="seg">
                   <button className={source === 'own' ? 'active' : ''} aria-pressed={source === 'own'} onClick={() => setSource('own')}>Tự viết</button>
-                  <button className={source === 'telegram' ? 'active' : ''} aria-pressed={source === 'telegram'} onClick={() => setSource('telegram')}>Chép từ kênh Telegram <span className="chip pro">Pro</span></button>
+                  <button className={source === 'ai' ? 'active' : ''} aria-pressed={source === 'ai'} onClick={() => setSource('ai')}>Từ Phân tích AI{locked('copy-ai') && ' 🔒'}</button>
+                  <button className={source === 'telegram' ? 'active' : ''} aria-pressed={source === 'telegram'} onClick={() => setSource('telegram')}>Từ kênh Telegram{locked('copy-telegram') && ' 🔒'}</button>
                 </div>
               </div>
             )}
-            {kind === 'signal' && source === 'telegram' && (!isPro ? (
-              <div className="pro-lock">
-                <strong>Tính năng Pro</strong>
-                <p className="muted small">Chọn một tín hiệu từ các kênh Telegram bạn theo dõi, app điền sẵn cặp, chiều, giá vào, SL, TP để bạn chỉnh và đăng lại.</p>
-                {proUrl ? <a className="button primary" href={proUrl} target="_blank" rel="noopener noreferrer">Nâng cấp Pro</a> : <span className="muted small">Liên hệ quản trị cộng đồng để nâng cấp.</span>}
+            {kind === 'signal' && source === 'ai' && (locked('copy-ai') ? (
+              <ProNote onOpenPro={onOpenPro}>Đăng tín hiệu từ Phân tích AI là tính năng Pro.</ProNote>
+            ) : (
+              <div className="tg-pick">
+                {aiTrades.length === 0 ? <p className="muted small">Chưa có lệnh nào do agent đề xuất. Vào trang Phân tích AI, phân tích vài cặp, rồi bấm "Đăng thành tín hiệu" trên lệnh muốn đăng.</p> : (
+                  <Field label="Lệnh agent đề xuất">
+                    <select value={aiPicked} onChange={(e) => applyAi(e.target.value)}>
+                      <option value="">Chọn lệnh…</option>
+                      {aiTrades.map((r) => <option key={r.symbol} value={r.symbol}>{new Date(r.at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · {r.symbol} {r.analysis.trade.side === 'buy' ? 'Buy' : 'Sell'} {r.analysis.trade.entry} · R:R {r.analysis.trade.rr ?? '–'} · {r.playbook}</option>)}
+                    </select>
+                  </Field>
+                )}
+                <label className="inline wrap"><input type="checkbox" className="check" checked={credit} onChange={(e) => setCredit(e.target.checked)} /> Ghi "phân tích bởi agent" và tên bộ quy tắc vào bài đăng</label>
+                {aiPicked && <p className="muted small">Kiểm tra lại giá vào, SL, TP trên biểu đồ trước khi đăng. Bạn sửa được mọi ô bên dưới.</p>}
               </div>
+            ))}
+            {kind === 'signal' && source === 'telegram' && (locked('copy-telegram') ? (
+              <ProNote onOpenPro={onOpenPro}>Chép tín hiệu từ kênh Telegram là tính năng Pro.</ProNote>
             ) : (
               <div className="tg-pick">
                 {tgSignals.length === 0 ? <p className="muted small">Chưa đọc được tín hiệu nào từ kênh Telegram. Kết nối Telegram ở bridge và chọn kênh ở <code>channels</code>.</p> : (
@@ -144,7 +190,8 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
                 {pickedSignal && <div className="msg wide tg-quote">{pickedSignal.text}</div>}
               </div>
             ))}
-            {kind === 'signal' && (source === 'own' || isPro) && (
+            {kind === 'signal' && !(source === 'ai' && locked('copy-ai')) && !(source === 'telegram' && locked('copy-telegram')) && (
+              <>
               <div className="prop-form">
                 <Field label="Cặp tiền"><select value={symbol} onChange={(e) => setSymbol(e.target.value)}>{PAIRS.map((p) => <option key={p}>{p}</option>)}</select></Field>
                 <Field group label="Chiều">
@@ -157,8 +204,9 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
                 <Field label="Stop loss"><Num value={sl} onChange={setSl} /></Field>
                 <Field label="Take profit 1"><Num value={tp1} onChange={setTp1} /></Field>
                 <Field label="Take profit 2"><Num value={tp2} onChange={setTp2} /></Field>
-                <Field label="Nhận định kèm theo"><input value={note} placeholder="Lý do vào lệnh, điều kiện huỷ…" onChange={(e) => setNote(e.target.value)} /></Field>
               </div>
+              <div className="note-field"><Field label="Nhận định kèm theo"><textarea rows={3} value={note} placeholder="Lý do vào lệnh, điều kiện huỷ…" onChange={(e) => setNote(e.target.value)} /></Field></div>
+              </>
             )}
             {kind === 'result' && (recent.length === 0 ? <p className="muted">Nhật ký chưa có lệnh nào.</p> : (
               <Field label="Lệnh đã đóng">

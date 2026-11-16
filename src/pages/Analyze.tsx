@@ -8,6 +8,7 @@ import { fmtServerTime } from '../lib/parse'
 import { BIAS_TEXT, CONFIDENCE_TEXT, ORDER_TEXT, type Analysis, type AnalysisResult, type Playbook } from '../lib/kb'
 import { usePersistent } from '../lib/store'
 import type { Settings } from '../lib/types'
+import type { SignalDraft } from '../lib/share'
 import { AiSetup } from './Learn'
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
@@ -30,7 +31,7 @@ export async function buildFeatures(symbol: string, bridge: BridgeState, serverO
   }
 }
 
-function TradeBox({ a, symbol, settings }: { a: Analysis; symbol: string; settings: Settings }) {
+function TradeBox({ a, symbol, settings, onShare, shareLocked }: { a: Analysis; symbol: string; settings: Settings; onShare?: () => void; shareLocked?: boolean }) {
   const t = a.trade
   if (!a.has_trade || t.side === 'none' || t.entry == null || t.sl == null) {
     return <div className="no-trade"><strong>Chưa có lệnh</strong>{a.wait_for && <div>Cần chờ: {a.wait_for}</div>}</div>
@@ -52,11 +53,12 @@ function TradeBox({ a, symbol, settings }: { a: Analysis; symbol: string; settin
       </dl>
       {t.invalidation && <p className="small">Lệnh mất hiệu lực khi: {t.invalidation}</p>}
       {wrong && <p className="warn">⚠ Stop loss nằm sai phía so với giá vào. Đừng dùng đề xuất này.</p>}
+      {onShare && !wrong && <div className="actions" style={{ marginTop: 8 }}><button className={shareLocked ? '' : 'primary'} onClick={onShare}>Đăng thành tín hiệu{shareLocked && ' 🔒'}</button><span className="muted small">{shareLocked ? 'Tính năng Pro. Bấm để xem gói Pro.' : 'Mở trang Chia sẻ với lệnh đã điền sẵn, bạn duyệt rồi mới đăng.'}</span></div>}
     </div>
   )
 }
 
-export default function Analyze({ bridge, settings }: { bridge: BridgeState; settings: Settings }) {
+export default function Analyze({ bridge, settings, onShare, shareLocked }: { bridge: BridgeState; settings: Settings; onShare?: (d: SignalDraft & { credit: string }) => void; shareLocked?: boolean }) {
   const [books, setBooks] = useState<Playbook[]>([])
   const [ai, setAi] = useState<{ configured: boolean; model: string } | null>(null)
   const [bookId, setBookId] = usePersistent('fx.ai.playbook', '')
@@ -148,7 +150,11 @@ export default function Analyze({ bridge, settings }: { bridge: BridgeState; set
               <div className="tf-row">
                 {a.timeframes.map((t) => <div key={t.tf} className="tf-cell" title={t.note}><span className="muted small">{t.tf}</span><strong className={`trend ${t.bias}`}>{BIAS_TEXT[t.bias]}</strong><span className="small">{t.note}</span></div>)}
               </div>
-              <TradeBox a={a} symbol={symbol} settings={settings} />
+              <TradeBox a={a} symbol={symbol} settings={settings} onShare={onShare && a.has_trade && a.trade.entry != null && a.trade.sl != null ? () => onShare({
+                symbol, side: a.trade.side === 'sell' ? 'sell' : 'buy', entry: a.trade.entry!, sl: a.trade.sl!, tps: [a.trade.tp1, a.trade.tp2].filter((x): x is number => x != null),
+                note: [a.summary.replace(/^\(Phân tích mẫu, không phải AI thật\)\s*/, ''), a.trade.invalidation ? `Lệnh mất hiệu lực khi: ${a.trade.invalidation}` : ''].filter(Boolean).join('\n'),
+                credit: `Phân tích bởi agent theo bộ quy tắc "${r.playbook}" · xu hướng chính ${BIAS_TEXT[a.main_trend].replace(/^\S+\s/, '').toLowerCase()}`,
+              }) : undefined} shareLocked={shareLocked} />
               <details className="guide" open={!a.has_trade}>
                 <summary>Kiểm tra theo bộ quy tắc ({a.checklist.filter((c) => c.met).length}/{a.checklist.length} đạt)</summary>
                 <ul className="checklist">

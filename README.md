@@ -24,6 +24,7 @@ Công cụ cho người giao dịch forex, chạy trên trình duyệt máy tín
 
 ## Bản IB và bản trader
 
+- **Gói Pro**: một trang duy nhất cho mọi thứ liên quan tới Pro. Trader xem tính năng nào là Pro, đã mở hay chưa, giá và nút nâng cấp. IB chọn tính năng nào là Pro (đăng tín hiệu từ Phân tích AI, chép tín hiệu từ Telegram, Phân tích AI, Học kiến thức, Tín hiệu Telegram), đặt giá và link nâng cấp, và quản lý link giới thiệu cùng gói cấu hình ngay tại đây. Trang bị khoá hiện màn hình giới thiệu Pro; mục bị khoá trong thanh bên có biểu tượng khoá nhỏ.
 - **Bản IB** (mặc định, `npm run build`): chỉnh link giới thiệu (link, mã, chữ trên nút, câu giới thiệu, ẩn/hiện, thêm đối tác), ưu đãi, cửa hàng, nhóm cộng đồng và cài đặt Pro; xuất gói cấu hình `brand.json`. Công tắc "Xem như người dùng" ở cuối thanh bên để xem giao diện của trader.
 - **Bản trader** (`npm run build:trader`, ra thư mục `dist-trader/`): chỉ xem. Đọc `brand.json` đóng gói cùng app, hoặc từ link đặt bằng `VITE_BRAND_URL` (ví dụ một GitHub Gist), nên sửa gói là người dùng thấy bản mới mà không phải cài lại.
 - Việc chặn tính năng Pro hiện dựa vào gói cấu hình (`proForAll`), chưa có xác minh theo từng người; xác minh thật cần máy chủ và đăng nhập.

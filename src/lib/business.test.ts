@@ -191,3 +191,14 @@ describe('gói cấu hình', () => {
     expect(telegramUrl('https://t.me/x')).toBe('https://t.me/x')
   })
 })
+
+import { lockedTabs } from './pro'
+
+describe('Pro', () => {
+  it('khoá trang theo tính năng, trừ trang Chia sẻ (khoá từng lựa chọn bên trong)', () => {
+    expect([...lockedTabs(['copy-ai', 'ai', 'signals'], false)].sort()).toEqual(['ai', 'signals'])
+    expect(lockedTabs(['ai'], true).size).toBe(0)
+    expect(normalizePack({}).proFeatures).toEqual(['copy-ai', 'copy-telegram'])
+    expect(normalizePack({ proFeatures: ['ai', 3] }).proFeatures).toEqual(['ai'])
+  })
+})

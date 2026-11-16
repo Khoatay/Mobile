@@ -3,6 +3,7 @@ import type { Community, Product } from './catalog'
 import { BRAND_URL, EDITION } from './edition'
 import type { Offer } from './offers'
 import { mergePartners, type PartnerConfig } from './partners'
+import { DEFAULT_PRO_FEATURES } from './pro'
 import { usePersistent } from './store'
 
 /**
@@ -20,6 +21,10 @@ export interface BrandPack {
   proForAll: boolean
   /** Nơi người dùng bấm "Nâng cấp Pro": trang bán, nhóm Telegram, Zalo… */
   proUrl: string
+  /** id các tính năng đang là Pro (xem PRO_FEATURES). */
+  proFeatures: string[]
+  /** Giá hoặc cách có Pro, hiện ở trang Gói Pro. VD: "199.000đ/tháng hoặc miễn phí cho khách IB". */
+  proPrice: string
   updatedAt: number
 }
 
@@ -28,7 +33,7 @@ export const EMPTY_PACK: BrandPack = {
   brand: { brand: 'FX Desk', tagline: '', accent: '#2a78d6', link: '', disclaimer: true },
   partners: mergePartners(undefined),
   offers: [], products: [], communities: [],
-  proForAll: false, proUrl: '', updatedAt: 0,
+  proForAll: false, proUrl: '', proFeatures: DEFAULT_PRO_FEATURES, proPrice: '', updatedAt: 0,
 }
 
 /** Kiểm tra và chuẩn hoá một gói đọc từ file hoặc mạng; thiếu trường thì lấy mặc định. */
@@ -43,6 +48,8 @@ export function normalizePack(raw: unknown): BrandPack {
     partners: mergePartners(arr<PartnerConfig>(r.partners)),
     offers: arr(r.offers), products: arr(r.products), communities: arr(r.communities),
     proForAll: !!r.proForAll, proUrl: typeof r.proUrl === 'string' ? r.proUrl : '',
+    proFeatures: Array.isArray(r.proFeatures) ? r.proFeatures.filter((x): x is string => typeof x === 'string') : DEFAULT_PRO_FEATURES,
+    proPrice: typeof r.proPrice === 'string' ? r.proPrice : '',
   }
 }
 

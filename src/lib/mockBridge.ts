@@ -404,6 +404,6 @@ export function seed() {
       { id: 'cm3', kind: 'group', name: '(Ví dụ) Nhóm chat cộng đồng', description: 'Hỏi đáp, chia sẻ lệnh, thảo luận thị trường mỗi ngày.', perk: 'Phân tích sáng và lịch tin mạnh mỗi ngày', condition: '', url: 'https://t.me/', image: '', visible: true, createdAt: now - 2 },
       { id: 'cm4', kind: 'group', name: '(Ví dụ) Nhóm VIP', description: 'Tín hiệu đã duyệt, bảng thành tích tự ghi từ MT5.', perk: 'Tín hiệu và bảng thành tích công khai', condition: 'Dành cho khách mở tài khoản dưới link IB', url: 'https://t.me/', image: '', visible: true, createdAt: now - 3 },
     ],
-    proForAll: false, proUrl: 'https://t.me/', updatedAt: now,
+    proForAll: false, proUrl: 'https://t.me/', proFeatures: ['copy-ai', 'copy-telegram', 'signals'], proPrice: '(Ví dụ) 199.000đ/tháng · miễn phí cho khách mở tài khoản dưới link IB', updatedAt: now,
   })
 }
