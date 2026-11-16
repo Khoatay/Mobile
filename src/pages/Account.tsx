@@ -415,7 +415,7 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
           {a && (
             <div className="tiles wide">
               <Tile label="Số dư" value={money(a.balance, a.currency)} sub={`Đòn bẩy 1:${a.leverage}`} />
-              <Tile label="Equity" value={money(a.equity, a.currency)} sub={`Lãi/lỗ đang treo ${signed(a.profit)}`} />
+              <Tile tone={a.profit} label="Equity" value={money(a.equity, a.currency)} sub={`Lãi/lỗ đang treo ${signed(a.profit)}`} />
               <Tile label="Ký quỹ còn trống" value={money(a.marginFree, a.currency)} sub={`Đang dùng ${money(a.margin)}`} />
             </div>
           )}

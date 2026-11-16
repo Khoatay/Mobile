@@ -87,10 +87,10 @@ export default function Dashboard({ trades, settings, infos, goJournal }: { trad
       ) : (
         <>
           <div className="tiles wide">
-            <Tile label="Lãi/lỗ ròng" value={`${signed(s.net)} ${ccy}`} sub={`${s.n} lệnh · đã trừ phí và swap`} />
+            <Tile tone={s.net} label="Lãi/lỗ ròng" value={`${signed(s.net)} ${ccy}`} sub={`${s.n} lệnh · đã trừ phí và swap`} />
             <Tile label="Tỷ lệ thắng" value={pct(s.winRate)} sub={`${s.wins} thắng · ${s.losses} thua`} />
-            <Tile label="Profit factor" value={Number.isFinite(s.profitFactor) ? s.profitFactor.toFixed(2) : '∞'} sub={`Lãi gộp ${money(s.grossProfit)} / lỗ gộp ${money(s.grossLoss)}`} />
-            <Tile label="Kỳ vọng mỗi lệnh" value={`${signed(s.expectancy)} ${ccy}`} sub={s.avgR == null ? 'Chưa có lệnh nào kèm SL' : `Trung bình ${signed(s.avgR)}R trên ${s.rCount} lệnh có SL`} />
+            <Tile tone={s.profitFactor >= 1 ? 1 : -1} label="Profit factor" value={Number.isFinite(s.profitFactor) ? s.profitFactor.toFixed(2) : '∞'} sub={`Lãi gộp ${money(s.grossProfit)} / lỗ gộp ${money(s.grossLoss)}`} />
+            <Tile tone={s.expectancy} label="Kỳ vọng mỗi lệnh" value={`${signed(s.expectancy)} ${ccy}`} sub={s.avgR == null ? 'Chưa có lệnh nào kèm SL' : `Trung bình ${signed(s.avgR)}R trên ${s.rCount} lệnh có SL`} />
             <Tile label="Sụt giảm lớn nhất" value={money(s.maxDrawdown, ccy)} sub={`Chuỗi thua dài nhất: ${s.maxLosingStreak} lệnh`} />
             <Tile label="Thắng TB / thua TB" value={s.payoff ? s.payoff.toFixed(2) : '–'} sub={`${money(s.avgWin)} / ${money(s.avgLoss)} · giữ TB ${duration(s.avgHoldMs)}`} />
           </div>

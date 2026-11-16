@@ -25,9 +25,11 @@ export function Num({ value, onChange, step, min }: { value: number; onChange: (
   )
 }
 
-export function Tile({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
+export function Tile({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'pos' | 'neg' | number }) {
+  // tone là số thì lấy theo dấu: dương là lãi, âm là lỗ.
+  const t = typeof tone === 'number' ? (tone > 0 ? 'pos' : tone < 0 ? 'neg' : '') : tone ?? ''
   return (
-    <div className="tile">
+    <div className={t ? `tile ${t}` : 'tile'}>
       <div className="tile-label">{label}</div>
       <div className="tile-value">{value}</div>
       {sub && <div className="tile-sub">{sub}</div>}

@@ -1,0 +1,178 @@
+/*
+ * Giao diện "bàn giao dịch": thanh bên navy cố định ở cả hai chế độ, logo vàng (XAU),
+ * icon màu theo nhóm, lãi xanh lá / lỗ đỏ, số liệu dùng Space Grotesk, chữ thường Be Vietnam Pro
+ * (đủ dấu tiếng Việt). Lớp này nạp sau styles.css và chỉ đè lên token và vài thành phần.
+ */
+:root {
+  --font-ui: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-num: 'Space Grotesk', 'Be Vietnam Pro', system-ui, sans-serif;
+  --page: #f3f5fa;
+  --surface: #ffffff;
+  --raised: #edf0f7;
+  --ink: #0f1729;
+  --ink-2: #4a5568;
+  --muted: #7a8599;
+  --hair: #e5e9f2;
+  --axis: #cdd5e3;
+  --border: rgba(15, 23, 41, 0.08);
+  --pos: #0f9d6a;
+  --neg: #e5484d;
+  --gold: #f2b33d;
+  --shadow: 0 1px 2px rgba(15, 23, 41, 0.04), 0 4px 16px rgba(15, 23, 41, 0.05);
+  --glow: radial-gradient(1200px 500px at 85% -10%, rgba(42, 120, 214, 0.08), transparent 60%);
+  --nav-bg: linear-gradient(180deg, #0b1322 0%, #101b31 100%);
+  --nav-ink: #b7c1d6;
+  --nav-muted: #6e7b94;
+  --nav-hover: rgba(255, 255, 255, 0.06);
+  --nav-active: rgba(255, 255, 255, 0.1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #090e18;
+    --surface: #111a2a;
+    --raised: #1a2538;
+    --ink: #e8edf6;
+    --ink-2: #a9b4c7;
+    --muted: #7c889c;
+    --hair: #1d2839;
+    --axis: #2a3850;
+    --border: rgba(255, 255, 255, 0.07);
+    --pos: #1fae78;
+    --neg: #d9434f;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
+    --glow: radial-gradient(1200px 500px at 85% -10%, rgba(57, 135, 229, 0.12), transparent 60%);
+    --nav-bg: linear-gradient(180deg, #070c16 0%, #0b1424 100%);
+  }
+}
+:root[data-theme="dark"] {
+  --page: #090e18;
+  --surface: #111a2a;
+  --raised: #1a2538;
+  --ink: #e8edf6;
+  --ink-2: #a9b4c7;
+  --muted: #7c889c;
+  --hair: #1d2839;
+  --axis: #2a3850;
+  --border: rgba(255, 255, 255, 0.07);
+  --pos: #1fae78;
+  --neg: #d9434f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
+  --glow: radial-gradient(1200px 500px at 85% -10%, rgba(57, 135, 229, 0.12), transparent 60%);
+  --nav-bg: linear-gradient(180deg, #070c16 0%, #0b1424 100%);
+}
+
+body { font-family: var(--font-ui); background: var(--glow), var(--page); background-attachment: fixed; }
+h1 { font-family: var(--font-num); font-size: 26px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+h3 { font-size: 14.5px; }
+
+/* ---------- thanh bên */
+.app { grid-template-columns: 236px minmax(0, 1fr); }
+.sidebar { background: var(--nav-bg); border-right: none; color: var(--nav-ink); padding: 18px 12px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 8px; color: #fff; }
+.logo {
+  width: 36px; height: 36px; border-radius: 10px; flex: none; display: grid; place-items: center;
+  font-family: var(--font-num); font-weight: 700; font-size: 14px; letter-spacing: 0.02em; color: #1b1406;
+  background: linear-gradient(135deg, #ffd978 0%, var(--gold) 45%, #d98a1c 100%);
+  box-shadow: 0 4px 14px rgba(242, 179, 61, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.brand-text { font-family: var(--font-num); font-size: 17px; font-weight: 700; line-height: 1.2; min-width: 0; }
+.brand small { color: var(--nav-muted); font-family: var(--font-ui); font-weight: 400; }
+.nav-title { color: var(--nav-muted); font-weight: 600; letter-spacing: 0.08em; padding: 6px 10px 4px; }
+.nav { color: var(--nav-ink); border-radius: 8px; padding: 7px 10px; font-size: 13.5px; }
+.nav:hover { background: var(--nav-hover); color: #fff; }
+.nav.active { background: var(--nav-active); color: #fff; font-weight: 600; }
+.nav-label { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.nav-icon { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; flex: none; color: var(--tone); background: color-mix(in srgb, var(--tone) 14%, transparent); transition: background 0.15s, color 0.15s; }
+.nav.active .nav-icon { background: var(--tone); color: #0b1322; }
+.tone-gold { --tone: #f2b33d; }
+.tone-sky { --tone: #5cc2ff; }
+.tone-mint { --tone: #3fd6a2; }
+.tone-lilac { --tone: #b49cff; }
+.count { color: var(--nav-muted); font-family: var(--font-num); }
+.nav.active .count { color: var(--nav-ink); }
+.side-note { color: var(--nav-muted); }
+.bridge-state { color: var(--nav-ink); background: rgba(255, 255, 255, 0.04); border-radius: 8px; padding: 8px 10px; margin: 0 2px; }
+.sidebar .led { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06); }
+.sidebar .led.on { background: #3fd6a2; box-shadow: 0 0 0 3px rgba(63, 214, 162, 0.2), 0 0 10px rgba(63, 214, 162, 0.6); }
+
+/* ---------- khối nội dung */
+.main { padding: 28px 32px 56px; max-width: 1320px; }
+.card { border-radius: 14px; box-shadow: var(--shadow); padding: 18px 20px; }
+.tile { border-radius: 12px; }
+.tiles.wide .tile { box-shadow: var(--shadow); padding: 14px 16px; }
+.tile-value { font-family: var(--font-num); font-size: 22px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.tiles.wide .tile-value { font-size: 24px; }
+.tile.pos { background: color-mix(in srgb, var(--pos) 9%, var(--surface)); border-color: color-mix(in srgb, var(--pos) 28%, transparent); }
+.tile.pos .tile-value { color: var(--pos); }
+.tile.neg { background: color-mix(in srgb, var(--neg) 8%, var(--surface)); border-color: color-mix(in srgb, var(--neg) 26%, transparent); }
+.tile.neg .tile-value { color: var(--neg); }
+.num, .tick, .trade-grid, .hero { font-family: var(--font-num); }
+
+.hero { font-size: 64px; font-weight: 700; letter-spacing: -0.03em; background: linear-gradient(120deg, var(--ink) 0%, var(--accent) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero span { -webkit-text-fill-color: var(--ink-2); font-family: var(--font-ui); }
+.result { background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 7%, var(--surface)) 0%, var(--surface) 55%); }
+
+button { border-radius: 8px; transition: filter 0.15s, transform 0.05s, box-shadow 0.15s; }
+button:active:not(:disabled) { transform: translateY(1px); }
+button.primary { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, #fff) 0%, var(--accent) 100%); box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent); font-weight: 600; }
+button.primary:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 45%, transparent); }
+input, select, textarea { border-radius: 8px; }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); outline: none; }
+
+.seg { border-radius: 10px; padding: 3px; }
+.seg button { border-radius: 7px; }
+.seg button.active { box-shadow: 0 1px 3px rgba(15, 23, 41, 0.12); color: var(--accent); }
+
+/* tab dạng viên thuốc */
+.tabs { border-bottom: none; gap: 6px; background: var(--surface); padding: 5px; border-radius: 12px; box-shadow: var(--shadow); border: 1px solid var(--border); width: fit-content; max-width: 100%; }
+.tab { border-radius: 8px; border-bottom: none; margin-bottom: 0; padding: 7px 13px; }
+.tab:hover { background: var(--raised); }
+.tab.active { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent); }
+.tab.active small { color: color-mix(in srgb, var(--accent) 70%, var(--ink-2)); }
+
+.chip { border-radius: 999px; padding: 2px 9px; background: var(--raised); }
+.notice { border-radius: 10px; border-left: none; }
+.warn, .notice.bad { border-radius: 10px; }
+thead th { text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px; font-weight: 600; }
+tbody tr { transition: background 0.1s; }
+.pip { border-radius: 50%; }
+
+/* biểu đồ và thanh */
+.bar.pos { background: linear-gradient(90deg, color-mix(in srgb, var(--pos) 70%, transparent), var(--pos)); }
+.bar.neg { background: linear-gradient(270deg, color-mix(in srgb, var(--neg) 70%, transparent), var(--neg)); }
+.meter { height: 10px; border-radius: 6px; }
+.meter > div { border-radius: 6px; background: linear-gradient(90deg, color-mix(in srgb, var(--m) 75%, #fff), var(--m)); }
+
+/* phân tích AI */
+.trend.up { color: var(--pos); }
+.trend.down { color: var(--neg); }
+.trend { padding: 2px 9px; border-radius: 999px; background: var(--raised); font-family: var(--font-ui); }
+.trend.up { background: color-mix(in srgb, var(--pos) 13%, transparent); }
+.trend.down { background: color-mix(in srgb, var(--neg) 12%, transparent); }
+.tf-cell .trend { padding: 0; background: none; }
+.trade-box { border-left-width: 1px; border-radius: 12px; }
+.trade-box.buy { border-color: color-mix(in srgb, var(--pos) 40%, transparent); background: color-mix(in srgb, var(--pos) 7%, var(--surface)); }
+.trade-box.sell { border-color: color-mix(in srgb, var(--neg) 40%, transparent); background: color-mix(in srgb, var(--neg) 7%, var(--surface)); }
+.trade-box.buy .trade-head strong { color: var(--pos); }
+.trade-box.sell .trade-head strong { color: var(--neg); }
+.bubble { border-radius: 14px; }
+.bubble.user { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, var(--surface)), color-mix(in srgb, var(--accent) 12%, var(--surface))); border-bottom-right-radius: 4px; }
+.bubble.assistant { border-bottom-left-radius: 4px; }
+
+.preview-bar { background: linear-gradient(90deg, #2b1d05, #4a3208 50%, #2b1d05); color: #ffd978; font-weight: 500; }
+
+@media (max-width: 720px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { padding: 10px 12px; position: sticky; top: 0; z-index: 20; height: auto; flex-direction: column; align-items: stretch; gap: 8px; }
+  .sidebar nav { display: flex; flex-direction: row; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+  .nav-group { flex-direction: row; gap: 4px; margin: 0; }
+  .nav-title, .side-note { display: none; }
+  .nav { white-space: nowrap; padding: 6px 10px 6px 6px; }
+  .brand { padding: 0 4px; }
+  .logo { width: 30px; height: 30px; font-size: 12px; }
+  .main { padding: 18px 16px 40px; }
+  .nav-icon { width: 22px; height: 22px; }
+  .tabs { width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+  .hero { font-size: 52px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

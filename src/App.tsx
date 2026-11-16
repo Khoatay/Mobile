@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import Icon, { type IconName } from './components/Icon'
 import { resolveInfos, type AccountInfo } from './lib/accounts'
 import { PREVIEW, useBridge, useTelegramMessages } from './lib/bridge'
 import { DEFAULT_PROFILE, type Profile } from './lib/share'
@@ -18,10 +19,10 @@ import Share from './pages/Share'
 import Signals from './pages/Signals'
 
 const GROUPS = [
-  { title: 'Giao dịch', tabs: [['calc', 'Tính lot'], ['account', 'Tài khoản MT5'], ['prop', 'Luật quỹ']] },
-  { title: 'Phân tích', tabs: [['journal', 'Nhật ký lệnh'], ['stats', 'Thống kê'], ['learn', 'Học kiến thức'], ['ai', 'Phân tích AI'], ['signals', 'Tín hiệu Telegram'], ['news', 'Tin tức']] },
-  { title: 'Kinh doanh', tabs: [['ledger', 'Thu chi đầu tư'], ['share', 'Chia sẻ cộng đồng']] },
-  { title: 'Khác', tabs: [['guides', 'Hướng dẫn'], ['me', 'Cá nhân hoá']] },
+  { title: 'Giao dịch', tone: 'gold', tabs: [['calc', 'Tính lot', 'calc'], ['account', 'Tài khoản MT5', 'terminal'], ['prop', 'Luật quỹ', 'shield']] },
+  { title: 'Phân tích', tone: 'sky', tabs: [['journal', 'Nhật ký lệnh', 'journal'], ['stats', 'Thống kê', 'chart'], ['learn', 'Học kiến thức', 'bulb'], ['ai', 'Phân tích AI', 'sparkle'], ['signals', 'Tín hiệu Telegram', 'send'], ['news', 'Tin tức', 'news']] },
+  { title: 'Kinh doanh', tone: 'mint', tabs: [['ledger', 'Thu chi đầu tư', 'coins'], ['share', 'Chia sẻ cộng đồng', 'megaphone']] },
+  { title: 'Khác', tone: 'lilac', tabs: [['guides', 'Hướng dẫn', 'book'], ['me', 'Cá nhân hoá', 'palette']] },
 ] as const
 type Tab = (typeof GROUPS)[number]['tabs'][number][0]
 
@@ -55,14 +56,17 @@ export default function App() {
     {PREVIEW && <div className="preview-bar">Bản xem trước: dữ liệu giả lập, không nối MT5 hay Telegram thật. Lệnh, tin nhắn và tài khoản ở đây đều là mẫu.</div>}
     <div className="app">
       <aside className="sidebar">
-        <div className="brand">{profile.brand || 'FX Desk'}{profile.tagline && <small>{profile.tagline}</small>}</div>
+        <div className="brand">
+          <span className="logo" aria-hidden="true">{(profile.brand || 'FX').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase() || 'FX'}</span>
+          <span className="brand-text">{profile.brand || 'FX Desk'}{profile.tagline && <small>{profile.tagline}</small>}</span>
+        </div>
         <nav>
           {GROUPS.map((g) => (
-            <div key={g.title} className="nav-group">
+            <div key={g.title} className={`nav-group tone-${g.tone}`}>
               <div className="nav-title">{g.title}</div>
-              {g.tabs.map(([id, label]) => (
+              {g.tabs.map(([id, label, icon]) => (
                 <button key={id} className={tab === id ? 'nav active' : 'nav'} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
-                  {label}
+                  <span className="nav-label"><span className="nav-icon"><Icon name={icon as IconName} /></span>{label}</span>
                   {id === 'journal' && trades.length > 0 && <span className="count">{trades.length}</span>}
                 </button>
               ))}

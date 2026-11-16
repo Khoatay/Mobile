@@ -54,9 +54,9 @@ export default function Ledger({ bridge, settings, labels, infos }: { bridge: Br
       <div className="tiles wide">
         <Tile label="Đã bỏ ra" value={money(s.out, ccy)} sub="Phí quỹ, nạp tài khoản, công cụ, khoá học…" />
         <Tile label="Đã thu về" value={money(s.in, ccy)} sub="Rút từ quỹ, từ tài khoản, backcom, affiliate…" />
-        <Tile label="Dòng tiền ròng" value={`${signed(s.net)} ${ccy}`} sub="Thu về trừ bỏ ra" />
+        <Tile tone={s.net} label="Dòng tiền ròng" value={`${signed(s.net)} ${ccy}`} sub="Thu về trừ bỏ ra" />
         <Tile label="Còn trong tài khoản của bạn" value={own.length ? money(s.held, ccy) : '–'} sub={own.length ? own.map((a) => labels[a.id] ?? a.label).join(', ') : 'Nối tài khoản Real qua MT5 để tính'} />
-        <Tile label="Lãi/lỗ tổng" value={`${signed(s.total)} ${ccy}`} sub={own.length ? 'Dòng tiền ròng + tiền còn trong tài khoản. Chỉ đúng khi đã ghi đủ mọi lần nạp.' : 'Chưa gồm tiền còn trong tài khoản thật'} />
+        <Tile tone={s.total} label="Lãi/lỗ tổng" value={`${signed(s.total)} ${ccy}`} sub={own.length ? 'Dòng tiền ròng + tiền còn trong tài khoản. Chỉ đúng khi đã ghi đủ mọi lần nạp.' : 'Chưa gồm tiền còn trong tài khoản thật'} />
         <Tile label="Tỷ suất trên tiền bỏ ra" value={s.roi == null ? '–' : `${s.roi > 0 ? '+' : ''}${pct(s.roi)}`} sub="Lãi/lỗ tổng chia tổng đã bỏ ra" />
       </div>
 
