@@ -1,0 +1,87 @@
+/** Kiểu dữ liệu của phần tự động hoá trong bridge (bảo vệ tài khoản, cảnh báo, copy lệnh). */
+export interface GuardConfig {
+  enabled: boolean
+  /** Số tiền được lỗ trong ngày (đã chốt + đang treo). 0 = không áp dụng. */
+  daily_limit: number
+  /** Mức equity không được chạm (sàn lỗ tổng). 0 = không áp dụng. */
+  floor: number
+  /** Tổng khoảng lỗ cho phép, để tính % đã dùng của sàn. */
+  max_loss: number
+  warn_at: number[]
+  act_at: number
+  max_consec_losses: number
+  max_trades: number
+  close_on_breach: boolean
+  close_new_when_locked: boolean
+  server_offset: number
+}
+export interface GuardState {
+  day_loss: number; used: number; floor_used: number; level: number; equity: number; currency: string
+  consec_losses: number; trades: number; positions: number; tradable: boolean; error: string; updated: number
+}
+export interface AutoEvent { at: number; kind: 'warn' | 'lock' | 'unlock' | 'news' | 'copy' | 'copy-error'; account: string; label: string; text: string }
+export interface CopyFollower { account: string; mode: 'fixed' | 'multiplier' | 'balance'; value: number; reverse: boolean }
+export interface CopierConfig { enabled: boolean; master: string; followers: CopyFollower[]; copy_sltp: boolean }
+export interface AutomationSnapshot {
+  guards: Record<string, GuardConfig>
+  states: Record<string, GuardState>
+  locks: Record<string, { until: number; reason: string; at: number }>
+  events: AutoEvent[]
+  alerts: { news: boolean; minutes: number; notify: boolean }
+  copier: CopierConfig
+  copyState: { started: number; last: number; error: string }
+  telegram: boolean
+}
+
+/** Cách IB/trader đặt giới hạn trên app; app tính ra số tiền cụ thể rồi gửi cho bridge. */
+export interface GuardUi {
+  enabled: boolean
+  /** prop: lấy từ luật quỹ của tài khoản; custom: % số dư tự đặt. */
+  source: 'prop' | 'custom'
+  dailyPct: number
+  totalPct: number
+  warn1: number
+  warn2: number
+  actAt: number
+  maxConsec: number
+  maxTrades: number
+  closeOnBreach: boolean
+  closeNew: boolean
+}
+export const DEFAULT_GUARD_UI: GuardUi = { enabled: true, source: 'prop', dailyPct: 3, totalPct: 8, warn1: 70, warn2: 90, actAt: 95, maxConsec: 3, maxTrades: 0, closeOnBreach: true, closeNew: true }
+
+/** Tính cấu hình gửi bridge. Với nguồn "prop", giới hạn lấy từ luật quỹ đã đánh giá (số tiền cụ thể của hôm nay). */
+export function buildGuard(ui: GuardUi, serverOffset: number, balance: number, prop?: { dailyLimit: number; floor: number; maxLossLimit: number }): GuardConfig {
+  const fromProp = ui.source === 'prop' && prop
+  return {
+    enabled: ui.enabled,
+    daily_limit: round2(fromProp ? prop.dailyLimit : (balance * ui.dailyPct) / 100),
+    floor: round2(fromProp ? prop.floor : ui.totalPct > 0 ? balance * (1 - ui.totalPct / 100) : 0),
+    max_loss: round2(fromProp ? prop.maxLossLimit : (balance * ui.totalPct) / 100),
+    warn_at: [ui.warn1, ui.warn2].filter((x) => x > 0 && x < ui.actAt).map((x) => x / 100),
+    act_at: ui.actAt / 100,
+    max_consec_losses: ui.maxConsec,
+    max_trades: ui.maxTrades,
+    close_on_breach: ui.closeOnBreach,
+    close_new_when_locked: ui.closeNew,
+    server_offset: serverOffset,
+  }
+}
+const round2 = (v: number) => Math.round(v * 100) / 100
+
+/** Hai cấu hình khác nhau đủ để phải gửi lại (bỏ qua chênh lệch nhỏ hơn 1 xu). */
+export function guardChanged(a: GuardConfig | undefined, b: GuardConfig): boolean {
+  if (!a) return true
+  return (Object.keys(b) as (keyof GuardConfig)[]).some((k) => {
+    const x = a[k], y = b[k]
+    if (typeof y === 'number') return Math.abs((x as number) - y) >= 0.01
+    return JSON.stringify(x) !== JSON.stringify(y)
+  })
+}
+
+/** Khối lượng lệnh chép, giống bridge, để xem trước trên giao diện. */
+export function copyVolume(masterVol: number, masterBalance: number, followerBalance: number, f: CopyFollower): number {
+  if (f.mode === 'fixed') return f.value
+  if (f.mode === 'balance') return masterVol * (masterBalance > 0 ? followerBalance / masterBalance : 0) * f.value
+  return masterVol * f.value
+}

@@ -31,6 +31,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
+from automation import Automation
 from brain import Brain, Knowledge
 
 HERE = Path(__file__).resolve().parent
@@ -139,6 +140,7 @@ class Mt5:
                     "ticket": p.ticket, "symbol": p.symbol, "side": "buy" if p.type == 0 else "sell",
                     "volume": p.volume, "openPrice": p.price_open, "price": p.price_current,
                     "sl": p.sl, "tp": p.tp, "profit": p.profit, "swap": p.swap, "time": p.time,
+                    "comment": getattr(p, "comment", ""), "magic": getattr(p, "magic", 0),
                 })
             return {
                 "login": a.login, "server": a.server, "name": a.name, "currency": a.currency,
@@ -291,6 +293,79 @@ class Mt5:
                 "deviation": 20, "magic": 20261115, "comment": "FX Desk close",
                 "type_time": mt5.ORDER_TIME_GTC, "type_filling": self._filling(info),
             })
+
+    def close_all(self, reason="FX Desk guard"):
+        """Đóng mọi lệnh đang mở. Trả về số lệnh đã đóng và lỗi nếu có (không dừng giữa chừng)."""
+        with self.lock:
+            self._tradable()
+            done, errors = 0, []
+            for pos in self.mt5.positions_get() or ():
+                try:
+                    self.close(pos.ticket)
+                    done += 1
+                except Exception as e:
+                    errors.append(f"{pos.symbol} #{pos.ticket}: {e}")
+            return {"closed": done, "errors": errors}
+
+    def modify(self, ticket, sl, tp):
+        """Đổi SL/TP của một lệnh đang mở."""
+        with self.lock:
+            self._tradable()
+            mt5 = self.mt5
+            found = mt5.positions_get(ticket=int(ticket)) or ()
+            if not found:
+                raise ValueError(f"Không thấy lệnh đang mở số {ticket}")
+            pos = found[0]
+            return self._send({"action": mt5.TRADE_ACTION_SLTP, "symbol": pos.symbol, "position": pos.ticket, "sl": float(sl or 0), "tp": float(tp or 0)})
+
+    def copy_open(self, p):
+        """Mở lệnh chép từ tài khoản nguồn. Giống order() nhưng cho phép SL trống nếu lệnh nguồn không có SL."""
+        with self.lock:
+            self._tradable()
+            mt5 = self.mt5
+            name = self.resolve(str(p["symbol"]))
+            if not name:
+                raise ValueError(f"Broker không có mã {p['symbol']}")
+            info, tick = mt5.symbol_info(name), mt5.symbol_info_tick(name)
+            if info is None or tick is None or tick.ask <= 0:
+                raise RuntimeError(f"Không có giá cho {name}")
+            step = info.volume_step or 0.01
+            max_lot = float(self.cfg.get("max_lot", 1.0))
+            volume = min(float(p["volume"]), max_lot)
+            volume = round(int(volume / step + 1e-9) * step, 8)
+            if volume < info.volume_min:
+                raise ValueError(f"Khối lượng {volume} nhỏ hơn mức tối thiểu {info.volume_min} của {name}")
+            buy = p["side"] == "buy"
+            return self._send({
+                "action": mt5.TRADE_ACTION_DEAL, "symbol": name, "volume": volume,
+                "type": mt5.ORDER_TYPE_BUY if buy else mt5.ORDER_TYPE_SELL, "price": tick.ask if buy else tick.bid,
+                "sl": float(p.get("sl") or 0), "tp": float(p.get("tp") or 0), "deviation": 20, "magic": 20261116,
+                "comment": str(p.get("comment", ""))[:31], "type_time": mt5.ORDER_TIME_GTC, "type_filling": self._filling(info),
+            })
+
+    def today(self, server_offset):
+        """Kết quả hôm nay theo ngày máy chủ: lãi/lỗ đã chốt, số lệnh, chuỗi thua liên tiếp hiện tại."""
+        with self.lock:
+            if not self.ensure():
+                raise RuntimeError(self.error)
+            day0 = int((time.time() + float(server_offset) * 3600) // 86400 * 86400)
+            deals = [d for d in self.mt5.history_deals_get(datetime.now() - timedelta(days=3), datetime.now() + timedelta(days=2)) or () if d.time >= day0]
+            closed, by_pos, opened = 0.0, {}, set()
+            for d in sorted(deals, key=lambda x: x.time):
+                if d.type not in (0, 1):
+                    continue
+                net = d.profit + d.commission + d.swap + getattr(d, "fee", 0.0)
+                closed += net
+                if d.entry == 0:
+                    opened.add(d.position_id)
+                else:
+                    by_pos.setdefault(d.position_id, [0.0, d.time])
+                    by_pos[d.position_id][0] += net
+                    by_pos[d.position_id][1] = d.time
+            streak = 0
+            for net, _ in sorted(by_pos.values(), key=lambda x: x[1]):
+                streak = streak + 1 if net < 0 else 0
+            return {"closed_pnl": round(closed, 2), "trades": len(opened), "consec_losses": streak, "day_start": day0}
 
 
 def worker_main(cfg, conn):
@@ -507,8 +582,7 @@ class Telegram:
         entities = await self.resolve(client, self.cfg.get("channels"))
         targets = await self.resolve(client, self.cfg.get("post_targets"))
         if not entities and not targets:
-            self.error = "Không tìm thấy kênh nào trong config.json"
-            return
+            print("[telegram] Chưa khai báo kênh nào; vẫn kết nối để gửi cảnh báo vào Saved Messages")
         titles = {e.id: get_display_name(e) for e in entities}
         limit = int(self.cfg.get("history_per_channel", 200))
         for e in entities:
@@ -530,6 +604,13 @@ class Telegram:
             print(f"[telegram] Được phép gửi bài tới: {', '.join(self.targets)}")
         await client.run_until_disconnected()
         self.connected, self.error = False, "Mất kết nối Telegram"
+
+    def send_me(self, text):
+        """Nhắn vào Saved Messages của chính tài khoản Telegram: điện thoại sẽ báo. Không chặn, bỏ qua nếu chưa nối."""
+        if not self.connected or self.loop is None:
+            return
+        client = self.tg
+        asyncio.run_coroutine_threadsafe(client.send_message("me", text), self.loop)
 
     def send(self, target, text, image=None):
         """Gửi bài tới một nhóm trong post_targets. Chú thích ảnh của Telegram tối đa 1024 ký tự."""
@@ -620,8 +701,7 @@ class Calendar:
 
 # ---------------------------------------------------------------------------- HTTP
 
-def make_handler(registry, tg, kb, brain):
-    calendar = Calendar()
+def make_handler(registry, tg, kb, brain, calendar, auto):
 
     def send_post(body):
         image = str(body.get("image") or "")
@@ -714,6 +794,7 @@ def make_handler(registry, tg, kb, brain):
                 "/terminals": registry.terminals,
                 "/kb": kb.list,
                 "/ai/status": brain.status,
+                "/automation": auto.snapshot,
             }
             if url.path not in routes:
                 return self.send(404, {"error": "Không có đường dẫn này"})
@@ -733,7 +814,22 @@ def make_handler(registry, tg, kb, brain):
             except ValueError:
                 return self.send(400, {"error": "Dữ liệu gửi lên không phải JSON"})
             if url.path == "/order":
-                self.answer(lambda: pick({"account": str(body["account"])}).call("order", body))
+                def place():
+                    lk = auto.locked(str(body["account"]))
+                    if lk:
+                        raise ValueError(f"Tài khoản đang bị khoá vào lệnh: {lk['reason']}")
+                    return pick({"account": str(body["account"])}).call("order", body)
+                self.answer(place)
+            elif url.path == "/automation/guard":
+                self.answer(lambda: auto.set_guard(body))
+            elif url.path == "/automation/unlock":
+                self.answer(lambda: auto.unlock(str(body["account"])))
+            elif url.path == "/automation/alerts":
+                self.answer(lambda: auto.set_alerts(body))
+            elif url.path == "/automation/copier":
+                self.answer(lambda: auto.set_copier(body))
+            elif url.path == "/automation/test":
+                self.answer(auto.test_notify)
             elif url.path == "/kb/save":
                 self.answer(lambda: kb.save(body))
             elif url.path == "/kb/delete":
@@ -768,12 +864,15 @@ def main():
     registry = Registry(cfg)
     kb = Knowledge()
     brain = Brain(cfg, kb)
+    calendar = Calendar()
+    auto = Automation(registry, tg, calendar)
+    auto.start()
     print(f"[ai] {'Đã có khoá API' if brain.status()['configured'] else 'Chưa có khoá API: thêm anthropic_api_key vào config.json để dùng phần Học và phân tích'} · model {brain.model}")
     for a in registry.list():
         print(f"[mt5] {a.label} ({a.type}){' — CHO PHÉP VÀO LỆNH' if a.tradable else ''}: đang kết nối…")
     tg.start()
     port = int(cfg.get("port", 8787))
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(registry, tg, kb, brain))
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(registry, tg, kb, brain, calendar, auto))
     print(f"FX Desk bridge đang chạy tại http://127.0.0.1:{port} (Ctrl+C để dừng)")
     try:
         server.serve_forever()

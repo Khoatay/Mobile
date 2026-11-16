@@ -22,6 +22,8 @@ import Offers from './pages/Offers'
 import Shop from './pages/Shop'
 import Community from './pages/Community'
 import ProPage from './pages/ProPage'
+import Guard from './pages/Guard'
+import Copier from './pages/Copier'
 import { ProLockPage } from './components/ProGate'
 import { lockedTabs, PRO_FEATURES } from './lib/pro'
 import type { SignalDraft } from './lib/share'
@@ -32,7 +34,7 @@ import Share from './pages/Share'
 import Signals from './pages/Signals'
 
 const GROUPS = [
-  { title: 'Giao dịch', tone: 'gold', tabs: [['calc', 'Tính lot', 'calc'], ['account', 'Tài khoản', 'terminal'], ['prop', 'Quỹ', 'shield']] },
+  { title: 'Giao dịch', tone: 'gold', tabs: [['calc', 'Tính lot', 'calc'], ['account', 'Tài khoản', 'terminal'], ['prop', 'Quỹ', 'shield'], ['guard', 'Bảo vệ', 'lock'], ['copier', 'Copy lệnh', 'copy']] },
   { title: 'Phân tích', tone: 'sky', tabs: [['journal', 'Nhật ký lệnh', 'journal'], ['stats', 'Thống kê', 'chart'], ['learn', 'Học kiến thức', 'bulb'], ['ai', 'Phân tích AI', 'sparkle'], ['signals', 'Tín hiệu Telegram', 'send'], ['news', 'Tin tức', 'news']] },
   { title: 'Cộng đồng', tone: 'mint', tabs: [['offers', 'Ưu đãi', 'gift'], ['shop', 'Cửa hàng', 'bag'], ['community', 'Nhóm cộng đồng', 'users'], ['share', 'Chia sẻ cộng đồng', 'megaphone']] },
   { title: 'Cá nhân', tone: 'lilac', tabs: [['pro', 'Gói Pro', 'crown'], ['ledger', 'Thu chi đầu tư', 'coins'], ['guides', 'Hướng dẫn', 'book'], ['profile', 'Hồ sơ', 'user'], ['me', 'Cá nhân hoá', 'palette']] },
@@ -128,6 +130,8 @@ export default function App() {
         {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} infos={infos} goAccounts={() => setTab('account')} links={links} />}
         {tab === 'account' && <Account bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} infos={infos} setInfo={setInfo} links={links} />}
         {tab === 'signals' && (locked.has('signals') ? <ProLockPage feature={lockOf('signals')} onOpenPro={() => setTab('pro')} /> : <Signals bridge={bridge} settings={settings} messages={messages} />)}
+        {tab === 'guard' && (locked.has('guard') ? <ProLockPage feature={lockOf('guard')} onOpenPro={() => setTab('pro')} /> : <Guard bridge={bridge} trades={trades} settings={settings} infos={infos} />)}
+        {tab === 'copier' && (locked.has('copier') ? <ProLockPage feature={lockOf('copier')} onOpenPro={() => setTab('pro')} /> : <Copier bridge={bridge} infos={infos} />)}
         {tab === 'learn' && (locked.has('learn') ? <ProLockPage feature={lockOf('learn')} onOpenPro={() => setTab('pro')} /> : <Learn bridge={bridge} />)}
         {tab === 'ai' && (locked.has('ai') ? <ProLockPage feature={lockOf('ai')} onOpenPro={() => setTab('pro')} /> : <Analyze bridge={bridge} settings={settings} shareLocked={featureLocked('copy-ai')} onShare={(d) => { if (featureLocked('copy-ai')) { setTab('pro'); return } setDraft(d); setTab('share') }} />)}
         {tab === 'news' && <News bridge={bridge} messages={messages} />}

@@ -198,7 +198,26 @@ describe('Pro', () => {
   it('khoá trang theo tính năng, trừ trang Chia sẻ (khoá từng lựa chọn bên trong)', () => {
     expect([...lockedTabs(['copy-ai', 'ai', 'signals'], false)].sort()).toEqual(['ai', 'signals'])
     expect(lockedTabs(['ai'], true).size).toBe(0)
-    expect(normalizePack({}).proFeatures).toEqual(['copy-ai', 'copy-telegram'])
+    expect(normalizePack({}).proFeatures).toEqual(['guard', 'copier', 'copy-ai'])
     expect(normalizePack({ proFeatures: ['ai', 3] }).proFeatures).toEqual(['ai'])
+  })
+})
+
+import { buildGuard, copyVolume, DEFAULT_GUARD_UI, guardChanged } from './automation'
+
+describe('bảo vệ và copy lệnh', () => {
+  it('giới hạn theo luật quỹ hoặc % số dư', () => {
+    const g = buildGuard(DEFAULT_GUARD_UI, 2, 100000, { dailyLimit: 5000, floor: 90000, maxLossLimit: 10000 })
+    expect(g).toMatchObject({ daily_limit: 5000, floor: 90000, max_loss: 10000, act_at: 0.95, warn_at: [0.7, 0.9], max_consec_losses: 3, server_offset: 2 })
+    const c = buildGuard({ ...DEFAULT_GUARD_UI, source: 'custom', dailyPct: 2, totalPct: 6, warn2: 96 }, 3, 20000)
+    expect(c).toMatchObject({ daily_limit: 400, floor: 18800, max_loss: 1200, warn_at: [0.7] })
+    expect(guardChanged(g, { ...g })).toBe(false)
+    expect(guardChanged(g, { ...g, daily_limit: 4999.5 })).toBe(true)
+    expect(guardChanged(undefined, g)).toBe(true)
+  })
+  it('khối lượng chép', () => {
+    expect(copyVolume(1, 10000, 50000, { account: 'x', mode: 'balance', value: 1, reverse: false })).toBe(5)
+    expect(copyVolume(1, 10000, 50000, { account: 'x', mode: 'multiplier', value: 0.5, reverse: false })).toBe(0.5)
+    expect(copyVolume(2, 10000, 50000, { account: 'x', mode: 'fixed', value: 0.1, reverse: false })).toBe(0.1)
   })
 })

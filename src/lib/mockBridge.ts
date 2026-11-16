@@ -226,6 +226,39 @@ function mockAnalysis(f: MarketFeatures): Analysis {
   }
 }
 
+// ---------- tự động hoá giả lập (bảo vệ, cảnh báo, copy lệnh)
+import type { AutoEvent, AutomationSnapshot, CopierConfig, GuardConfig } from './automation'
+const auto = {
+  guards: {} as Record<string, GuardConfig>,
+  locks: {} as AutomationSnapshot['locks'],
+  events: [
+    { at: T0 - 3 * HOUR, kind: 'news', account: '', label: 'Hệ thống', text: 'Còn 25 phút nữa có tin mạnh USD: Core CPI m/m. Bạn đang có lệnh mở với USD.' },
+  ] as AutoEvent[],
+  alerts: { news: true, minutes: 30, notify: true },
+  copier: { enabled: false, master: '', followers: [], copy_sltp: true } as CopierConfig,
+}
+// Lỗ đã chốt hôm nay của từng tài khoản (giả lập), để thanh "đã dùng" có số.
+const closedToday: Record<string, number> = { '520011': -1450, '730045': -320, '218551005': -6.4, '411902': 0 }
+function autoSnapshot(): AutomationSnapshot {
+  const states: AutomationSnapshot['states'] = {}
+  for (const a of accounts) {
+    const g = auto.guards[a.id]
+    if (!g) continue
+    const l = live(a)
+    const dayLoss = Math.max(0, -((closedToday[a.id] ?? 0) + l.profit))
+    const used = g.daily_limit > 0 ? dayLoss / g.daily_limit : 0
+    const floorUsed = g.floor > 0 && g.max_loss > 0 ? Math.max(0, (g.max_loss - (l.equity - g.floor)) / g.max_loss) : 0
+    const level = Math.max(used, floorUsed)
+    if (g.enabled && level >= g.act_at && !auto.locks[a.id]) {
+      auto.locks[a.id] = { until: Math.floor(T0 / 1000) + 12 * 3600, reason: `Chạm ${Math.round(level * 100)}% giới hạn lỗ trong ngày`, at: Date.now() / 1000 }
+      auto.events.unshift({ at: Date.now(), kind: 'lock', account: a.id, label: a.label, text: `${auto.locks[a.id].reason}. Khoá vào lệnh tới hết ngày máy chủ. Đã đóng ${a.positions.length} lệnh.` })
+      a.positions = []
+    }
+    states[a.id] = { day_loss: Number(dayLoss.toFixed(2)), used, floor_used: floorUsed, level, equity: l.equity, currency: a.currency, consec_losses: a.id === '520011' ? 2 : 0, trades: a.id === '520011' ? 3 : 1, positions: a.positions.length, tradable: a.tradable, error: '', updated: Date.now() }
+  }
+  return { guards: auto.guards, states, locks: auto.locks, events: auto.events.slice(0, 100), alerts: auto.alerts, copier: auto.copier, copyState: { started: 0, last: Date.now(), error: '' }, telegram: true }
+}
+
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const find = (id: unknown) => {
   const a = accounts.find((x) => x.id === String(id))
@@ -247,6 +280,7 @@ export async function mockGet(path: string): Promise<unknown> {
     case '/telegram/messages': return messages.filter((m) => m.date > Number(q('after') || 0))
     case '/calendar': return calendar
     case '/kb': return JSON.parse(JSON.stringify(playbooks))
+    case '/automation': return autoSnapshot()
     case '/ai/status': return { configured: true, model: 'bản xem trước (không gọi AI)' }
     case '/terminals': {
       const used = new Map(accounts.map((a) => [a.terminal, a.label]))
@@ -261,6 +295,7 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
   await wait(300)
   if (path === '/order') {
     const acc = find(body.account)
+    if (auto.locks[acc.id]) throw new Error(`Tài khoản đang bị khoá vào lệnh: ${auto.locks[acc.id].reason}`)
     if (!acc.tradable) throw new Error('Tài khoản này chưa bật "allow_trading" trong config.json')
     const symbol = String(body.symbol), side = body.side as 'buy' | 'sell', volume = Number(body.volume), sl = Number(body.sl), tp = Number(body.tp) || 0
     if (!(sl > 0)) throw new Error('Bắt buộc phải có stop loss')
@@ -270,6 +305,17 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
     if (side === 'buy' ? sl >= price : sl <= price) throw new Error(`Stop loss ${sl} nằm sai phía so với giá ${price}`)
     const ticket = nextTicket++
     acc.positions.push({ ticket, symbol, side, volume, openPrice: price, price, sl, tp, profit: 0, swap: 0, time: Math.floor(Date.now() / 1000) + OFFSET * 3600 })
+    // Copy lệnh giả lập: chép ngay sang các tài khoản nhận.
+    if (auto.copier.enabled && auto.copier.master === acc.id) {
+      for (const f of auto.copier.followers) {
+        const fa = accounts.find((x) => x.id === f.account)
+        if (!fa || auto.locks[fa.id]) continue
+        const vol = Math.max(0.01, Math.round((f.mode === 'fixed' ? f.value : f.mode === 'balance' ? volume * ((balances.get(fa.id) ?? 1) / (balances.get(acc.id) ?? 1)) * f.value : volume * f.value) * 100) / 100)
+        const fside = f.reverse ? (side === 'buy' ? 'sell' : 'buy') : side
+        fa.positions.push({ ticket: nextTicket++, symbol, side: fside, volume: vol, openPrice: price, price, sl: f.reverse ? tp : sl, tp: f.reverse ? sl : tp, profit: 0, swap: 0, time: Math.floor(Date.now() / 1000) + OFFSET * 3600, comment: `FXD#${ticket}` } as LivePosition)
+        auto.events.unshift({ at: Date.now(), kind: 'copy', account: fa.id, label: fa.label, text: `Chép ${fside.toUpperCase()} ${vol} lot ${symbol} từ lệnh #${ticket}.` })
+      }
+    }
     return { order: ticket, deal: ticket, price, volume }
   }
   if (path === '/close') {
@@ -278,6 +324,14 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
     if (!p) throw new Error(`Không thấy lệnh đang mở số ${body.ticket}`)
     refreshPositions(acc)
     acc.positions = acc.positions.filter((x) => x !== p)
+    if (auto.copier.enabled && auto.copier.master === acc.id) {
+      for (const fa of accounts) {
+        const linked = fa.positions.filter((x) => (x as LivePosition & { comment?: string }).comment === `FXD#${p.ticket}`)
+        if (!linked.length) continue
+        fa.positions = fa.positions.filter((x) => !linked.includes(x))
+        auto.events.unshift({ at: Date.now(), kind: 'copy', account: fa.id, label: fa.label, text: `Đóng ${p.symbol} theo lệnh nguồn #${p.ticket}.` })
+      }
+    }
     balances.set(acc.id, Number(((balances.get(acc.id) ?? 0) + p.profit).toFixed(2)))
     return { order: nextTicket, deal: nextTicket++, price: p.price, volume: p.volume }
   }
@@ -299,6 +353,26 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
     return { removed: acc.id }
   }
   if (path === '/telegram/send') return { sent: true, target: body.target }
+  if (path === '/automation/guard') {
+    const id = String(body.account)
+    if (body.config) {
+      const g = body.config as GuardConfig
+      const was = auto.guards[id]?.enabled
+      auto.guards[id] = g
+      if (g.enabled && !was) auto.events.unshift({ at: Date.now(), kind: 'warn', account: id, label: find(id).label, text: `Bật bảo vệ: lỗ ngày tối đa ${g.daily_limit.toFixed(2)}, hành động ở ${Math.round(g.act_at * 100)}%.` })
+    } else delete auto.guards[id]
+    return autoSnapshot()
+  }
+  if (path === '/automation/unlock') { const id = String(body.account); delete auto.locks[id]; auto.events.unshift({ at: Date.now(), kind: 'unlock', account: id, label: find(id).label, text: 'Đã mở khoá bằng tay.' }); closedToday[id] = 0; return autoSnapshot() }
+  if (path === '/automation/alerts') { auto.alerts = { news: !!body.news, minutes: Number(body.minutes) || 30, notify: !!body.notify }; return autoSnapshot() }
+  if (path === '/automation/copier') {
+    const c = body.config as CopierConfig
+    if (c.master && c.followers.some((f) => f.account === c.master)) throw new Error('Tài khoản nguồn không thể đồng thời là tài khoản nhận')
+    if (c.enabled && !auto.copier.enabled) auto.events.unshift({ at: Date.now(), kind: 'copy', account: c.master, label: find(c.master).label, text: `Bật copy lệnh sang ${c.followers.length} tài khoản. Bỏ qua ${find(c.master).positions.length} lệnh đang mở sẵn.` })
+    auto.copier = { ...c, enabled: c.enabled && !!c.master && c.followers.length > 0 }
+    return autoSnapshot()
+  }
+  if (path === '/automation/test') return { sent: true }
   if (path === '/kb/save') {
     if (body.id) {
       const pb = findPb(body.id)

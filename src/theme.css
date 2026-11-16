@@ -357,3 +357,41 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 .pro-gate-icon { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; color: #2b1d05; background: linear-gradient(135deg, #ffe39a, var(--gold) 55%, #d98a1c); box-shadow: 0 8px 24px rgba(242, 179, 61, 0.4); }
 .pro-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: color-mix(in srgb, var(--gold) 9%, var(--surface)); border: 1px dashed color-mix(in srgb, var(--gold) 55%, transparent); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 13.5px; }
 .note-field { margin-top: 12px; }
+
+/* bảo vệ tài khoản */
+.guards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); gap: 16px; margin-bottom: 16px; }
+.guards > .card { margin-bottom: 0; }
+.guard.on { border-color: color-mix(in srgb, var(--pos) 40%, transparent); }
+.guard.locked { border-color: color-mix(in srgb, var(--neg) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--neg) 12%, transparent), var(--shadow); }
+.guard-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.guard-head h3 { margin: 0 0 4px; font-family: var(--font-num); font-size: 17px; }
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; font-size: 13px; white-space: nowrap; }
+.switch input { appearance: none; width: 40px; height: 22px; border-radius: 999px; background: var(--axis); position: relative; transition: background 0.15s; cursor: pointer; margin: 0; padding: 0; border: none; }
+.switch input::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.15s; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); }
+.switch input:checked { background: var(--pos); }
+.switch input:checked::after { transform: translateX(18px); }
+.switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lock-banner { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--neg) 12%, var(--surface)); color: var(--neg); }
+.lock-banner span { color: var(--ink); }
+.guard-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin: 12px 0; }
+.guard-stats > div { display: flex; flex-direction: column; background: var(--page); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+.guard-stats strong { font-family: var(--font-num); font-size: 17px; }
+.guard .meter-block { margin-bottom: 8px; }
+.chip.ok-chip { background: color-mix(in srgb, var(--pos) 15%, transparent); color: var(--pos); font-weight: 600; }
+.events { list-style: none; padding: 0; margin: 0 0 8px; }
+.events li { display: grid; grid-template-columns: 22px auto auto 1fr; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--hair); font-size: 13px; }
+.events li:first-child { border-top: none; }
+.ev-lock strong, .ev-copy-error strong { color: var(--neg); }
+@media (max-width: 720px) { .events li { grid-template-columns: 22px 1fr; } .events li > :nth-child(3), .events li > :nth-child(4) { grid-column: 2; } }
+
+/* copy lệnh */
+.copy-flow { display: grid; grid-template-columns: minmax(200px, 280px) auto minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .copy-flow { grid-template-columns: minmax(0, 1fr); } .copy-arrow { transform: rotate(90deg); justify-self: center; } }
+.copy-node { display: flex; flex-direction: column; gap: 8px; background: var(--page); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.copy-node.master { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.copy-node-head { display: flex; gap: 8px; align-items: center; }
+.copy-node-head strong { flex: 1; }
+.copy-arrow { font-size: 28px; color: var(--accent); align-self: center; }
+.copy-followers { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.notes { margin: 14px 0 0; padding-left: 18px; }
+.notes li { margin: 3px 0; }
