@@ -99,7 +99,7 @@ export default function Analyze({ bridge, settings }: { bridge: BridgeState; set
     <>
       <h1>Phân tích AI</h1>
       {ai && !ai.configured && <AiSetup online />}
-      {!mt5 && <p className="warn">⚠ Cần ít nhất một tài khoản MT5 đã nối để lấy nến. Thêm ở trang Tài khoản MT5.</p>}
+      {!mt5 && <p className="warn">⚠ Cần ít nhất một tài khoản MT5 đã nối để lấy nến. Thêm ở trang Tài khoản.</p>}
       {books.length > 0 && !books.some((b) => b.rules.trim()) && <p className="warn">⚠ Các bộ kiến thức chưa có quy tắc. Hãy dạy agent ở trang Học kiến thức trước.</p>}
       {books.length === 0 && <p className="warn">⚠ Chưa có bộ kiến thức nào. Tạo ở trang Học kiến thức.</p>}
 

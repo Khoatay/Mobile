@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import Avatar from './components/Avatar'
 import Icon, { type IconName } from './components/Icon'
+import { DEFAULT_USER, type UserProfile } from './lib/user'
 import { resolveInfos, type AccountInfo } from './lib/accounts'
 import { PREVIEW, useBridge, useTelegramMessages } from './lib/bridge'
 import { DEFAULT_PROFILE, type Profile } from './lib/share'
@@ -13,16 +15,18 @@ import Guides from './pages/Guides'
 import Journal from './pages/Journal'
 import Ledger from './pages/Ledger'
 import News from './pages/News'
+import Offers from './pages/Offers'
+import ProfilePage from './pages/Profile'
 import Personalize from './pages/Personalize'
 import Prop from './pages/Prop'
 import Share from './pages/Share'
 import Signals from './pages/Signals'
 
 const GROUPS = [
-  { title: 'Giao dịch', tone: 'gold', tabs: [['calc', 'Tính lot', 'calc'], ['account', 'Tài khoản MT5', 'terminal'], ['prop', 'Luật quỹ', 'shield']] },
+  { title: 'Giao dịch', tone: 'gold', tabs: [['calc', 'Tính lot', 'calc'], ['account', 'Tài khoản', 'terminal'], ['prop', 'Quỹ', 'shield']] },
   { title: 'Phân tích', tone: 'sky', tabs: [['journal', 'Nhật ký lệnh', 'journal'], ['stats', 'Thống kê', 'chart'], ['learn', 'Học kiến thức', 'bulb'], ['ai', 'Phân tích AI', 'sparkle'], ['signals', 'Tín hiệu Telegram', 'send'], ['news', 'Tin tức', 'news']] },
-  { title: 'Kinh doanh', tone: 'mint', tabs: [['ledger', 'Thu chi đầu tư', 'coins'], ['share', 'Chia sẻ cộng đồng', 'megaphone']] },
-  { title: 'Khác', tone: 'lilac', tabs: [['guides', 'Hướng dẫn', 'book'], ['me', 'Cá nhân hoá', 'palette']] },
+  { title: 'Kinh doanh', tone: 'mint', tabs: [['ledger', 'Thu chi đầu tư', 'coins'], ['offers', 'Ưu đãi', 'gift'], ['share', 'Chia sẻ cộng đồng', 'megaphone']] },
+  { title: 'Khác', tone: 'lilac', tabs: [['guides', 'Hướng dẫn', 'book'], ['profile', 'Hồ sơ', 'user'], ['me', 'Cá nhân hoá', 'palette']] },
 ] as const
 type Tab = (typeof GROUPS)[number]['tabs'][number][0]
 
@@ -33,6 +37,8 @@ export default function App() {
   const [stored, setProfile] = usePersistent<Profile>('fx.profile', DEFAULT_PROFILE)
   const profile = useMemo(() => ({ ...DEFAULT_PROFILE, ...stored }), [stored])
   const bridge = useBridge()
+  const [storedUser, setUser] = usePersistent<UserProfile>('fx.user', DEFAULT_USER)
+  const user = useMemo(() => ({ ...DEFAULT_USER, ...storedUser }), [storedUser])
   const messages = useTelegramMessages(!!bridge.status?.telegram.connected)
 
   useEffect(() => { document.documentElement.style.setProperty('--accent', profile.accent) }, [profile.accent])
@@ -73,6 +79,10 @@ export default function App() {
             </div>
           ))}
         </nav>
+        <button className={tab === 'profile' ? 'user-chip active' : 'user-chip'} onClick={() => setTab('profile')}>
+          <Avatar src={user.avatar} name={user.displayName || user.username} size={32} />
+          <span className="user-text"><strong>{user.displayName || 'Đặt tên của bạn'}</strong><small>{user.username ? `@${user.username}` : 'Hồ sơ'}</small></span>
+        </button>
         <p className="side-note bridge-state">
           <span className={bridge.accounts.length ? 'led on' : 'led'} />{' '}
           {!bridge.online ? 'Bridge chưa chạy' : `${bridge.accounts.length}/${bridge.metas.length} tài khoản MT5 đã nối`}
@@ -83,15 +93,17 @@ export default function App() {
         {tab === 'calc' && <Calculator settings={settings} patch={patchSettings} />}
         {tab === 'journal' && <Journal trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} labels={labels} />}
         {tab === 'stats' && <Dashboard trades={trades} settings={settings} infos={infos} goJournal={() => setTab('journal')} />}
-        {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} infos={infos} goAccounts={() => setTab('account')} />}
-        {tab === 'account' && <Account bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} infos={infos} setInfo={setInfo} />}
+        {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} infos={infos} goAccounts={() => setTab('account')} links={profile.partners} />}
+        {tab === 'account' && <Account bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} infos={infos} setInfo={setInfo} links={profile.partners} />}
         {tab === 'signals' && <Signals bridge={bridge} settings={settings} messages={messages} />}
         {tab === 'learn' && <Learn bridge={bridge} />}
         {tab === 'ai' && <Analyze bridge={bridge} settings={settings} />}
         {tab === 'news' && <News bridge={bridge} messages={messages} />}
         {tab === 'ledger' && <Ledger bridge={bridge} settings={settings} labels={labels} infos={infos} />}
         {tab === 'share' && <Share bridge={bridge} trades={trades} settings={settings} profile={profile} labels={labels} infos={infos} />}
-        {tab === 'guides' && <Guides />}
+        {tab === 'offers' && <Offers links={profile.partners} bridge={bridge} disclaimer={profile.disclaimer} />}
+        {tab === 'profile' && <ProfilePage user={user} setUser={setUser} trades={trades} />}
+        {tab === 'guides' && <Guides links={profile.partners} />}
         {tab === 'me' && <Personalize profile={profile} setProfile={setProfile} />}
       </main>
     </div>

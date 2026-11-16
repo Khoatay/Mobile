@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from 'react'
+import { isWebUrl, PARTNERS, type PartnerLinks } from '../lib/partners'
+import { PRESETS } from '../lib/prop'
 import { Field } from '../components/Field'
 import { usePersistent } from '../lib/store'
 
@@ -63,7 +65,7 @@ const SECTIONS: { title: string; guides: Guide[] }[] = [
             <li>Mở cửa sổ lệnh trong thư mục <code>bridge</code>, chạy <code>pip install -r requirements.txt</code>.</li>
             <li>Sao chép <code>config.example.json</code> thành <code>config.json</code>. Với mỗi tài khoản, điền số tài khoản, mật khẩu view (investor), tên máy chủ và đường dẫn tới <code>terminal64.exe</code>.</li>
             <li>Chạy <code>python bridge.py</code>. Góc dưới bên trái app sẽ báo số tài khoản đã nối.</li>
-            <li>Vào trang <strong>Tài khoản MT5</strong> và bấm “Đưa lịch sử mọi tài khoản vào Nhật ký”.</li>
+            <li>Vào trang <strong>Tài khoản</strong> và bấm “Đưa lịch sử mọi tài khoản vào Nhật ký”.</li>
           </ol>
         ),
       },
@@ -149,9 +151,133 @@ export function youtubeId(url: string): string | null {
   return null
 }
 
-const isWebUrl = (url: string) => { try { return ['http:', 'https:'].includes(new URL(url).protocol) } catch { return false } }
 
-export default function Guides() {
+function PartnerButton({ id, links, label }: { id: string; links?: PartnerLinks; label: string }) {
+  const p = PARTNERS.find((x) => x.id === id)!
+  const v = links?.[id]
+  if (!v?.url) return null
+  return (
+    <span className="partner-link">
+      <a className="button primary" href={v.url} target="_blank" rel="noopener noreferrer">{label}</a>
+      {v.code && <span className="chip">Mã: {v.code}</span>}
+      <span className="muted small">Link giới thiệu cho {p.name}</span>
+    </span>
+  )
+}
+
+const FUND_INFO: Record<string, { intro: string; presets: string[] }> = {
+  ftmo: { intro: 'Quỹ lâu năm, phổ biến nhất. Có gói 2 bước (Challenge rồi Verification) và gói 1 bước.', presets: ['ftmo-2s-1', 'ftmo-2s-2', 'ftmo-1s'] },
+  the5ers: { intro: 'Nhiều chương trình khác nhau: High Stakes 2 bước, Hyper Growth 1 bước, Bootcamp 3 bước giá rẻ.', presets: ['5ers-hs-1', '5ers-hs-2', '5ers-hg', '5ers-bc'] },
+  tentrade: { intro: 'Quỹ mới hơn, gói TenExpress 1 bước với giới hạn lỗ tổng rộng hơn.', presets: ['ten-express'] },
+}
+
+function FundRules({ ids }: { ids: string[] }) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead><tr><th>Chương trình</th><th className="num">Mục tiêu</th><th className="num">Lỗ ngày</th><th className="num">Lỗ tổng</th><th>Kiểu lỗ tổng</th><th className="num">Ngày tối thiểu</th></tr></thead>
+        <tbody>
+          {ids.map((id) => {
+            const p = PRESETS.find((x) => x.id === id)!
+            const r = p.rules
+            return (
+              <tr key={id}>
+                <td>{p.name}</td>
+                <td className="num">{r.targetPct}%</td>
+                <td className="num">{r.dailyLossPct ? `${r.dailyLossPct}%${r.dailyBase === 'dayStart' ? ' (đầu ngày)' : ''}` : 'Không'}</td>
+                <td className="num">{r.maxLossPct}%</td>
+                <td>{r.maxLossType === 'trailing' ? 'Trailing' : 'Cố định'}</td>
+                <td className="num">{r.minDays || 'Không'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function fundSection(links?: PartnerLinks): { title: string; guides: Guide[] } {
+  return {
+    title: 'Quỹ (prop firm)',
+    guides: [
+      {
+        title: 'Quỹ hoạt động thế nào',
+        body: (
+          <ol>
+            <li><strong>Mua bài thi (challenge)</strong>: trả một khoản phí để nhận tài khoản thi, ví dụ 100.000 USD vốn ảo.</li>
+            <li><strong>Vượt vòng</strong>: đạt mục tiêu lãi mà không chạm giới hạn lỗ trong ngày và giới hạn lỗ tổng, đủ số ngày giao dịch tối thiểu. Gói 2 bước phải qua hai vòng.</li>
+            <li><strong>Nhận tài khoản cấp vốn</strong>: giao dịch tiếp với cùng luật lỗ (thường không còn mục tiêu lãi).</li>
+            <li><strong>Rút lợi nhuận (payout)</strong>: quỹ chia phần lớn lợi nhuận cho bạn theo tỷ lệ của từng gói; nhiều quỹ hoàn lại phí thi ở lần rút đầu.</li>
+            <li><strong>Vi phạm luật</strong> ở bất kỳ bước nào là mất tài khoản, phải mua bài thi mới.</li>
+          </ol>
+        ),
+      },
+      {
+        title: 'Hiểu đúng giới hạn lỗ',
+        body: (
+          <ul>
+            <li><strong>Lỗ trong ngày</strong> tính theo equity (gồm cả lệnh đang treo), không chỉ lệnh đã đóng. Ngày reset theo giờ máy chủ của quỹ.</li>
+            <li><strong>Tính trên vốn ban đầu</strong> (FTMO): giới hạn cố định, ví dụ 5% của 100.000 là 5.000 USD mỗi ngày. <strong>Tính trên số dư đầu ngày</strong> (The5ers): giới hạn đổi theo số dư.</li>
+            <li><strong>Lỗ tổng cố định</strong>: sàn số dư không đổi, ví dụ 90.000 USD. <strong>Trailing</strong>: sàn đi lên theo đỉnh số dư cuối ngày, nên lãi xong rồi lỗ lại vẫn có thể vi phạm.</li>
+            <li>Trang <strong>Quỹ</strong> tính sẵn mọi thứ này cho từng tài khoản và báo còn được lỗ bao nhiêu hôm nay.</li>
+          </ul>
+        ),
+      },
+      ...PARTNERS.filter((p) => p.kind === 'prop').map((p) => ({
+        title: p.name,
+        body: (
+          <>
+            <p>{FUND_INFO[p.id]?.intro}</p>
+            {FUND_INFO[p.id] && <FundRules ids={FUND_INFO[p.id].presets} />}
+            <p className="muted small">Thông số tổng hợp từ các trang đánh giá bên thứ ba, có thể đã thay đổi. Luôn đọc điều khoản trên trang của quỹ trước khi mua.</p>
+            <PartnerButton id={p.id} links={links} label={`Mua bài thi ${p.name}`} />
+          </>
+        ),
+      })),
+      {
+        title: 'Cách vận hành tài khoản quỹ trong app',
+        body: (
+          <ol>
+            <li>Ở trang <strong>Tài khoản</strong>, thêm tài khoản quỹ bằng mật khẩu view, đặt vai trò <strong>Quỹ</strong>, broker là tên quỹ và giai đoạn (Vòng 1, Vòng 2, Đã cấp vốn).</li>
+            <li>App tự chọn chương trình và cỡ tài khoản; kiểm tra lại cho đúng gói bạn mua.</li>
+            <li>Mỗi ngày trước khi vào lệnh, xem <strong>Còn được lỗ hôm nay</strong>. Phiếu vào lệnh tự chặn lệnh có khoản lỗ vượt mức này.</li>
+            <li>Đặt rủi ro mỗi lệnh sao cho thua liền 3–4 lệnh vẫn chưa chạm giới hạn ngày.</li>
+          </ol>
+        ),
+      },
+    ],
+  }
+}
+
+function brokerSection(links?: PartnerLinks): { title: string; guides: Guide[] } {
+  return {
+    title: 'Sàn giao dịch',
+    guides: [
+      {
+        title: 'Exness',
+        body: (
+          <>
+            <p>Hợp người mới: nạp ít, có tài khoản cent để tập với tiền nhỏ, rút nạp nhanh. Có nhiều loại tài khoản (Standard, Raw Spread, Zero, Pro) khác nhau ở spread và phí.</p>
+            <PartnerButton id="exness" links={links} label="Mở tài khoản Exness" />
+          </>
+        ),
+      },
+      {
+        title: 'IC Markets',
+        body: (
+          <>
+            <p>Hợp scalper, người chạy EA và copy trade: tài khoản Raw spread thấp, tính phí theo lot. Cần số vốn ban đầu cao hơn.</p>
+            <PartnerButton id="icmarkets" links={links} label="Mở tài khoản IC Markets" />
+          </>
+        ),
+      },
+    ],
+  }
+}
+
+export default function Guides({ links: partnerLinks }: { links?: PartnerLinks }) {
+  const sections = [SECTIONS[0], SECTIONS[1], fundSection(partnerLinks), brokerSection(partnerLinks), SECTIONS[2]]
   const [links, setLinks] = usePersistent<Link[]>('fx.links', [])
   const [title, setTitle] = useState('')
   const [url, setUrl] = useState('')
@@ -168,7 +294,7 @@ export default function Guides() {
   return (
     <>
       <h1>Hướng dẫn</h1>
-      {SECTIONS.map((s) => (
+      {sections.map((s) => (
         <section key={s.title} className="card">
           <h3>{s.title}</h3>
           {s.guides.map((g) => (

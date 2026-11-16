@@ -123,7 +123,7 @@ export default function Dashboard({ trades, settings, infos, goJournal }: { trad
                   </tbody>
                 </table>
               </div>
-              <p className="muted small">Cùng bộ lọc thời gian, cặp và chiều lệnh ở trên. Lệnh nhập từ file không có số tài khoản sẽ không nằm trong dòng nào. Đặt nhóm cho tài khoản ở trang Tài khoản MT5.</p>
+              <p className="muted small">Cùng bộ lọc thời gian, cặp và chiều lệnh ở trên. Lệnh nhập từ file không có số tài khoản sẽ không nằm trong dòng nào. Đặt nhóm cho tài khoản ở trang Tài khoản.</p>
             </section>
           )}
 

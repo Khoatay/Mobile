@@ -1,3 +1,4 @@
+import type { PartnerLinks } from './partners'
 import { parseSymbol, pipSize } from './forex'
 import { pct, signed } from './format'
 import { computeStats, rMultiple } from './stats'
@@ -13,9 +14,11 @@ export interface Profile {
   disclaimer: boolean
   /** Ẩn số tiền trên banner và bài đăng, chỉ hiện pip, R, %. */
   hideMoney: boolean
+  /** Link IB, affiliate quỹ và công cụ, kèm mã giảm giá nếu có. */
+  partners: PartnerLinks
 }
 
-export const DEFAULT_PROFILE: Profile = { brand: 'FX Desk', tagline: '', accent: '#2a78d6', link: '', disclaimer: true, hideMoney: true }
+export const DEFAULT_PROFILE: Profile = { brand: 'FX Desk', tagline: '', accent: '#2a78d6', link: '', disclaimer: true, hideMoney: true, partners: {} }
 export const ACCENTS = ['#2a78d6', '#1baf7a', '#eb6834', '#6250d6', '#d55181', '#c98500']
 export const DISCLAIMER = 'Chia sẻ góc nhìn cá nhân, không phải khuyến nghị đầu tư. Giao dịch có rủi ro mất vốn.'
 

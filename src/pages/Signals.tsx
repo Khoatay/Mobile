@@ -85,7 +85,7 @@ export default function Signals({ bridge, settings, messages: live }: { bridge: 
       ) : (
         <section className="card">
           <h3>Chưa kết nối Telegram</h3>
-          <p className="muted">{bridge.online ? bridge.status?.telegram.error : 'Chương trình nền (bridge) chưa chạy. Xem hướng dẫn ở trang Tài khoản MT5.'}</p>
+          <p className="muted">{bridge.online ? bridge.status?.telegram.error : 'Chương trình nền (bridge) chưa chạy. Xem hướng dẫn ở trang Tài khoản.'}</p>
           <ol className="steps">
             <li>Lấy <code>api_id</code> và <code>api_hash</code> tại my.telegram.org (mục API development tools), điền vào <code>bridge/config.json</code>.</li>
             <li>Chạy <code>python bridge.py login</code>, nhập số điện thoại và mã xác nhận. Lệnh này in ra danh sách kênh bạn đang tham gia.</li>

@@ -370,4 +370,10 @@ export function seed() {
   // Các lần nạp/rút của tài khoản riêng, cùng id với nút "Lấy nạp/rút từ MT5" nên bấm lại không bị trùng.
   for (const a of accounts.filter((x) => x.type !== 'prop')) ledger.push(...balanceDealsToEntries(historyOf(a).deals, a.id, a.label))
   put('fx.ledger', ledger)
+  const day0 = (d: number) => new Date(T0 + d * 86_400_000).toISOString().slice(0, 10)
+  put('fx.offers', [
+    { id: 'ex1', partner: 'ftmo', partnerName: '', kind: 'prop', title: '(Ví dụ) Giảm giá challenge cuối năm', detail: 'Ưu đãi mẫu để xem giao diện, không phải khuyến mãi thật. Thay bằng ưu đãi bạn đã kiểm tra trên trang của quỹ.', code: 'MAU-XEM-THU', url: '', expires: day0(2), pinned: true, createdAt: T0 },
+    { id: 'ex2', partner: 'exness', partnerName: '', kind: 'broker', title: '(Ví dụ) Hoàn phí cho tài khoản mới', detail: 'Ưu đãi mẫu. Ghi rõ điều kiện: tài khoản mới, nạp tối thiểu, thời hạn.', code: '', url: '', expires: day0(20), pinned: false, createdAt: T0 - 1 },
+    { id: 'ex3', partner: 'tradingview', partnerName: '', kind: 'tool', title: '(Ví dụ) Giảm giá gói Premium', detail: 'Ưu đãi mẫu.', code: '', url: '', expires: '', pinned: false, createdAt: T0 - 2 },
+  ])
 }

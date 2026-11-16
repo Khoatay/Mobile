@@ -5,6 +5,7 @@ import { evaluateProp, PRESETS, suggestProp, type PropConfig } from '../lib/prop
 import { usePersistent } from '../lib/store'
 import type { InfoMap } from '../lib/accounts'
 import type { BridgeState } from '../lib/bridge'
+import { partnerFor, type PartnerLinks } from '../lib/partners'
 import type { Settings, Trade } from '../lib/types'
 
 function Meter({ label, used, limit, kind, detail }: { label: string; used: number; limit: number; kind: 'loss' | 'gain'; detail: string }) {
@@ -33,36 +34,13 @@ const STATE = {
   active: { text: '● Đang trong giới hạn', cls: 'state' },
 }
 
-export default function Prop({ trades: allTrades, settings, bridge, infos, goAccounts }: { trades: Trade[]; settings: Settings; bridge: BridgeState; infos: InfoMap; goAccounts: () => void }) {
-  // Chỉ tài khoản có vai trò "Quỹ"; mỗi tài khoản một bộ luật riêng.
+/** Khối theo dõi luật cho một tài khoản quỹ. Dùng ở trang Quỹ và ngay dưới tab tài khoản quỹ. */
+export function FundPanel({ id: key, allTrades, settings, bridge, infos, links }: { id: string; allTrades: Trade[]; settings: Settings; bridge: BridgeState; infos: InfoMap; links?: PartnerLinks }) {
   const [configs, setConfigs] = usePersistent<Record<string, PropConfig>>('fx.props', {})
-  const propIds = Object.keys(infos).filter((id) => infos[id].role === 'prop')
-  const [picked, setPicked] = useState<string | null>(null)
-  const key = picked && propIds.includes(picked) ? picked : propIds[0]
   const nowServer = Date.now() + settings.serverOffset * 3_600_000
-  const configFor = (id: string) => configs[id] ?? suggestProp(infos[id]?.broker ?? '', infos[id]?.phase ?? '', bridge.accounts.find((a) => a.id === id)?.balance)
-  // Trạng thái từng quỹ, để hiện chấm màu trên tab.
-  const states = useMemo(() => Object.fromEntries(propIds.map((id) => {
-    const live = bridge.accounts.find((a) => a.id === id)
-    const st = evaluateProp(allTrades.filter((t) => t.account === id), configFor(id), nowServer, live?.profit ?? 0)
-    const tight = Number.isFinite(st.room) && st.dailyLimit > 0 && st.room < st.dailyLimit * 0.4
-    return [id, st.state === 'failed' ? 'crit' : st.state === 'passed' ? 'ok' : tight ? 'warn' : 'on']
-  })), [propIds.join(), allTrades, configs, bridge.accounts, Math.floor(nowServer / 60000)])
-
-  if (!key) {
-    return (
-      <>
-        <h1>Theo dõi luật quỹ</h1>
-        <section className="card empty">
-          <p>Chưa có tài khoản quỹ nào.</p>
-          <p className="muted small">Ở trang Tài khoản MT5, mở tab của tài khoản quỹ và đặt <strong>Vai trò</strong> là “Quỹ”, hoặc thêm tài khoản mới với vai trò đó.</p>
-          <button className="primary" onClick={goAccounts}>Sang trang Tài khoản MT5</button>
-        </section>
-      </>
-    )
-  }
-
-  const cfg = configFor(key)
+  const cfg = configs[key] ?? suggestProp(infos[key]?.broker ?? '', infos[key]?.phase ?? '', bridge.accounts.find((a) => a.id === key)?.balance)
+  const partner = partnerFor(infos[key]?.broker ?? '')
+  const link = partner && links?.[partner.id]
   const setCfg = (c: PropConfig) => setConfigs({ ...configs, [key]: c })
   const trades = allTrades.filter((t) => t.account === key)
   const account = bridge.accounts.find((a) => a.id === key) ?? null
@@ -77,15 +55,6 @@ export default function Prop({ trades: allTrades, settings, bridge, infos, goAcc
 
   return (
     <>
-      <h1>Theo dõi luật quỹ</h1>
-      <div className="tabs" role="tablist" aria-label="Tài khoản quỹ">
-        {propIds.map((id) => (
-          <button key={id} role="tab" aria-selected={id === key} className={id === key ? 'tab active' : 'tab'} onClick={() => setPicked(id)}>
-            <span className={`led st-${states[id]}`} title={STATE_TIP[states[id]]} /> {infos[id].label}
-            {(infos[id].broker || infos[id].phase) && <small>{[infos[id].broker, infos[id].phase].filter(Boolean).join(' · ')}</small>}
-          </button>
-        ))}
-      </div>
       {account ? (
         <p className="notice">
           ✓ Đang đọc trực tiếp tài khoản {account.login}: lãi/lỗ đang treo {signed(floating)} {ccy} đã được tính vào giới hạn.
@@ -154,6 +123,16 @@ export default function Prop({ trades: allTrades, settings, bridge, infos, goAcc
         )}
       </section>
 
+      {partner && link?.url && (s.state !== 'active') && (
+        <section className="card partner-cta">
+          <div>
+            <strong>{s.state === 'failed' ? `Thử lại với ${partner.name}?` : `Qua vòng rồi. Mua thêm tài khoản ${partner.name}?`}</strong>
+            <p className="muted small">{link.code ? `Mã giảm giá: ${link.code}. ` : ''}Mua qua link giới thiệu của {infos[key]?.label ? 'bạn' : 'cộng đồng'}.</p>
+          </div>
+          <a className="button primary" href={link.url} target="_blank" rel="noopener noreferrer">Mở {partner.name}</a>
+        </section>
+      )}
+
       <section className="card">
         <h3>Theo từng ngày</h3>
         {s.days.length === 0 ? (
@@ -181,6 +160,51 @@ export default function Prop({ trades: allTrades, settings, bridge, infos, goAcc
           </div>
         )}
       </section>
+    </>
+  )
+}
+
+export default function Prop({ trades: allTrades, settings, bridge, infos, goAccounts, links }: { trades: Trade[]; settings: Settings; bridge: BridgeState; infos: InfoMap; goAccounts: () => void; links?: PartnerLinks }) {
+  // Chỉ tài khoản có vai trò "Quỹ"; mỗi tài khoản một bộ luật riêng.
+  const [configs] = usePersistent<Record<string, PropConfig>>('fx.props', {})
+  const propIds = Object.keys(infos).filter((id) => infos[id].role === 'prop')
+  const [picked, setPicked] = useState<string | null>(null)
+  const key = picked && propIds.includes(picked) ? picked : propIds[0]
+  const nowServer = Date.now() + settings.serverOffset * 3_600_000
+  const configFor = (id: string) => configs[id] ?? suggestProp(infos[id]?.broker ?? '', infos[id]?.phase ?? '', bridge.accounts.find((a) => a.id === id)?.balance)
+  // Trạng thái từng quỹ, để hiện chấm màu trên tab.
+  const states = useMemo(() => Object.fromEntries(propIds.map((id) => {
+    const live = bridge.accounts.find((a) => a.id === id)
+    const st = evaluateProp(allTrades.filter((t) => t.account === id), configFor(id), nowServer, live?.profit ?? 0)
+    const tight = Number.isFinite(st.room) && st.dailyLimit > 0 && st.room < st.dailyLimit * 0.4
+    return [id, st.state === 'failed' ? 'crit' : st.state === 'passed' ? 'ok' : tight ? 'warn' : 'on']
+  })), [propIds.join(), allTrades, configs, bridge.accounts, Math.floor(nowServer / 60000)])
+
+  if (!key) {
+    return (
+      <>
+        <h1>Quỹ</h1>
+        <section className="card empty">
+          <p>Chưa có tài khoản quỹ nào.</p>
+          <p className="muted small">Ở trang Tài khoản, mở tab của tài khoản quỹ và đặt <strong>Vai trò</strong> là “Quỹ”, hoặc thêm tài khoản mới với vai trò đó.</p>
+          <button className="primary" onClick={goAccounts}>Sang trang Tài khoản</button>
+        </section>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <h1>Quỹ</h1>
+      <div className="tabs" role="tablist" aria-label="Tài khoản quỹ">
+        {propIds.map((id) => (
+          <button key={id} role="tab" aria-selected={id === key} className={id === key ? 'tab active' : 'tab'} onClick={() => setPicked(id)}>
+            <span className={`led st-${states[id]}`} title={STATE_TIP[states[id]]} /> {infos[id].label}
+            {(infos[id].broker || infos[id].phase) && <small>{[infos[id].broker, infos[id].phase].filter(Boolean).join(' · ')}</small>}
+          </button>
+        ))}
+      </div>
+      <FundPanel key={key} id={key} allTrades={allTrades} settings={settings} bridge={bridge} infos={infos} links={links} />
     </>
   )
 }

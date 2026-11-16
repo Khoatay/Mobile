@@ -8,6 +8,8 @@ import { money, signed } from '../lib/format'
 import { dealsToTrades } from '../lib/mt5deals'
 import { fmtServerTime } from '../lib/parse'
 import { evaluateProp, type PropConfig } from '../lib/prop'
+import type { PartnerLinks } from '../lib/partners'
+import { FundPanel } from './Prop'
 import { mergeTrades, usePersistent } from '../lib/store'
 import type { Settings, Side, Trade } from '../lib/types'
 
@@ -19,6 +21,7 @@ interface Props {
   patch: (p: Partial<Settings>) => void
   infos: InfoMap
   setInfo: (id: string, info: Partial<AccountInfo>) => void
+  links?: PartnerLinks
 }
 type Msg = { ok: boolean; text: string } | null
 const errText = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
@@ -283,7 +286,7 @@ function AddAccount({ bridge, groups, onAdded }: { bridge: BridgeState; groups: 
   )
 }
 
-export default function Account({ bridge, trades, setTrades, settings, patch, infos, setInfo }: Props) {
+export default function Account({ bridge, trades, setTrades, settings, patch, infos, setInfo, links }: Props) {
   const [tab, setTab] = useState<string>('overview')
   const [days, setDays] = useState(90)
   const [busy, setBusy] = useState(false)
@@ -387,7 +390,7 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
   if (tab === 'add') {
     return (
       <>
-        <h1>Tài khoản MT5</h1>
+        <h1>Tài khoản</h1>
         {tabs}
         <AddAccount bridge={bridge} groups={groups} onAdded={(id, info) => { pending.current = id; setInfo(id, info); setTab(id) }} />
       </>
@@ -403,7 +406,7 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
     const count = trades.filter((t) => t.account === id).length
     return (
       <>
-        <h1>Tài khoản MT5</h1>
+        <h1>Tài khoản</h1>
         {tabs}
         <section className="card">
           <div className="card-head">
@@ -427,6 +430,12 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
           {info && <InfoEditor info={info} groups={groups} onChange={(p) => setInfo(id, p)} />}
           <p className="muted small">Nhãn lưu trên trình duyệt này. Nhóm dùng để gộp thống kê ở trang Thống kê và Chia sẻ.</p>
         </section>
+        {info?.role === 'prop' && (
+          <section className="fund-embed">
+            <h2 className="section-title">Theo dõi quỹ</h2>
+            <FundPanel id={id} allTrades={trades} settings={settings} bridge={bridge} infos={infos} links={links} />
+          </section>
+        )}
         {a && <PositionsTable rows={positionsOf([a])} infos={infos} busy={busy} onClose={closePosition} showAccount={false} />}
         {a?.tradable && <OrderTicket accounts={[a]} trades={trades} settings={settings} onDone={bridge.refresh} infos={infos} />}
         {meta && (
@@ -443,7 +452,7 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
   // ---------- tab Tổng quan
   return (
     <>
-      <h1>Tài khoản MT5</h1>
+      <h1>Tài khoản</h1>
       {!bridge.online && <BridgeSetup />}
       {(bridge.online || ids.length > 0) && tabs}
       {bridge.online && ids.length === 0 && (

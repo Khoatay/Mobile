@@ -4,10 +4,28 @@ import RuleText from '../components/RuleText'
 import { ask } from '../lib/ask'
 import { bridgeGet, bridgePost, type BridgeState } from '../lib/bridge'
 import { TEMPLATES, type Playbook } from '../lib/kb'
+import { download } from '../lib/store'
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
 const kb = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`)
 const KIND = { pdf: 'PDF', text: 'Văn bản', transcript: 'Phụ đề video' }
+
+/**
+ * Lấy chữ từ file JSON do AI khác xuất ra (lịch sử chat của ChatGPT, Gemini…):
+ * gom mọi đoạn văn bản đủ dài, bỏ id, ngày giờ và các trường kỹ thuật.
+ */
+export function jsonToText(raw: string): string {
+  const out: string[] = []
+  const walk = (v: unknown, key = '') => {
+    if (typeof v === 'string') {
+      const t = v.trim()
+      if (t.length >= 20 && !/^(id|.*_id|uuid|url|.*time|.*date|model.*|type|status)$/i.test(key) && !/^[\w-]{20,}$/.test(t)) out.push(t)
+    } else if (Array.isArray(v)) v.forEach((x) => walk(x, key))
+    else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) walk(x, k)
+  }
+  walk(JSON.parse(raw))
+  return [...new Set(out)].join('\n\n')
+}
 
 function readFile(f: File, as: 'text' | 'dataurl'): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -46,6 +64,7 @@ export default function Learn({ bridge }: { bridge: BridgeState }) {
   const [newName, setNewName] = useState('')
   const [template, setTemplate] = useState('ict')
   const fileInput = useRef<HTMLInputElement>(null)
+  const rulesInput = useRef<HTMLInputElement>(null)
   const chatEnd = useRef<HTMLDivElement>(null)
 
   const load = () => bridgeGet<Playbook[]>('/kb').then((b) => { setBooks(b); setErr('') }).catch((e) => setErr(errText(e)))
@@ -82,7 +101,12 @@ export default function Learn({ bridge }: { bridge: BridgeState }) {
       if (lower.endsWith('.pdf')) pb = await bridgePost<Playbook>('/kb/source', { playbook: pb.id, kind: 'pdf', name: f.name, data: await readFile(f, 'dataurl') })
       else if (/\.(srt|vtt)$/.test(lower)) pb = await bridgePost<Playbook>('/kb/source', { playbook: pb.id, kind: 'transcript', name: f.name, text: await readFile(f, 'text') })
       else if (/\.(txt|md)$/.test(lower)) pb = await bridgePost<Playbook>('/kb/source', { playbook: pb.id, kind: 'text', name: f.name, text: await readFile(f, 'text') })
-      else throw new Error(`${f.name}: chỉ nhận PDF, TXT, MD, SRT, VTT`)
+      else if (lower.endsWith('.json')) {
+        let text = ''
+        try { text = jsonToText(await readFile(f, 'text')) } catch { throw new Error(`${f.name}: file JSON bị lỗi`) }
+        if (!text) throw new Error(`${f.name}: không tìm thấy nội dung chữ trong file`)
+        pb = await bridgePost<Playbook>('/kb/source', { playbook: pb.id, kind: 'text', name: f.name, text })
+      } else throw new Error(`${f.name}: chỉ nhận PDF, TXT, MD, JSON, SRT, VTT`)
     }
     replace(pb)
   })
@@ -142,8 +166,8 @@ export default function Learn({ bridge }: { bridge: BridgeState }) {
                   <button className="primary" disabled={!!busy} onClick={() => fileInput.current?.click()}>Nạp file…</button>
                 </div>
               </div>
-              <input ref={fileInput} type="file" multiple hidden accept=".pdf,.txt,.md,.srt,.vtt" onChange={(e) => { if (e.target.files?.length) upload(e.target.files); e.target.value = '' }} />
-              <p className="muted small">PDF khoá học, ghi chú (.txt, .md), phụ đề video (.srt, .vtt). Video YouTube: tải phụ đề về (nhiều công cụ miễn phí làm được), hoặc dán lời thoại vào ô bên dưới.</p>
+              <input ref={fileInput} type="file" multiple hidden accept=".pdf,.txt,.md,.json,.srt,.vtt" onChange={(e) => { if (e.target.files?.length) upload(e.target.files); e.target.value = '' }} />
+              <p className="muted small">PDF khoá học, ghi chú (.txt, .md), nội dung xuất từ AI khác như ChatGPT hay Gemini (.json, .md, .txt), phụ đề video (.srt, .vtt). Video YouTube: tải phụ đề về (nhiều công cụ miễn phí làm được), hoặc dán lời thoại vào ô bên dưới.</p>
               {book.sources.length === 0 ? <p className="muted">Chưa có tài liệu nào.</p> : (
                 <ul className="sources">
                   {book.sources.map((s) => (
@@ -185,9 +209,18 @@ export default function Learn({ bridge }: { bridge: BridgeState }) {
                 {editing == null ? <button onClick={() => setEditing(book.rules)}>Sửa tay</button> : (
                   <><button className="primary" disabled={!!busy} onClick={saveRules}>Lưu</button><button className="ghost" onClick={() => setEditing(null)}>Huỷ</button></>
                 )}
+                <button className="ghost" disabled={!book.rules.trim()} onClick={() => download(`${book.name}.md`, `# ${book.name}\n\n${book.rules}\n`, 'text/markdown')}>Xuất .md</button>
+                <button className="ghost" disabled={!!busy} onClick={() => rulesInput.current?.click()}>Nhập quy tắc</button>
                 <button className="ghost danger" disabled={!!busy} onClick={remove}>Xoá bộ</button>
               </div>
             </div>
+            <input ref={rulesInput} type="file" hidden accept=".md,.txt" onChange={async (e) => {
+              const f = e.target.files?.[0]; e.target.value = ''
+              if (!f) return
+              const text = (await readFile(f, 'text')).replace(/^#\s+.*\n+/, '')
+              if (book.rules.trim() && !(await ask(`Thay bộ quy tắc hiện tại bằng nội dung của ${f.name}? Bạn vẫn sửa được trước khi lưu.`, 'Thay'))) return
+              setEditing(text)
+            }} />
             {editing != null ? <textarea className="rules-edit" rows={24} value={editing} onChange={(e) => setEditing(e.target.value)} />
               : book.rules.trim() ? <RuleText text={book.rules} /> : <p className="muted">Chưa có quy tắc. Nạp tài liệu rồi bấm "Tổng hợp từ tài liệu", hoặc kể cho agent qua trò chuyện.</p>}
             <p className="muted small">Dòng in nghiêng là điều agent tự suy ra, cần bạn xác nhận. Bạn sửa tay được bất cứ lúc nào; agent sẽ dựa trên bản bạn sửa ở lần dạy tiếp theo.</p>

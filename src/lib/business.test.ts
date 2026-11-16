@@ -124,3 +124,43 @@ describe('accounts', () => {
     expect(currenciesIn('g:Quỹ A', infos)).toEqual(['USD', 'EUR'])
   })
 })
+
+import { blankOffer, daysLeft, offerCaption, offerUrl, sortOffers } from './offers'
+
+describe('offers', () => {
+  const now = Date.parse('2026-11-16T10:00:00')
+  const o = (p: Partial<ReturnType<typeof blankOffer>>) => ({ ...blankOffer(), ...p })
+  it('hạn dùng và thứ tự', () => {
+    expect(daysLeft(o({ expires: '2026-11-16' }), now)).toBe(0)
+    expect(daysLeft(o({ expires: '2026-11-20' }), now)).toBe(4)
+    expect(daysLeft(o({ expires: '2026-11-10' }), now)).toBeLessThan(0)
+    expect(daysLeft(o({}), now)).toBeNull()
+    const list = [o({ id: 'a', createdAt: 3 }), o({ id: 'b', expires: '2026-11-30' }), o({ id: 'c', expires: '2026-11-18' }), o({ id: 'd', pinned: true, createdAt: 1 })]
+    expect(sortOffers(list, now).map((x) => x.id)).toEqual(['d', 'c', 'b', 'a'])
+  })
+  it('link mặc định và nội dung đăng', () => {
+    const links = { ftmo: { url: 'https://vi.du/ftmo', code: 'X' } }
+    const x = o({ partner: 'ftmo', title: 'Giảm 20%', code: 'TRADER20', expires: '2099-01-31' })
+    expect(offerUrl(x, links)).toBe('https://vi.du/ftmo')
+    expect(offerUrl({ ...x, url: 'https://khac' }, links)).toBe('https://khac')
+    const c = offerCaption(x, links, true)
+    expect(c).toContain('FTMO: Giảm 20%')
+    expect(c).toContain('Mã: TRADER20')
+    expect(c).toContain('Hạn: 31/01/2099')
+    expect(c).toContain('👉 https://vi.du/ftmo')
+  })
+})
+
+import { jsonToText } from '../pages/Learn'
+
+describe('nhập file AI khác', () => {
+  it('lấy chữ từ JSON lịch sử chat, bỏ id và ngày giờ', () => {
+    const raw = JSON.stringify([{ id: 'a1b2c3d4e5f6g7h8i9j0k1', create_time: '2026-11-01T10:00:00Z', mapping: { x: { message: { content: { parts: ['Order block là nến ngược chiều cuối cùng trước cú phá cấu trúc.', 'ok'] } } } } }, { title: 'Ghi chú ICT về thanh khoản phiên Á' }])
+    const t = jsonToText(raw)
+    expect(t).toContain('Order block là nến ngược chiều')
+    expect(t).toContain('Ghi chú ICT về thanh khoản phiên Á')
+    expect(t).not.toContain('2026-11-01')
+    expect(t).not.toContain('a1b2c3')
+    expect(t).not.toContain('ok')
+  })
+})
