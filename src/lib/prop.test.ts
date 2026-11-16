@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_PROP, evaluateProp, PRESETS, type PropConfig } from './prop'
+import { DEFAULT_PROP, evaluateProp, PRESETS, suggestProp, type PropConfig } from './prop'
 import type { Trade } from './types'
 
 const mk = (day: number, profit: number, hour = 10): Trade => ({
@@ -70,5 +70,15 @@ describe('evaluateProp', () => {
     expect(s.dailyRemaining).toBe(Infinity)
     expect(s.room).toBe(1000)
     expect(s.state).toBe('active')
+  })
+})
+
+describe('suggestProp', () => {
+  it('đoán chương trình từ broker và giai đoạn, cỡ tài khoản từ số dư', () => {
+    expect(suggestProp('FTMO', 'Vòng 1', 101250)).toMatchObject({ preset: 'ftmo-2s-1', accountSize: 100000, targetPct: 10 })
+    expect(suggestProp('ftmo', 'Vòng 2', 49000)).toMatchObject({ preset: 'ftmo-2s-2', accountSize: 50000, targetPct: 5 })
+    expect(suggestProp('The5ers', 'Vòng 2')).toMatchObject({ preset: '5ers-hs-2', accountSize: 100000 })
+    expect(suggestProp('Ten Trade', '')).toMatchObject({ preset: 'ten-express' })
+    expect(suggestProp('', '', 7.16)).toMatchObject({ preset: PRESETS[0].id, accountSize: 100000 })
   })
 })

@@ -35,6 +35,25 @@ export const PRESETS: { id: string; name: string; rules: Rules }[] = [
 
 export const DEFAULT_PROP: PropConfig = { preset: PRESETS[0].id, accountSize: 100000, startDate: '', ...PRESETS[0].rules }
 
+const SIZES = [5000, 10000, 15000, 25000, 50000, 100000, 200000, 400000]
+
+/**
+ * Bộ luật ban đầu cho một tài khoản quỹ, đoán từ tên broker và giai đoạn ("Vòng 2" -> bước 2),
+ * và cỡ tài khoản chuẩn gần nhất với số dư hiện tại (nếu lệch không quá 15%). Người dùng sửa lại được.
+ */
+export function suggestProp(broker: string, phase: string, balance?: number): PropConfig {
+  const b = broker.toLowerCase().replace(/\s/g, '')
+  const second = /2|verification|xác minh/i.test(phase)
+  const id = b.includes('ftmo') ? (second ? 'ftmo-2s-2' : 'ftmo-2s-1')
+    : b.includes('5ers') ? (second ? '5ers-hs-2' : '5ers-hs-1')
+    : b.includes('tentrade') ? 'ten-express'
+    : PRESETS[0].id
+  const preset = PRESETS.find((p) => p.id === id)!
+  const near = balance ? SIZES.reduce((a, c) => (Math.abs(c - balance) < Math.abs(a - balance) ? c : a)) : 0
+  const accountSize = near && Math.abs(near - balance!) / near <= 0.15 ? near : DEFAULT_PROP.accountSize
+  return { preset: preset.id, accountSize, startDate: '', ...preset.rules }
+}
+
 export interface PropDay {
   date: string
   net: number

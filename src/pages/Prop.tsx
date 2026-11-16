@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Field, Num, Tile } from '../components/Field'
 import { money, signed } from '../lib/format'
-import { DEFAULT_PROP, evaluateProp, PRESETS, type PropConfig } from '../lib/prop'
+import { evaluateProp, PRESETS, suggestProp, type PropConfig } from '../lib/prop'
 import { usePersistent } from '../lib/store'
 import type { InfoMap } from '../lib/accounts'
 import type { BridgeState } from '../lib/bridge'
@@ -25,29 +25,51 @@ function Meter({ label, used, limit, kind, detail }: { label: string; used: numb
   )
 }
 
+const STATE_TIP: Record<string, string> = { crit: 'Đã vi phạm luật', ok: 'Đã đạt mục tiêu', warn: 'Sắp chạm giới hạn lỗ', on: 'Đang trong giới hạn' }
+
 const STATE = {
   failed: { text: '⛔ Đã vi phạm luật', cls: 'state crit' },
   passed: { text: '✓ Đã đạt mục tiêu', cls: 'state ok' },
   active: { text: '● Đang trong giới hạn', cls: 'state' },
 }
 
-export const ALL = '*'
-
-export default function Prop({ trades: allTrades, settings, bridge, labels, infos }: { trades: Trade[]; settings: Settings; bridge: BridgeState; labels: Record<string, string>; infos: InfoMap }) {
-  // Mỗi tài khoản có bộ luật riêng; "*" là toàn bộ Nhật ký không tách tài khoản.
+export default function Prop({ trades: allTrades, settings, bridge, infos, goAccounts }: { trades: Trade[]; settings: Settings; bridge: BridgeState; infos: InfoMap; goAccounts: () => void }) {
+  // Chỉ tài khoản có vai trò "Quỹ"; mỗi tài khoản một bộ luật riêng.
   const [configs, setConfigs] = usePersistent<Record<string, PropConfig>>('fx.props', {})
-  const ids = Object.keys(labels)
+  const propIds = Object.keys(infos).filter((id) => infos[id].role === 'prop')
   const [picked, setPicked] = useState<string | null>(null)
-  const key = picked ?? Object.keys(infos).find((id) => infos[id].role === 'prop') ?? ALL
-  const cfg = configs[key] ?? DEFAULT_PROP
+  const key = picked && propIds.includes(picked) ? picked : propIds[0]
+  const nowServer = Date.now() + settings.serverOffset * 3_600_000
+  const configFor = (id: string) => configs[id] ?? suggestProp(infos[id]?.broker ?? '', infos[id]?.phase ?? '', bridge.accounts.find((a) => a.id === id)?.balance)
+  // Trạng thái từng quỹ, để hiện chấm màu trên tab.
+  const states = useMemo(() => Object.fromEntries(propIds.map((id) => {
+    const live = bridge.accounts.find((a) => a.id === id)
+    const st = evaluateProp(allTrades.filter((t) => t.account === id), configFor(id), nowServer, live?.profit ?? 0)
+    const tight = Number.isFinite(st.room) && st.dailyLimit > 0 && st.room < st.dailyLimit * 0.4
+    return [id, st.state === 'failed' ? 'crit' : st.state === 'passed' ? 'ok' : tight ? 'warn' : 'on']
+  })), [propIds.join(), allTrades, configs, bridge.accounts, Math.floor(nowServer / 60000)])
+
+  if (!key) {
+    return (
+      <>
+        <h1>Theo dõi luật quỹ</h1>
+        <section className="card empty">
+          <p>Chưa có tài khoản quỹ nào.</p>
+          <p className="muted small">Ở trang Tài khoản MT5, mở tab của tài khoản quỹ và đặt <strong>Vai trò</strong> là “Quỹ”, hoặc thêm tài khoản mới với vai trò đó.</p>
+          <button className="primary" onClick={goAccounts}>Sang trang Tài khoản MT5</button>
+        </section>
+      </>
+    )
+  }
+
+  const cfg = configFor(key)
   const setCfg = (c: PropConfig) => setConfigs({ ...configs, [key]: c })
-  const trades = useMemo(() => (key === ALL ? allTrades : allTrades.filter((t) => t.account === key)), [allTrades, key])
+  const trades = allTrades.filter((t) => t.account === key)
   const account = bridge.accounts.find((a) => a.id === key) ?? null
   const set = (p: Partial<PropConfig>) => setCfg({ ...cfg, ...p, preset: 'preset' in p ? p.preset! : 'custom' })
-  const ccy = account?.currency ?? settings.accountCcy
-  const nowServer = Date.now() + settings.serverOffset * 3_600_000
+  const ccy = account?.currency ?? infos[key]?.currency ?? settings.accountCcy
   const floating = account?.profit ?? 0
-  const s = useMemo(() => evaluateProp(trades, cfg, nowServer, floating), [trades, cfg, Math.floor(nowServer / 60000), floating])
+  const s = evaluateProp(trades, cfg, nowServer, floating)
   const drift = account ? account.balance - s.balance : 0
 
   const riskPerTrade = (s.balance * settings.riskPct) / 100
@@ -56,6 +78,14 @@ export default function Prop({ trades: allTrades, settings, bridge, labels, info
   return (
     <>
       <h1>Theo dõi luật quỹ</h1>
+      <div className="tabs" role="tablist" aria-label="Tài khoản quỹ">
+        {propIds.map((id) => (
+          <button key={id} role="tab" aria-selected={id === key} className={id === key ? 'tab active' : 'tab'} onClick={() => setPicked(id)}>
+            <span className={`led st-${states[id]}`} title={STATE_TIP[states[id]]} /> {infos[id].label}
+            {(infos[id].broker || infos[id].phase) && <small>{[infos[id].broker, infos[id].phase].filter(Boolean).join(' · ')}</small>}
+          </button>
+        ))}
+      </div>
       {account ? (
         <p className="notice">
           ✓ Đang đọc trực tiếp tài khoản {account.login}: lãi/lỗ đang treo {signed(floating)} {ccy} đã được tính vào giới hạn.
@@ -63,21 +93,13 @@ export default function Prop({ trades: allTrades, settings, bridge, labels, info
         </p>
       ) : (
         <p className="warn">
-          ⚠ {key === ALL ? 'Đang gộp mọi lệnh trong Nhật ký' : 'Tài khoản này chưa kết nối MT5'}, nên chỉ tính trên lệnh đã đóng. Quỹ tính cả lãi/lỗ đang treo (equity), con số ở đây có thể lạc quan hơn thực tế khi bạn còn lệnh mở.
+          ⚠ Tài khoản này chưa kết nối MT5, nên chỉ tính trên lệnh đã đóng. Quỹ tính cả lãi/lỗ đang treo (equity), con số ở đây có thể lạc quan hơn thực tế khi bạn còn lệnh mở.
         </p>
       )}
       <p className="muted small">Thông số mẫu lấy từ các trang đánh giá bên thứ ba, hãy đối chiếu với điều khoản tài khoản của bạn và sửa lại nếu khác.</p>
 
       <section className="card">
         <div className="prop-form">
-          {ids.length > 0 && (
-            <Field label="Tài khoản">
-              <select value={key} onChange={(e) => setPicked(e.target.value)}>
-                {ids.map((id) => <option key={id} value={id}>{labels[id]}{infos[id]?.phase ? ` · ${infos[id].phase}` : ''}</option>)}
-                <option value={ALL}>Toàn bộ Nhật ký (không tách)</option>
-              </select>
-            </Field>
-          )}
           <Field label="Chương trình">
             <select value={cfg.preset} onChange={(e) => {
               const p = PRESETS.find((x) => x.id === e.target.value)

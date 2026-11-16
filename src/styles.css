@@ -231,3 +231,7 @@ a { color: var(--accent); }
 .tab.add { color: var(--accent); }
 tr.clickable { cursor: pointer; }
 tr.group-row td { background: var(--raised); }
+.led.st-ok { background: #0ca30c; }
+.led.st-on { background: var(--accent); }
+.led.st-warn { background: #fab219; }
+.led.st-crit { background: #d03b3b; }

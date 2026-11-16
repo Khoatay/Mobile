@@ -75,7 +75,7 @@ export default function App() {
         {tab === 'calc' && <Calculator settings={settings} patch={patchSettings} />}
         {tab === 'journal' && <Journal trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} labels={labels} />}
         {tab === 'stats' && <Dashboard trades={trades} settings={settings} infos={infos} goJournal={() => setTab('journal')} />}
-        {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} labels={labels} infos={infos} />}
+        {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} infos={infos} goAccounts={() => setTab('account')} />}
         {tab === 'account' && <Account bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} infos={infos} setInfo={setInfo} />}
         {tab === 'signals' && <Signals bridge={bridge} settings={settings} messages={messages} />}
         {tab === 'news' && <News bridge={bridge} messages={messages} />}
