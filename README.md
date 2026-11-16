@@ -30,6 +30,18 @@ Công cụ cho người giao dịch forex, chạy trên trình duyệt máy tín
 - **Chia sẻ cộng đồng**: tạo banner và nội dung cho tín hiệu, kết quả lệnh, thống kê theo ngày/tuần/tháng; tải ảnh, sao chép, hoặc gửi thẳng lên nhóm Telegram trong danh sách cho phép.
 - **Hướng dẫn** và **Cá nhân hoá**: bài hướng dẫn dùng app, kết nối, quỹ (cách vận hành, luật từng chương trình), sàn và giao dịch cơ bản, kèm nút mở link giới thiệu của bạn; link IB, affiliate và mã giảm giá khai báo một chỗ ở Cá nhân hoá; thư viện link bài viết, video của riêng bạn; tên thương hiệu, màu, link giới thiệu, dòng cảnh báo, ẩn số tiền khi chia sẻ.
 
+## Bản đơn giản và bản đầy đủ
+
+Lần đầu mở app sẽ hỏi chọn giao diện; đổi lại bằng nút "Bản đầy đủ" ở góc trên hoặc "Chuyển sang bản đơn giản" ở thanh bên. Hai bản dùng chung dữ liệu.
+
+- **Bản đơn giản** (cho người mới): một cột như app điện thoại, 5 mục ở thanh dưới, không dùng thuật ngữ khi không cần.
+  - **Trang chủ**: tổng số dư và lệnh đang mở (nếu có bridge), hoặc lãi/lỗ hôm nay và tuần này; lối tắt và một lời khuyên mỗi ngày.
+  - **Tính lệnh**: 4 bước bấm chọn (cặp, vốn, mức rủi ro An toàn/Vừa phải/Mạo hiểm, khoảng cắt lỗ); kết quả nói bằng tiền: "sai thì mất bao nhiêu, đúng thì được bao nhiêu".
+  - **Kết quả**: hướng dẫn 3 bước lấy file từ MT5, tổng lãi/lỗ, thắng/thua, một câu nhận xét, tối đa 3 điều nên chú ý và 10 lệnh gần nhất.
+  - **Học**: 5 điều cần nhớ và từ điển cho người mới (pip, lot, SL, TP, đòn bẩy, ký quỹ, spread, equity, quỹ).
+  - **Ưu đãi**: ưu đãi và nhóm cộng đồng của IB, bấm để chép mã.
+- **Bản đầy đủ**: mọi chức năng bên dưới.
+
 ## Bản IB và bản trader
 
 - **Gói Pro**: một trang duy nhất cho mọi thứ liên quan tới Pro. Trader xem tính năng nào là Pro, đã mở hay chưa, giá và nút nâng cấp. IB chọn tính năng nào là Pro (đăng tín hiệu từ AI phân tích, chép tín hiệu từ Telegram, AI phân tích, AI học trade, Tín hiệu Telegram), đặt giá và link nâng cấp, và quản lý link giới thiệu cùng gói cấu hình ngay tại đây. Trang bị khoá hiện màn hình giới thiệu Pro; mục bị khoá trong thanh bên có biểu tượng khoá nhỏ.
@@ -92,4 +104,5 @@ Việc đọc lệnh từ tin nhắn dùng quy tắc cố định (cặp tiền,
 
 - `src/lib/` — logic thuần (tính lot, đọc file, thống kê), không phụ thuộc giao diện, dùng lại được cho bản điện thoại.
 - `src/pages/`, `src/components/` — giao diện React.
+- `src/lite/` — bản đơn giản (giao diện và phần đổi số liệu sang lời dễ hiểu).
 - `bridge/` — chương trình nền Python; chỉ chuyển dữ liệu thô, mọi phép tính nằm ở `src/lib/`.

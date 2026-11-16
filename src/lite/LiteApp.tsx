@@ -1,0 +1,68 @@
+import { useState } from 'react'
+import Icon, { type IconName } from '../components/Icon'
+import type { BrandPack } from '../lib/brandpack'
+import type { BridgeState } from '../lib/bridge'
+import type { PartnerLinks } from '../lib/partners'
+import type { Profile } from '../lib/share'
+import type { Settings, Trade } from '../lib/types'
+import type { UserProfile } from '../lib/user'
+import LiteCalc from './LiteCalc'
+import LiteHome from './LiteHome'
+import LiteLearn from './LiteLearn'
+import LiteOffers from './LiteOffers'
+import LiteResults from './LiteResults'
+
+export type LiteTab = 'home' | 'calc' | 'results' | 'learn' | 'offers'
+
+const TABS: [LiteTab, string, IconName][] = [
+  ['home', 'Trang chủ', 'home'],
+  ['calc', 'Tính lệnh', 'calc'],
+  ['results', 'Kết quả', 'chart'],
+  ['learn', 'Học', 'book'],
+  ['offers', 'Ưu đãi', 'gift'],
+]
+
+export interface LiteProps {
+  settings: Settings
+  patch: (p: Partial<Settings>) => void
+  trades: Trade[]
+  setTrades: (t: Trade[]) => void
+  bridge: BridgeState
+  user: UserProfile
+  profile: Profile
+  pack: BrandPack
+  links: PartnerLinks
+  /** Sang bản đầy đủ, có thể mở thẳng một trang (vd. 'guides'). */
+  goFull: (tab?: string) => void
+}
+
+/** Bản đơn giản: 5 mục ở thanh dưới, chữ to, không thuật ngữ. Mọi dữ liệu dùng chung với bản đầy đủ. */
+export default function LiteApp(props: LiteProps) {
+  const [tab, setTab] = useState<LiteTab>('home')
+  const { profile, goFull } = props
+  return (
+    <div className="lite">
+      <header className="lite-top">
+        <span className="logo" aria-hidden="true">{(profile.brand || 'FX').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase() || 'FX'}</span>
+        <strong className="lite-brand">{profile.brand || 'FX Desk'}</strong>
+        <span className="lite-badge">Đơn giản</span>
+        <button className="lite-switch" onClick={() => goFull()}>Bản đầy đủ</button>
+      </header>
+      <main className="lite-main">
+        {tab === 'home' && <LiteHome {...props} go={setTab} />}
+        {tab === 'calc' && <LiteCalc settings={props.settings} patch={props.patch} />}
+        {tab === 'results' && <LiteResults trades={props.trades} setTrades={props.setTrades} settings={props.settings} goFull={goFull} />}
+        {tab === 'learn' && <LiteLearn goFull={goFull} />}
+        {tab === 'offers' && <LiteOffers pack={props.pack} links={props.links} disclaimer={profile.disclaimer} />}
+      </main>
+      <nav className="lite-nav" aria-label="Mục chính">
+        {TABS.map(([id, label, icon]) => (
+          <button key={id} className={tab === id ? 'active' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => { setTab(id); window.scrollTo(0, 0) }}>
+            <Icon name={icon} size={22} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
+  )
+}

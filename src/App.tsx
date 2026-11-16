@@ -35,6 +35,9 @@ import Personalize from './pages/Personalize'
 import Prop from './pages/Prop'
 import Share from './pages/Share'
 import Signals from './pages/Signals'
+import LiteApp from './lite/LiteApp'
+import ModePicker from './lite/ModePicker'
+import type { Mode } from './lite/plain'
 
 const GROUPS = [
   { title: 'Giao dịch', tone: 'gold', tabs: [['calc', 'Tính lot', 'calc'], ['account', 'Tài khoản', 'terminal'], ['prop', 'Quỹ', 'shield'], ['guard', 'Bảo vệ', 'lock'], ['copier', 'Copy lệnh', 'copy']] },
@@ -46,6 +49,8 @@ type Tab = (typeof GROUPS)[number]['tabs'][number][0]
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('calc')
+  // Bản đơn giản cho người mới hoặc bản đầy đủ; '' = chưa chọn, hỏi ở màn hình chào.
+  const [mode, setMode] = usePersistent<Mode | ''>('fx.mode', '')
   const [settings, patchSettings] = useSettings()
   const [trades, setTrades] = useTrades()
   const [stored, setProfile] = usePersistent<Profile>('fx.profile', DEFAULT_PROFILE)
@@ -87,9 +92,20 @@ export default function App() {
     if (changed.length) setStoredInfo((all) => ({ ...all, ...Object.fromEntries(changed.map((a) => [a.id, { ...all[a.id], currency: a.currency }])) }))
   }, [bridge.accounts])
 
+  const previewBar = PREVIEW && <div className="preview-bar">Bản xem trước: dữ liệu giả lập, không nối MT5 hay Telegram thật. Lệnh, tin nhắn và tài khoản ở đây đều là mẫu.</div>
+  if (mode === '') return <>{previewBar}<ModePicker brand={profile.brand} onPick={setMode} /></>
+  if (mode === 'lite')
+    return (
+      <>
+        {previewBar}
+        <LiteApp settings={settings} patch={patchSettings} trades={trades} setTrades={setTrades} bridge={bridge} user={user} profile={profile} pack={pack} links={links}
+          goFull={(t) => { if (t && GROUPS.some((g) => g.tabs.some(([id]) => id === t))) setTab(t as Tab); setMode('full'); window.scrollTo(0, 0) }} />
+      </>
+    )
+
   return (
     <>
-    {PREVIEW && <div className="preview-bar">Bản xem trước: dữ liệu giả lập, không nối MT5 hay Telegram thật. Lệnh, tin nhắn và tài khoản ở đây đều là mẫu.</div>}
+    {previewBar}
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
@@ -113,6 +129,7 @@ export default function App() {
           <Avatar src={user.avatar} name={user.displayName || user.username} size={32} />
           <span className="user-text"><strong>{user.displayName || 'Đặt tên của bạn'}</strong><small>{user.username ? `@${user.username}` : 'Hồ sơ'}</small></span>
         </button>
+        <button className="lite-toggle" onClick={() => setMode('lite')}>Chuyển sang bản đơn giản</button>
         {EDITION === 'owner' && (
           <label className={viewAs ? 'mode-switch on' : 'mode-switch'}>
             <input type="checkbox" checked={viewAs} onChange={(e) => setViewAs(e.target.checked)} />
