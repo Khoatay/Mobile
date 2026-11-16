@@ -4,6 +4,8 @@ import { PREVIEW, useBridge, useTelegramMessages } from './lib/bridge'
 import { DEFAULT_PROFILE, type Profile } from './lib/share'
 import { usePersistent, useSettings, useTrades } from './lib/store'
 import Account from './pages/Account'
+import Analyze from './pages/Analyze'
+import Learn from './pages/Learn'
 import Calculator from './pages/Calculator'
 import Dashboard from './pages/Dashboard'
 import Guides from './pages/Guides'
@@ -17,7 +19,7 @@ import Signals from './pages/Signals'
 
 const GROUPS = [
   { title: 'Giao dịch', tabs: [['calc', 'Tính lot'], ['account', 'Tài khoản MT5'], ['prop', 'Luật quỹ']] },
-  { title: 'Phân tích', tabs: [['journal', 'Nhật ký lệnh'], ['stats', 'Thống kê'], ['signals', 'Tín hiệu Telegram'], ['news', 'Tin tức']] },
+  { title: 'Phân tích', tabs: [['journal', 'Nhật ký lệnh'], ['stats', 'Thống kê'], ['learn', 'Học kiến thức'], ['ai', 'Phân tích AI'], ['signals', 'Tín hiệu Telegram'], ['news', 'Tin tức']] },
   { title: 'Kinh doanh', tabs: [['ledger', 'Thu chi đầu tư'], ['share', 'Chia sẻ cộng đồng']] },
   { title: 'Khác', tabs: [['guides', 'Hướng dẫn'], ['me', 'Cá nhân hoá']] },
 ] as const
@@ -80,6 +82,8 @@ export default function App() {
         {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} infos={infos} goAccounts={() => setTab('account')} />}
         {tab === 'account' && <Account bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} infos={infos} setInfo={setInfo} />}
         {tab === 'signals' && <Signals bridge={bridge} settings={settings} messages={messages} />}
+        {tab === 'learn' && <Learn bridge={bridge} />}
+        {tab === 'ai' && <Analyze bridge={bridge} settings={settings} />}
         {tab === 'news' && <News bridge={bridge} messages={messages} />}
         {tab === 'ledger' && <Ledger bridge={bridge} settings={settings} labels={labels} infos={infos} />}
         {tab === 'share' && <Share bridge={bridge} trades={trades} settings={settings} profile={profile} labels={labels} infos={infos} />}

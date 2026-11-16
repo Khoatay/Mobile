@@ -11,6 +11,8 @@ import { contractSize, parseSymbol, SAMPLE_QUOTES, usdValue } from './forex'
 import { dealsToTrades } from './mt5deals'
 import { demoMessages } from './signals'
 import { balanceDealsToEntries, type LedgerEntry } from './ledger'
+import { digitsOf, type MarketFeatures } from './features'
+import { TEMPLATES, type Analysis, type Playbook } from './kb'
 
 const HOUR = 3_600_000
 const OFFSET = 2 // giờ máy chủ giả lập: UTC+2
@@ -32,7 +34,9 @@ function mid(symbol: string, t = Date.now()): number {
   const info = parseSymbol(symbol)!
   const base = usdValue(info.base, SAMPLE_QUOTES) / usdValue(info.quote, SAMPLE_QUOTES)
   const h = hash(symbol)
-  return base * (1 + 0.004 * Math.sin(t / 5_400_000 + h) + 0.0012 * Math.sin(t / 420_000 + h * 3) + 0.0003 * Math.sin(t / 37_000 + h))
+  // Xu hướng chậm theo từng cặp (vàng tăng, EURUSD giảm…) để phân tích mẫu có cái để thấy.
+  const drift = ({ XAUUSD: 0.06, EURUSD: -0.03, GBPJPY: 0.025, USDJPY: 0.02, AUDUSD: -0.02 } as Record<string, number>)[symbol] ?? 0
+  return base * (1 + drift * ((t - T0) / (30 * 86_400_000)) + 0.004 * Math.sin(t / 5_400_000 + h) + 0.0012 * Math.sin(t / 420_000 + h * 3) + 0.0003 * Math.sin(t / 37_000 + h))
 }
 const digits = (symbol: string) => (symbol.includes('JPY') ? 3 : symbol.startsWith('XA') ? 2 : 5)
 const round = (symbol: string, v: number) => Number(v.toFixed(digits(symbol)))
@@ -147,6 +151,81 @@ const calendar: CalEvent[] = [
   { title: 'Bank Holiday', currency: 'CAD', date: at(90), impact: 'Holiday', forecast: '', previous: '' },
 ]
 
+// ---------- kho kiến thức mẫu
+const playbooks: Playbook[] = [{
+  id: 'pb-demo', name: 'ICT + SMC của tôi (mẫu)', rules: TEMPLATES.find((t) => t.id === 'ict')!.rules,
+  sources: [
+    { id: 's1', name: 'ICT 2022 Mentorship - ghi chép.pdf', kind: 'pdf', size: 2_480_000, addedAt: T0 - 5 * 86_400_000 },
+    { id: 's2', name: 'Bài 4 - Liquidity sweep.srt', kind: 'transcript', size: 38_000, addedAt: T0 - 3 * 86_400_000 },
+  ],
+  chat: [
+    { role: 'user', text: 'Tôi chỉ vào lệnh khi H4 cùng chiều và M15 có CHoCH sau khi quét đáy phiên Á.', at: T0 - 2 * 86_400_000 },
+    { role: 'assistant', text: 'Đã ghi vào mục Điều kiện vào lệnh: quét thanh khoản phiên Á, sau đó CHoCH M15 cùng chiều H4.\n\nCâu hỏi cần bạn xác nhận:\n- Bạn có vào lệnh ở phiên Mỹ không, hay chỉ phiên Âu?', at: T0 - 2 * 86_400_000 + 60_000 },
+  ],
+  updatedAt: T0 - 2 * 86_400_000,
+}]
+const findPb = (id: unknown) => {
+  const pb = playbooks.find((p) => p.id === String(id))
+  if (!pb) throw new Error('Không có bộ kiến thức này')
+  return pb
+}
+
+/** Phân tích mẫu: áp một phiên bản đơn giản của bộ quy tắc ICT lên đặc điểm giá, không gọi AI. */
+function mockAnalysis(f: MarketFeatures): Analysis {
+  const tf = (name: string) => f.timeframes.find((t) => t.tf === name)!
+  const h4 = tf('H4'), m15 = tf('M15'), d1 = tf('D1'), h1 = tf('H1')
+  const bias = (t: typeof h4) => (t.structure === 'bullish' || (t.structure === 'mixed' && t.ema_trend === 'up') ? 'up' : t.structure === 'bearish' || (t.structure === 'mixed' && t.ema_trend === 'down') ? 'down' : 'range') as Analysis['main_trend']
+  const main = bias(h4)
+  const lastBreak = m15.breaks[m15.breaks.length - 1]
+  const choch = !!lastBreak && lastBreak.kind === 'CHoCH' && lastBreak.dir === (main === 'up' ? 'up' : 'down')
+  const swept = main === 'up' ? f.levels.asia_low != null && Math.min(...m15.swings.filter((s) => s.kind === 'low').map((s) => s.price)) <= f.levels.asia_low
+    : f.levels.asia_high != null && Math.max(...m15.swings.filter((s) => s.kind === 'high').map((s) => s.price)) >= f.levels.asia_high
+  const zone = [...m15.fvg, ...m15.order_blocks].filter((z) => z.dir === (main === 'up' ? 'bull' : 'bear')).pop()
+  const inDiscount = h4.range ? (main === 'up' ? h4.range.position_pct < 50 : h4.range.position_pct > 50) : false
+  const checklist = [
+    { rule: 'H4 có thiên hướng rõ ràng', met: main !== 'range', detail: `Cấu trúc H4: ${h4.structure}, EMA: ${h4.ema_trend ?? 'không đủ dữ liệu'}` },
+    { rule: main === 'down' ? 'Giá ở vùng premium của biên H4 (tăng độ tin cậy)' : 'Giá ở vùng discount của biên H4 (tăng độ tin cậy)', met: inDiscount, detail: h4.range ? `Giá ở ${h4.range.position_pct}% biên ${h4.range.low} – ${h4.range.high}` : 'Chưa xác định được biên' },
+    { rule: 'Quét thanh khoản phiên Á (tăng độ tin cậy)', met: swept, detail: main === 'down' ? `Đỉnh phiên Á ${f.levels.asia_high ?? '–'}` : `Đáy phiên Á ${f.levels.asia_low ?? '–'}` },
+    { rule: 'M15 có CHoCH cùng chiều H4 (tăng độ tin cậy)', met: choch, detail: lastBreak ? `Phá cấu trúc gần nhất: ${lastBreak.kind} ${lastBreak.dir === 'up' ? 'tăng' : 'giảm'} tại ${lastBreak.level}` : 'Chưa có' },
+    { rule: 'Có FVG hoặc order block M15 để đặt lệnh limit', met: !!zone, detail: zone ? `${zone.dir === 'bull' ? 'Vùng tăng' : 'Vùng giảm'} ${zone.bottom} – ${zone.top}` : 'Chưa có vùng phù hợp' },
+  ]
+  const atr = m15.atr || h1.atr / 4
+  const r = (v: number) => Number(v.toFixed(digitsOf(f.symbol)))
+  let trade: Analysis['trade'] = { side: 'none', order_type: 'none', entry: null, sl: null, tp1: null, tp2: null, rr: null, confidence: 'low', invalidation: '' }
+  const ready = main !== 'range' && !!zone
+  if (ready && zone) {
+    const up = main === 'up'
+    const entry = up ? zone.top : zone.bottom
+    const sl = up ? zone.bottom - atr * 0.5 : zone.top + atr * 0.5
+    const targets = (up ? [...h1.swings.filter((s) => s.kind === 'high').map((s) => s.price), f.levels.prev_day_high] : [...h1.swings.filter((s) => s.kind === 'low').map((s) => s.price), f.levels.prev_day_low])
+      .filter((x): x is number => x != null && (up ? x > entry : x < entry)).sort((a, b) => (up ? a - b : b - a))
+    const risk = Math.abs(entry - sl)
+    const far = targets.filter((x) => Math.abs(x - entry) >= risk * 2)
+    const tp1 = far[0] ?? (up ? entry + risk * 2 : entry - risk * 2)
+    targets.splice(0, targets.length, ...far.slice(1))
+    targets.unshift(tp1)
+    const rr = Math.abs(tp1 - entry) / Math.abs(entry - sl)
+    trade = { side: up ? 'buy' : 'sell', order_type: 'limit', entry: r(entry), sl: r(sl), tp1: r(tp1), tp2: targets[1] != null ? r(targets[1]) : null, rr: Number(rr.toFixed(2)), confidence: checklist.every((c) => c.met) ? 'high' : checklist.filter((c) => c.met).length >= 3 ? 'medium' : 'low', invalidation: `Nến H1 đóng cửa ${up ? 'dưới' : 'trên'} ${r(sl)}` }
+  }
+  const hasTrade = trade.side !== 'none' && (trade.rr ?? 0) >= 1.5
+  return {
+    main_trend: main,
+    summary: `(Phân tích mẫu, không phải AI thật) D1 ${bias(d1) === 'up' ? 'tăng' : bias(d1) === 'down' ? 'giảm' : 'đi ngang'}, H4 ${main === 'up' ? 'tăng' : main === 'down' ? 'giảm' : 'đi ngang'}. ${hasTrade ? 'Đủ hai điều kiện bắt buộc (thiên hướng H4 và vùng vào lệnh M15); các điều kiện còn lại quyết định độ tin cậy.' : 'Chưa đủ điều kiện bắt buộc.'}`,
+    timeframes: [d1, h4, h1, m15].map((t) => ({ tf: t.tf, bias: bias(t), note: `${t.structure === 'bullish' ? 'HH-HL' : t.structure === 'bearish' ? 'LH-LL' : 'Lẫn lộn'}${t.breaks.length ? `, ${t.breaks[t.breaks.length - 1].kind} ${t.breaks[t.breaks.length - 1].dir === 'up' ? 'tăng' : 'giảm'}` : ''}` })),
+    key_levels: [
+      ...(f.levels.prev_day_high != null ? [{ price: f.levels.prev_day_high, label: 'Đỉnh ngày trước' }] : []),
+      ...(f.levels.prev_day_low != null ? [{ price: f.levels.prev_day_low, label: 'Đáy ngày trước' }] : []),
+      ...(f.levels.asia_high != null ? [{ price: f.levels.asia_high, label: 'Đỉnh phiên Á' }] : []),
+      ...(f.levels.asia_low != null ? [{ price: f.levels.asia_low, label: 'Đáy phiên Á' }] : []),
+      ...(zone ? [{ price: zone.top, label: 'Cạnh trên vùng vào lệnh M15' }, { price: zone.bottom, label: 'Cạnh dưới vùng vào lệnh M15' }] : []),
+    ],
+    checklist,
+    has_trade: hasTrade,
+    trade: hasTrade ? trade : { ...trade, side: 'none', order_type: 'none', entry: null, sl: null, tp1: null, tp2: null, rr: null },
+    wait_for: hasTrade ? '' : checklist.filter((c) => !c.met).map((c) => c.rule).join('; ') || 'R:R tới TP1 đạt từ 1:2',
+  }
+}
+
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const find = (id: unknown) => {
   const a = accounts.find((x) => x.id === String(id))
@@ -167,6 +246,8 @@ export async function mockGet(path: string): Promise<unknown> {
     case '/candles': return candles(q('symbol'), q('tf') || 'H1', Math.min(Number(q('count')) || 300, 20000))
     case '/telegram/messages': return messages.filter((m) => m.date > Number(q('after') || 0))
     case '/calendar': return calendar
+    case '/kb': return JSON.parse(JSON.stringify(playbooks))
+    case '/ai/status': return { configured: true, model: 'bản xem trước (không gọi AI)' }
     case '/terminals': {
       const used = new Map(accounts.map((a) => [a.terminal, a.label]))
       return [...accounts.map((a) => a.terminal), FREE_TERMINAL].map((p) => ({ path: p, usedBy: used.get(p) ?? null }))
@@ -218,6 +299,47 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
     return { removed: acc.id }
   }
   if (path === '/telegram/send') return { sent: true, target: body.target }
+  if (path === '/kb/save') {
+    if (body.id) {
+      const pb = findPb(body.id)
+      if (body.name) pb.name = String(body.name)
+      if ('rules' in body) pb.rules = String(body.rules)
+      pb.updatedAt = Date.now()
+      return { ...pb }
+    }
+    if (!String(body.name || '').trim()) throw new Error('Cần đặt tên cho bộ kiến thức')
+    const pb: Playbook = { id: `pb-${Date.now()}`, name: String(body.name), rules: String(body.rules || ''), sources: [], chat: [], updatedAt: Date.now() }
+    playbooks.push(pb)
+    return { ...pb }
+  }
+  if (path === '/kb/delete') { playbooks.splice(playbooks.indexOf(findPb(body.id)), 1); return { deleted: body.id } }
+  if (path === '/kb/source') {
+    const pb = findPb(body.playbook)
+    const size = body.kind === 'pdf' ? Math.round(String(body.data || '').length * 0.75) : String(body.text || '').length
+    pb.sources.push({ id: `s${Date.now()}`, name: String(body.name || 'Tài liệu'), kind: body.kind as 'pdf' | 'text' | 'transcript', size, addedAt: Date.now() })
+    return JSON.parse(JSON.stringify(pb))
+  }
+  if (path === '/kb/source/delete') { const pb = findPb(body.playbook); pb.sources = pb.sources.filter((s) => s.id !== body.source); return JSON.parse(JSON.stringify(pb)) }
+  if (path === '/kb/learn') {
+    await wait(900)
+    const pb = findPb(body.playbook)
+    const text = String(body.message || '').trim()
+    if (!text) throw new Error('Tin nhắn đang trống')
+    const summarize = text.startsWith('Hãy đọc toàn bộ tài liệu')
+    const reply = summarize
+      ? `(Câu trả lời mẫu, bản xem trước không gọi AI.) Đã đọc ${pb.sources.length} tài liệu và tổng hợp lại bộ quy tắc.\n\nCâu hỏi cần bạn xác nhận:\n- Tài liệu nói "chờ CHoCH" nhưng không nói rõ khung nào. Bạn dùng M15 hay M5?`
+      : `(Câu trả lời mẫu, bản xem trước không gọi AI.) Đã ghi nhận: "${text.slice(0, 160)}". Tôi đã thêm vào mục Ghi chú từ trò chuyện.`
+    pb.chat.push({ role: 'user', text, at: Date.now() }, { role: 'assistant', text: reply, at: Date.now() })
+    if (!summarize) pb.rules = pb.rules.replace(/\n## Ghi chú từ trò chuyện[\s\S]*$/, '') + `\n\n## Ghi chú từ trò chuyện\n${pb.chat.filter((c) => c.role === 'user' && !c.text.startsWith('Hãy đọc')).map((c) => `- ${c.text} (suy luận, cần xác nhận)`).join('\n')}`
+    pb.updatedAt = Date.now()
+    return { playbook: JSON.parse(JSON.stringify(pb)), reply }
+  }
+  if (path === '/ai/analyze') {
+    await wait(700)
+    const pb = findPb(body.playbook)
+    if (!pb.rules.trim()) throw new Error('Bộ kiến thức này chưa có quy tắc. Hãy dạy trước ở mục Học')
+    return { analysis: mockAnalysis(body.features as MarketFeatures), model: 'bản xem trước', usage: { input: 0, output: 0 } }
+  }
   throw new Error('Không có đường dẫn này')
 }
 

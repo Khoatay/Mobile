@@ -1,5 +1,7 @@
 {
   "port": 8787,
+  "anthropic_api_key": "sk-ant-...",
+  "ai_model": "claude-opus-5-5",
   "accounts": [
     {
       "label": "FTMO 100K",
@@ -32,8 +34,13 @@
   "telegram": {
     "api_id": 0,
     "api_hash": "",
-    "channels": ["@ten_kenh_cong_khai", "Tên kênh đúng như hiện trong Telegram"],
-    "post_targets": ["Tên nhóm cộng đồng của bạn"],
+    "channels": [
+      "@ten_kenh_cong_khai",
+      "Tên kênh đúng như hiện trong Telegram"
+    ],
+    "post_targets": [
+      "Tên nhóm cộng đồng của bạn"
+    ],
     "history_per_channel": 200
   }
 }

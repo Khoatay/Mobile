@@ -11,10 +11,16 @@ Công cụ cho người giao dịch forex, chạy trên trình duyệt máy tín
 - **Tài khoản MT5** (cần bridge): mỗi tài khoản một tab, thêm và gỡ tài khoản ngay trên app; gắn nhãn broker, Real/Demo, vai trò, giai đoạn (vòng 1, vòng 2…), nhóm và ghi chú. Xem nhiều tài khoản cùng lúc (thật, quỹ, copy trade, demo) với số dư, equity, lệnh đang mở; đưa lịch sử lệnh vào Nhật ký; cập nhật tỷ giá cho Tính lot. Thống kê và Luật quỹ tách được theo từng tài khoản, và Luật quỹ tính cả lãi/lỗ đang treo.
 - **Vào lệnh từ app** (mặc định tắt): lệnh thị trường với stop loss bắt buộc, lot tự tính theo % rủi ro, và nút đóng lệnh. Chỉ dùng được với tài khoản đã bật riêng trong bridge.
 - **Tín hiệu Telegram** (cần bridge): đọc lệnh từ các kênh bạn chọn, gom theo cặp tiền, đánh giá độ trùng khớp giữa các kênh và với xu hướng H4, và chấm thành tích từng kênh bằng dữ liệu giá từ MT5.
+- **Học kiến thức** (cần bridge và khoá API): tạo bộ kiến thức cho từng phương pháp (ICT, SMC, kết hợp…), nạp PDF, ghi chú và phụ đề video, dạy agent qua trò chuyện. Agent tóm thành một bộ quy tắc rõ ràng, sửa tay được, đánh dấu những điều nó tự suy ra.
+- **Phân tích AI** (cần bridge, MT5 và khoá API): chọn bộ kiến thức và danh sách cặp tiền; app tính sẵn các đặc điểm giá từ nến D1/H4/H1/M15 (cấu trúc, BOS/CHoCH, FVG, order block, thanh khoản, đỉnh đáy ngày và tuần trước, biên phiên Á) rồi agent chỉ áp đúng bộ quy tắc đó, cho ra xu hướng chính, thiên hướng từng khung, bảng kiểm tra điều kiện, và lệnh đề xuất kèm khối lượng theo % rủi ro, hoặc nói rõ cần chờ gì.
 - **Tin tức**: lịch kinh tế tuần này (lọc theo mức độ và theo đồng tiền đang giữ lệnh, cảnh báo tin mạnh sắp ra), và luồng tin từ các kênh Telegram.
 - **Thu chi đầu tư**: ghi khoản bỏ ra (phí quỹ, nạp tài khoản, công cụ, khoá học) và thu về (rút từ quỹ, từ tài khoản, backcom, affiliate); lấy nạp/rút từ MT5; tính lãi/lỗ tổng và tỷ suất trên tiền bỏ ra.
 - **Chia sẻ cộng đồng**: tạo banner và nội dung cho tín hiệu, kết quả lệnh, thống kê theo ngày/tuần/tháng; tải ảnh, sao chép, hoặc gửi thẳng lên nhóm Telegram trong danh sách cho phép.
 - **Hướng dẫn** và **Cá nhân hoá**: bài hướng dẫn dùng app, kết nối và giao dịch cơ bản; thư viện link bài viết, video của riêng bạn; tên thương hiệu, màu, link giới thiệu, dòng cảnh báo, ẩn số tiền khi chia sẻ.
+
+## Bản xem trước
+
+`VITE_PREVIEW=1 npm run build -- --outDir dist-preview` build app với bridge giả lập ngay trong trang (tài khoản, tin Telegram, lịch kinh tế, câu trả lời AI đều là mẫu), để xem thử mọi trang mà không cần MT5 hay khoá API.
 
 ## Chạy
 
@@ -43,6 +49,7 @@ python bridge.py
 - **Mỗi tài khoản cần một bản MT5 ở thư mục riêng**, vì một bản MT5 chỉ đăng nhập được một tài khoản tại một thời điểm. Cài MT5 thêm lần nữa vào thư mục khác (bộ cài của mỗi quỹ thường đã vào thư mục riêng), hoặc sao chép cả thư mục MT5 và đặt `"portable": true`.
 - **Vào lệnh**: chỉ với tài khoản có `"allow_trading": true` và dùng mật khẩu giao dịch thay cho mật khẩu view. `max_lot` (mặc định 1.0) là trần khối lượng mỗi lệnh. Bridge từ chối lệnh không có stop loss, và luôn để MT5 kiểm tra lệnh trước khi gửi. Hãy thử trên tài khoản demo trước, và kiểm tra điều khoản của quỹ về việc đặt lệnh bằng phần mềm ngoài.
 - **Telegram**: lấy `api_id` và `api_hash` tại my.telegram.org, rồi điền tên các kênh vào `channels`. Bridge đọc bằng tài khoản Telegram của bạn, nên chỉ thấy kênh công khai hoặc kênh bạn đã tham gia.
+- **AI**: thêm `"anthropic_api_key": "sk-ant-…"` vào `config.json` (tạo khoá tại console.anthropic.com). Mặc định dùng model `claude-opus-5-5`; đổi bằng `"ai_model"`. Bộ kiến thức và tài liệu lưu trong `bridge/knowledge/` (không đưa lên git). Mỗi lần dạy hoặc phân tích tốn phí API theo lượng chữ gửi đi; tài liệu nguồn được cache để các lần sau rẻ hơn.
 - **Gửi bài**: liệt kê tên nhóm được phép gửi trong `post_targets`. Bridge từ chối gửi tới bất kỳ nơi nào khác, kể cả các kênh đang đọc.
 - **Lịch kinh tế**: bridge tải từ nguồn công khai của Forex Factory, cần máy có internet.
 - `config.json` và file phiên Telegram chứa thông tin đăng nhập; chúng đã được loại khỏi git. Đừng gửi cho ai.

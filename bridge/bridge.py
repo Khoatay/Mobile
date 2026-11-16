@@ -31,6 +31,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
+from brain import Brain, Knowledge
+
 HERE = Path(__file__).resolve().parent
 CONFIG_PATH = HERE / "config.json"
 LOCAL_HOSTS = {"127.0.0.1", "localhost"}
@@ -618,7 +620,7 @@ class Calendar:
 
 # ---------------------------------------------------------------------------- HTTP
 
-def make_handler(registry, tg):
+def make_handler(registry, tg, kb, brain):
     calendar = Calendar()
 
     def send_post(body):
@@ -710,6 +712,8 @@ def make_handler(registry, tg):
                 "/telegram/messages": lambda: tg.since(int(q.get("after", 0))),
                 "/calendar": calendar.get,
                 "/terminals": registry.terminals,
+                "/kb": kb.list,
+                "/ai/status": brain.status,
             }
             if url.path not in routes:
                 return self.send(404, {"error": "Không có đường dẫn này"})
@@ -721,7 +725,8 @@ def make_handler(registry, tg):
                 return self.send(403, {"error": "Chỉ chấp nhận yêu cầu từ FX Desk trên chính máy này"})
             url = urlparse(self.path)
             size = int(self.headers.get("Content-Length") or 0)
-            if size > 8_000_000:
+            # Tài liệu PDF gửi lên có thể lớn; các yêu cầu khác giữ giới hạn nhỏ.
+            if size > (40_000_000 if self.path.startswith("/kb/source") else 8_000_000):
                 return self.send(400, {"error": "Dữ liệu gửi lên quá lớn"})
             try:
                 body = json.loads(self.rfile.read(size) or b"{}")
@@ -729,6 +734,18 @@ def make_handler(registry, tg):
                 return self.send(400, {"error": "Dữ liệu gửi lên không phải JSON"})
             if url.path == "/order":
                 self.answer(lambda: pick({"account": str(body["account"])}).call("order", body))
+            elif url.path == "/kb/save":
+                self.answer(lambda: kb.save(body))
+            elif url.path == "/kb/delete":
+                self.answer(lambda: kb.delete(str(body["id"])))
+            elif url.path == "/kb/source":
+                self.answer(lambda: kb.add_source(body))
+            elif url.path == "/kb/source/delete":
+                self.answer(lambda: kb.remove_source(str(body["playbook"]), str(body["source"])))
+            elif url.path == "/kb/learn":
+                self.answer(lambda: brain.learn(body))
+            elif url.path == "/ai/analyze":
+                self.answer(lambda: brain.analyze(body))
             elif url.path == "/accounts/add":
                 self.answer(lambda: registry.add(body))
             elif url.path == "/accounts/remove":
@@ -749,11 +766,14 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "login":
         return tg.login()
     registry = Registry(cfg)
+    kb = Knowledge()
+    brain = Brain(cfg, kb)
+    print(f"[ai] {'Đã có khoá API' if brain.status()['configured'] else 'Chưa có khoá API: thêm anthropic_api_key vào config.json để dùng phần Học và phân tích'} · model {brain.model}")
     for a in registry.list():
         print(f"[mt5] {a.label} ({a.type}){' — CHO PHÉP VÀO LỆNH' if a.tradable else ''}: đang kết nối…")
     tg.start()
     port = int(cfg.get("port", 8787))
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(registry, tg))
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(registry, tg, kb, brain))
     print(f"FX Desk bridge đang chạy tại http://127.0.0.1:{port} (Ctrl+C để dừng)")
     try:
         server.serve_forever()
