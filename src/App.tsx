@@ -24,8 +24,11 @@ import Community from './pages/Community'
 import ProPage from './pages/ProPage'
 import Guard from './pages/Guard'
 import Copier from './pages/Copier'
+import Track from './pages/Track'
+import Chat from './pages/Chat'
 import { ProLockPage } from './components/ProGate'
 import { lockedTabs, PRO_FEATURES } from './lib/pro'
+import { useAutopost } from './lib/useAutopost'
 import type { SignalDraft } from './lib/share'
 import ProfilePage from './pages/Profile'
 import Personalize from './pages/Personalize'
@@ -35,8 +38,8 @@ import Signals from './pages/Signals'
 
 const GROUPS = [
   { title: 'Giao dịch', tone: 'gold', tabs: [['calc', 'Tính lot', 'calc'], ['account', 'Tài khoản', 'terminal'], ['prop', 'Quỹ', 'shield'], ['guard', 'Bảo vệ', 'lock'], ['copier', 'Copy lệnh', 'copy']] },
-  { title: 'Phân tích', tone: 'sky', tabs: [['journal', 'Nhật ký lệnh', 'journal'], ['stats', 'Thống kê', 'chart'], ['learn', 'Học kiến thức', 'bulb'], ['ai', 'Phân tích AI', 'sparkle'], ['signals', 'Tín hiệu Telegram', 'send'], ['news', 'Tin tức', 'news']] },
-  { title: 'Cộng đồng', tone: 'mint', tabs: [['offers', 'Ưu đãi', 'gift'], ['shop', 'Cửa hàng', 'bag'], ['community', 'Nhóm cộng đồng', 'users'], ['share', 'Chia sẻ cộng đồng', 'megaphone']] },
+  { title: 'Phân tích', tone: 'sky', tabs: [['journal', 'Nhật ký lệnh', 'journal'], ['stats', 'Thống kê', 'chart'], ['learn', 'Học kiến thức', 'bulb'], ['ai', 'Phân tích AI', 'sparkle'], ['chat', 'Trò chuyện AI', 'chat'], ['signals', 'Tín hiệu Telegram', 'send'], ['news', 'Tin tức', 'news']] },
+  { title: 'Cộng đồng', tone: 'mint', tabs: [['offers', 'Ưu đãi', 'gift'], ['shop', 'Cửa hàng', 'bag'], ['community', 'Nhóm cộng đồng', 'users'], ['share', 'Chia sẻ cộng đồng', 'megaphone'], ['track', 'Thành tích công khai', 'trophy']] },
   { title: 'Cá nhân', tone: 'lilac', tabs: [['pro', 'Gói Pro', 'crown'], ['ledger', 'Thu chi đầu tư', 'coins'], ['guides', 'Hướng dẫn', 'book'], ['profile', 'Hồ sơ', 'user'], ['me', 'Cá nhân hoá', 'palette']] },
 ] as const
 type Tab = (typeof GROUPS)[number]['tabs'][number][0]
@@ -65,6 +68,7 @@ export default function App() {
   const bridge = useBridge()
   const [storedUser, setUser] = usePersistent<UserProfile>('fx.user', DEFAULT_USER)
   const user = useMemo(() => ({ ...DEFAULT_USER, ...storedUser }), [storedUser])
+  const autopost = useAutopost({ online: bridge.online, trades, setTrades, profile, user, serverOffset: settings.serverOffset, currency: settings.accountCcy })
   const messages = useTelegramMessages(!!bridge.status?.telegram.connected)
 
   useEffect(() => { document.documentElement.style.setProperty('--accent', profile.accent) }, [profile.accent])
@@ -136,11 +140,13 @@ export default function App() {
         {tab === 'ai' && (locked.has('ai') ? <ProLockPage feature={lockOf('ai')} onOpenPro={() => setTab('pro')} /> : <Analyze bridge={bridge} settings={settings} shareLocked={featureLocked('copy-ai')} onShare={(d) => { if (featureLocked('copy-ai')) { setTab('pro'); return } setDraft(d); setTab('share') }} />)}
         {tab === 'news' && <News bridge={bridge} messages={messages} />}
         {tab === 'ledger' && <Ledger bridge={bridge} settings={settings} labels={labels} infos={infos} />}
-        {tab === 'share' && <Share bridge={bridge} trades={trades} settings={settings} profile={profile} labels={labels} infos={infos} user={user} messages={messages} locked={featureLocked} onOpenPro={() => setTab('pro')} draft={draft} onDraftUsed={() => setDraft(null)} />}
+        {tab === 'share' && <Share bridge={bridge} trades={trades} settings={settings} profile={profile} labels={labels} infos={infos} user={user} messages={messages} locked={featureLocked} onOpenPro={() => setTab('pro')} draft={draft} onDraftUsed={() => setDraft(null)} autopost={autopost} />}
         {tab === 'offers' && <Offers links={links} bridge={bridge} disclaimer={profile.disclaimer} pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'shop' && <Shop pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'community' && <Community pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'profile' && <ProfilePage user={user} setUser={setUser} trades={trades} />}
+        {tab === 'chat' && <Chat bridge={bridge} trades={trades} infos={infos} />}
+        {tab === 'track' && <Track trades={trades} infos={infos} profile={profile} links={links} currency={settings.accountCcy} />}
         {tab === 'guides' && <Guides links={links} />}
         {tab === 'me' && <Personalize profile={profile} setProfile={setProfile} canEdit={canEdit} />}
         {tab === 'pro' && <ProPage pack={pack} setPack={canEdit ? setPack : null} profile={profile} setProfile={setProfile} isPro={isPro} goTab={(t) => setTab(t as Tab)} />}

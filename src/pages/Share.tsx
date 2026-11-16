@@ -9,6 +9,8 @@ import { signed } from '../lib/format'
 import { fmtServerTime } from '../lib/parse'
 import { drawBanner, PERIODS, periodTrades, resultPost, signalPost, statsPost, type Period, type Post, type Profile, type SignalDraft } from '../lib/share'
 import { ProNote } from '../components/ProGate'
+import AutopostPanel from '../components/AutopostPanel'
+import type { AutopostApi } from '../lib/useAutopost'
 import { usePersistent } from '../lib/store'
 import { BIAS_TEXT, type AnalysisResult } from '../lib/kb'
 import { loadImage } from '../lib/images'
@@ -17,10 +19,10 @@ import type { TgMessage } from '../lib/bridge'
 import type { UserProfile } from '../lib/user'
 import { netOf, type Settings, type Side, type Trade } from '../lib/types'
 
-type Kind = 'signal' | 'result' | 'stats'
-interface Props { bridge: BridgeState; trades: Trade[]; settings: Settings; profile: Profile; labels: Record<string, string>; infos: InfoMap; user: UserProfile; messages: TgMessage[]; locked: (feature: string) => boolean; onOpenPro: () => void; draft: (SignalDraft & { credit: string }) | null; onDraftUsed: () => void }
+type Kind = 'signal' | 'result' | 'stats' | 'auto'
+interface Props { bridge: BridgeState; trades: Trade[]; settings: Settings; profile: Profile; labels: Record<string, string>; infos: InfoMap; user: UserProfile; messages: TgMessage[]; locked: (feature: string) => boolean; onOpenPro: () => void; draft: (SignalDraft & { credit: string }) | null; onDraftUsed: () => void; autopost: AutopostApi }
 
-export default function Share({ bridge, trades, settings, profile, labels, infos, user, messages, locked, onOpenPro, draft, onDraftUsed }: Props) {
+export default function Share({ bridge, trades, settings, profile, labels, infos, user, messages, locked, onOpenPro, draft, onDraftUsed, autopost }: Props) {
   const [source, setSource] = useState<'own' | 'telegram' | 'ai'>('own')
   const [analyses] = usePersistent<Record<string, AnalysisResult>>('fx.analyses', {})
   // Lệnh agent đề xuất ở trang Phân tích AI, mới nhất trước.
@@ -140,13 +142,14 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
       <h1>Chia sẻ cộng đồng</h1>
       <div className="filters">
         <div className="seg">
-          {([['signal', 'Tín hiệu'], ['result', 'Kết quả lệnh'], ['stats', 'Thống kê theo kỳ']] as const).map(([k, label]) => (
+          {([['signal', 'Tín hiệu'], ['result', 'Kết quả lệnh'], ['stats', 'Thống kê theo kỳ'], ['auto', 'Đăng tự động']] as const).map(([k, label]) => (
             <button key={k} className={kind === k ? 'active' : ''} aria-pressed={kind === k} onClick={() => { setKind(k); setMsg(null) }}>{label}</button>
           ))}
         </div>
       </div>
 
-      <div className="share">
+      {kind === 'auto' && <AutopostPanel api={autopost} targets={bridge.status?.telegram.postTargets ?? []} accountIds={accountIds} infos={infos} />}
+      {kind !== 'auto' && <div className="share">
         <div>
           <section className="card">
             {kind === 'signal' && (
@@ -251,7 +254,7 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
           )}
         </div>
         <div className="banner-wrap">{post ? <canvas ref={canvas} className="banner" aria-label={`Banner: ${post.spec.kicker}, ${post.spec.title}, ${post.spec.big}`} /> : <div className="banner empty-banner">Banner sẽ hiện ở đây</div>}</div>
-      </div>
+      </div>}
     </>
   )
 }

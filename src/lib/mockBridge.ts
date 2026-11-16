@@ -1,3 +1,4 @@
+import { BLANK_PERSONA, PERSONA_TEMPLATES, type ChatTurn, type Persona, type PersonaStore } from './persona'
 /**
  * Bridge giả lập, chỉ dùng cho bản xem trước (build với VITE_PREVIEW=1).
  * Trả đúng dạng dữ liệu như bridge.py: vài tài khoản, lệnh đang mở, lịch sử, giá, nến, tin Telegram, lịch kinh tế.
@@ -281,6 +282,7 @@ export async function mockGet(path: string): Promise<unknown> {
     case '/calendar': return calendar
     case '/kb': return JSON.parse(JSON.stringify(playbooks))
     case '/automation': return autoSnapshot()
+    case '/personas': return personaStore()
     case '/ai/status': return { configured: true, model: 'bản xem trước (không gọi AI)' }
     case '/terminals': {
       const used = new Map(accounts.map((a) => [a.terminal, a.label]))
@@ -289,6 +291,19 @@ export async function mockGet(path: string): Promise<unknown> {
   }
   throw new Error('Không có đường dẫn này')
 }
+
+// ---- trò chuyện AI (xem trước: trả lời soạn sẵn, không gọi AI) ----
+const personas: Persona[] = [{ id: 'p1', ...PERSONA_TEMPLATES[0].p, playbooks: ['pb-demo'], createdAt: Date.now(), updatedAt: Date.now() }]
+const chats: Record<string, ChatTurn[]> = { p1: [
+  { role: 'user', text: 'Thầy ơi hôm qua em thua 3 lệnh vàng liền, giờ muốn vào lot gấp đôi để gỡ.', at: Date.now() - 3600_000 },
+  { role: 'assistant', text: 'Dừng tay đã em. Gấp đôi lot sau 3 lệnh thua là cách nhanh nhất để biến một ngày xấu thành một tháng xấu.\n\nThầy thấy trong nhật ký, 30 ngày qua em có chuỗi thua dài nhất 5 lệnh, và mấy lệnh vào vội sau khi thua đều lỗ nặng hơn lệnh thường. Hôm nay em nghỉ, tối nay ngồi xem lại 3 lệnh đó: có lệnh nào đúng kế hoạch không? Kể thầy nghe lệnh đầu tiên.', at: Date.now() - 3590_000 },
+] }
+const personaStore = () => JSON.parse(JSON.stringify({ items: personas, chats })) as PersonaStore
+const CANNED = [
+  'Câu hỏi hay. Trước khi trả lời, em cho thầy biết: lệnh này nằm trong kế hoạch nào, điểm vô hiệu ở đâu?',
+  'Bản xem trước nên thầy chỉ trả lời mẫu thôi. Khi chạy thật, nhân vật sẽ trả lời theo đúng tính cách, giá trị và kiến thức bạn đã dạy.',
+  'Nhớ nhé: giữ rủi ro mỗi lệnh dưới 1% thì một chuỗi thua cũng không giết được tài khoản.',
+]
 
 let nextTicket = 9500
 export async function mockPost(path: string, body: Record<string, unknown>): Promise<unknown> {
@@ -351,6 +366,22 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
     const acc = find(body.account)
     accounts.splice(accounts.indexOf(acc), 1)
     return { removed: acc.id }
+  }
+  if (path === '/personas/save') {
+    const old = personas.find((x) => x.id === body.id)
+    const p = { ...BLANK_PERSONA, ...(old ?? {}), ...(body as Partial<Persona>), updatedAt: Date.now() } as Persona
+    if (old) personas[personas.indexOf(old)] = p; else { p.id = `p${Date.now()}`; p.createdAt = Date.now(); personas.push(p) }
+    return personaStore()
+  }
+  if (path === '/personas/delete') { const k = personas.findIndex((x) => x.id === body.id); if (k >= 0) personas.splice(k, 1); delete chats[String(body.id)]; return personaStore() }
+  if (path === '/chat/clear') { chats[String(body.persona)] = []; return personaStore() }
+  if (path === '/chat') {
+    await wait(900)
+    const id = String(body.persona); const c = (chats[id] ??= [])
+    c.push({ role: 'user', text: String(body.message), at: Date.now() })
+    const reply = CANNED[c.length % CANNED.length]
+    c.push({ role: 'assistant', text: reply, at: Date.now() })
+    return { reply, ...personaStore() }
   }
   if (path === '/telegram/send') return { sent: true, target: body.target }
   if (path === '/automation/guard') {

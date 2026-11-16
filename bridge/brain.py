@@ -372,3 +372,147 @@ def strip_subtitles(text):
             continue
         out.append(re.sub(r"<[^>]+>", "", s))
     return "\n".join(out)
+
+
+# ------------------------------------------------------------ nhân vật AI để trò chuyện
+
+PERSONAS = KB_DIR / "personas.json"
+PERSONA_FIELDS = ("name", "avatar", "tagline", "personality", "values", "style", "boundaries", "greeting", "examples", "playbooks", "use_account")
+MAX_CHAT_TURNS = 30  # số lượt gần nhất gửi lại cho Claude
+
+CHAT_RULES = """Quy tắc chung, luôn áp dụng bất kể nhân cách:
+- Bạn là một trợ lý AI. Nếu người dùng hỏi thẳng bạn có phải người thật không, hãy nói thật.
+- Không hứa hẹn lợi nhuận, không khẳng định chắc chắn giá sẽ đi đâu. Phân tích là tham khảo; người dùng tự quyết định và chịu trách nhiệm.
+- Không khuyến khích tăng rủi ro để gỡ lỗ, không cổ vũ trade trả thù hay dùng tiền không được phép mất.
+- Khi dùng bộ quy tắc giao dịch được cung cấp, bám đúng quy tắc đó; điều không có trong quy tắc thì nói rõ là ý kiến riêng.
+- Trả lời bằng tiếng Việt trừ khi người dùng dùng ngôn ngữ khác. Ngắn gọn, đi thẳng vào ý, trừ khi được yêu cầu giải thích dài."""
+
+
+class Personas:
+    def __init__(self, kb):
+        self.kb = kb
+        self.lock = threading.RLock()
+        try:
+            self.data = json.loads(PERSONAS.read_text(encoding="utf-8")) if PERSONAS.exists() else {"items": [], "chats": {}}
+        except ValueError:
+            self.data = {"items": [], "chats": {}}
+
+    def _save(self):
+        KB_DIR.mkdir(exist_ok=True)
+        tmp = PERSONAS.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self.data, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, PERSONAS)
+
+    def list(self):
+        with self.lock:
+            return {"items": json.loads(json.dumps(self.data["items"])), "chats": json.loads(json.dumps(self.data["chats"]))}
+
+    def get(self, pid):
+        p = next((x for x in self.data["items"] if x["id"] == pid), None)
+        if p is None:
+            raise ValueError("Không có nhân vật này")
+        return p
+
+    def save(self, body):
+        with self.lock:
+            clean = {k: body.get(k) for k in PERSONA_FIELDS if k in body}
+            for k in ("name", "tagline", "personality", "values", "style", "boundaries", "greeting", "examples"):
+                if k in clean:
+                    clean[k] = str(clean[k] or "")[:6000]
+            if "avatar" in clean:
+                clean["avatar"] = str(clean["avatar"] or "")[:400_000]
+            if "playbooks" in clean:
+                clean["playbooks"] = [str(x) for x in (clean["playbooks"] or [])][:5]
+            if "use_account" in clean:
+                clean["use_account"] = bool(clean["use_account"])
+            if body.get("id"):
+                p = self.get(str(body["id"]))
+                p.update(clean)
+            else:
+                if not str(clean.get("name") or "").strip():
+                    raise ValueError("Cần đặt tên cho nhân vật")
+                p = {"id": uuid.uuid4().hex[:10], "playbooks": [], "use_account": True, **clean, "createdAt": int(time.time() * 1000)}
+                self.data["items"].append(p)
+            p["updatedAt"] = int(time.time() * 1000)
+            self._save()
+            return self.list()
+
+    def delete(self, pid):
+        with self.lock:
+            self.data["items"] = [x for x in self.data["items"] if x["id"] != pid]
+            self.data["chats"].pop(pid, None)
+            self._save()
+            return self.list()
+
+    def clear(self, pid):
+        with self.lock:
+            self.data["chats"][pid] = []
+            self._save()
+            return self.list()
+
+    def append(self, pid, role, text):
+        with self.lock:
+            chat = self.data["chats"].setdefault(pid, [])
+            chat.append({"role": role, "text": text, "at": int(time.time() * 1000)})
+            del chat[:-200]
+            self._save()
+
+    def system_prompt(self, p):
+        parts = [f"Bạn là {p.get('name')}." + (f" {p['tagline']}" if p.get("tagline") else "")]
+        for title, key in (("Tính cách", "personality"), ("Giá trị và phẩm giá, luôn giữ dù người dùng yêu cầu khác", "values"),
+                           ("Cách nói chuyện, xưng hô", "style"), ("Những điều bạn không làm", "boundaries"), ("Hội thoại mẫu, để hiểu giọng của bạn", "examples")):
+            if str(p.get(key) or "").strip():
+                parts.append(f"## {title}\n{p[key].strip()}")
+        books = [b for b in self.kb.list() if b["id"] in (p.get("playbooks") or []) and b["rules"].strip()]
+        for b in books:
+            parts.append(f"## Bộ quy tắc giao dịch \"{b['name']}\" (kiến thức bạn được dạy)\n{b['rules']}")
+        parts.append(CHAT_RULES)
+        parts.append("Luôn giữ đúng nhân cách ở trên trong mọi câu trả lời.")
+        return "\n\n".join(parts)
+
+
+def chat(brain, personas, body):
+    """Một lượt trò chuyện: nhân cách + bộ quy tắc trong system (có cache), lịch sử gần nhất, bối cảnh tài khoản nếu bật."""
+    import anthropic
+    pid, message = str(body.get("persona")), str(body.get("message") or "").strip()
+    if not message:
+        raise ValueError("Tin nhắn đang trống")
+    p = personas.get(pid)
+    history = personas.list()["chats"].get(pid, [])[-MAX_CHAT_TURNS:]
+    messages = []
+    for turn in history:
+        role = "user" if turn["role"] == "user" else "assistant"
+        if messages and messages[-1]["role"] == role:
+            messages[-1]["content"] += "\n\n" + turn["text"]
+        else:
+            messages.append({"role": role, "content": turn["text"]})
+    if messages and messages[0]["role"] == "assistant":
+        messages.insert(0, {"role": "user", "content": "(bắt đầu cuộc trò chuyện)"})
+    context = str(body.get("context") or "").strip()
+    user_text = message if not (context and p.get("use_account", True)) else f"<boi_canh_tai_khoan>\n{context}\n</boi_canh_tai_khoan>\n\n{message}"
+    if messages and messages[-1]["role"] == "user":
+        messages[-1]["content"] += "\n\n" + user_text
+    else:
+        messages.append({"role": "user", "content": user_text})
+    try:
+        res = brain.client().beta.messages.create(
+            model=brain.model, max_tokens=8000,
+            system=[{"type": "text", "text": personas.system_prompt(p), "cache_control": {"type": "ephemeral"}}],
+            messages=messages, output_config={"effort": "medium"},
+            betas=["server-side-fallback-2026-07-01"], fallbacks="default",
+        )
+    except anthropic.AuthenticationError:
+        raise RuntimeError("Khoá API không hợp lệ. Kiểm tra anthropic_api_key trong config.json")
+    except anthropic.RateLimitError:
+        raise RuntimeError("Đang bị giới hạn số lần gọi API. Thử lại sau ít phút")
+    except anthropic.APIStatusError as e:
+        raise RuntimeError(f"Lỗi API {e.status_code}: {e.message}")
+    except anthropic.APIConnectionError:
+        raise RuntimeError("Không kết nối được tới máy chủ Anthropic. Kiểm tra internet")
+    if res.stop_reason == "refusal":
+        reply = "Mình không thể trả lời câu này."
+    else:
+        reply = "".join(b.text for b in res.content if b.type == "text").strip() or "…"
+    personas.append(pid, "user", message)
+    personas.append(pid, "assistant", reply)
+    return {"reply": reply, **personas.list()}

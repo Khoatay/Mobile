@@ -33,7 +33,7 @@ export interface BannerSpec {
 }
 export interface Post { spec: BannerSpec; caption: string }
 
-function footer(p: Profile): string {
+export function footer(p: Profile): string {
   return [p.disclaimer ? `⚠️ ${DISCLAIMER}` : '', p.link ? `🔗 ${p.link}` : '', p.brand ? `— ${p.brand}` : ''].filter(Boolean).join('\n')
 }
 const join = (...parts: string[]) => parts.filter(Boolean).join('\n\n')

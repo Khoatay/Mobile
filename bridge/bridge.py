@@ -32,7 +32,7 @@ from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
 from automation import Automation
-from brain import Brain, Knowledge
+from brain import Brain, Knowledge, Personas, chat
 
 HERE = Path(__file__).resolve().parent
 CONFIG_PATH = HERE / "config.json"
@@ -701,7 +701,7 @@ class Calendar:
 
 # ---------------------------------------------------------------------------- HTTP
 
-def make_handler(registry, tg, kb, brain, calendar, auto):
+def make_handler(registry, tg, kb, brain, calendar, auto, personas):
 
     def send_post(body):
         image = str(body.get("image") or "")
@@ -795,6 +795,7 @@ def make_handler(registry, tg, kb, brain, calendar, auto):
                 "/kb": kb.list,
                 "/ai/status": brain.status,
                 "/automation": auto.snapshot,
+                "/personas": personas.list,
             }
             if url.path not in routes:
                 return self.send(404, {"error": "Không có đường dẫn này"})
@@ -820,6 +821,14 @@ def make_handler(registry, tg, kb, brain, calendar, auto):
                         raise ValueError(f"Tài khoản đang bị khoá vào lệnh: {lk['reason']}")
                     return pick({"account": str(body["account"])}).call("order", body)
                 self.answer(place)
+            elif url.path == "/personas/save":
+                self.answer(lambda: personas.save(body))
+            elif url.path == "/personas/delete":
+                self.answer(lambda: personas.delete(str(body["id"])))
+            elif url.path == "/chat":
+                self.answer(lambda: chat(brain, personas, body))
+            elif url.path == "/chat/clear":
+                self.answer(lambda: personas.clear(str(body["persona"])))
             elif url.path == "/automation/guard":
                 self.answer(lambda: auto.set_guard(body))
             elif url.path == "/automation/unlock":
@@ -864,6 +873,7 @@ def main():
     registry = Registry(cfg)
     kb = Knowledge()
     brain = Brain(cfg, kb)
+    personas = Personas(kb)
     calendar = Calendar()
     auto = Automation(registry, tg, calendar)
     auto.start()
@@ -872,7 +882,7 @@ def main():
         print(f"[mt5] {a.label} ({a.type}){' — CHO PHÉP VÀO LỆNH' if a.tradable else ''}: đang kết nối…")
     tg.start()
     port = int(cfg.get("port", 8787))
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(registry, tg, kb, brain, calendar, auto))
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(registry, tg, kb, brain, calendar, auto, personas))
     print(f"FX Desk bridge đang chạy tại http://127.0.0.1:{port} (Ctrl+C để dừng)")
     try:
         server.serve_forever()

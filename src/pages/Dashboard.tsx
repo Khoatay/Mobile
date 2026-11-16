@@ -6,6 +6,7 @@ import { badges, currenciesIn, groupsOf, inScope, scopeLabel, type InfoMap } fro
 import { Tile } from '../components/Field'
 import { duration, money, pct, signed } from '../lib/format'
 import { computeStats } from '../lib/stats'
+import { computeInsights } from '../lib/insights'
 import type { Settings, Trade } from '../lib/types'
 
 const RANGES = [
@@ -50,6 +51,8 @@ export default function Dashboard({ trades, settings, infos, goJournal }: { trad
     ]
   }, [base, accountIds, infos, settings.serverOffset])
   const s = useMemo(() => computeStats(filtered, settings.serverOffset), [filtered, settings.serverOffset])
+  const insights = useMemo(() => computeInsights(filtered, settings.serverOffset), [filtered, settings.serverOffset])
+  const [allInsights, setAllInsights] = useState(false)
 
   if (trades.length === 0)
     return (
@@ -95,6 +98,21 @@ export default function Dashboard({ trades, settings, infos, goJournal }: { trad
             <Tile label="Thắng TB / thua TB" value={s.payoff ? s.payoff.toFixed(2) : '–'} sub={`${money(s.avgWin)} / ${money(s.avgLoss)} · giữ TB ${duration(s.avgHoldMs)}`} />
           </div>
 
+          {insights.length > 0 && (
+            <section className="card insights">
+              <h3>Nhận xét từ nhật ký</h3>
+              <ul>
+                {insights.slice(0, allInsights ? undefined : 4).map((x) => (
+                  <li key={x.id} className={`insight ${x.tone}`}>
+                    <span className="insight-icon" aria-hidden="true">{x.tone === 'bad' ? '!' : x.tone === 'good' ? '✓' : 'i'}</span>
+                    <div><strong>{x.title}</strong><p>{x.detail}</p></div>
+                  </li>
+                ))}
+              </ul>
+              {insights.length > 4 && <button className="ghost mini" onClick={() => setAllInsights(!allInsights)}>{allInsights ? 'Thu gọn' : `Xem thêm ${insights.length - 4} nhận xét`}</button>}
+              <p className="muted small">Tự động tìm từ các lệnh đang lọc; chỉ kết luận khi nhóm có từ 8 lệnh trở lên. Mẫu càng lớn càng đáng tin.</p>
+            </section>
+          )}
           {scopeCcy.length > 1 && <p className="warn">⚠ {scopeLabel(scope, infos)} gồm tài khoản dùng nhiều loại tiền ({scopeCcy.join(', ')}). Các con số tiền bên dưới đang cộng thẳng, chưa quy đổi.</p>}
           <section className="card">
             <h3>Lãi/lỗ luỹ kế ({ccy}){scope && ` · ${scopeLabel(scope, infos)}`}</h3>
