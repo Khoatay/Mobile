@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Field, Num } from '../components/Field'
 import { ask } from '../lib/ask'
 import { badges, type InfoMap } from '../lib/accounts'
-import { buildGuard, DEFAULT_GUARD_UI, guardChanged, type AutomationSnapshot, type GuardUi } from '../lib/automation'
+import { buildGuard, dayRefOfPreset, DEFAULT_GUARD_UI, guardChanged, type AutomationSnapshot, type GuardUi } from '../lib/automation'
 import { bridgeGet, bridgePost, type BridgeState } from '../lib/bridge'
 import { money } from '../lib/format'
 import { evaluateProp, suggestProp, type PropConfig } from '../lib/prop'
@@ -10,7 +10,7 @@ import { usePersistent } from '../lib/store'
 import type { Settings, Trade } from '../lib/types'
 import { BridgeSetup } from './Account'
 
-const EVENT_ICON: Record<string, string> = { warn: '⚠️', lock: '⛔', unlock: '🔓', news: '📰', copy: '🔁', 'copy-error': '❗' }
+const EVENT_ICON: Record<string, string> = { warn: '⚠️', lock: '⛔', unlock: '🔓', news: '📰', copy: '🔁', 'copy-error': '❗', stop: '🛡️' }
 const errText = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
 
 export function useAutomation(online: boolean) {
@@ -49,10 +49,10 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
   const propLimits = useMemo(() => Object.fromEntries(bridge.accounts.filter((a) => infos[a.id]?.role === 'prop').map((a) => {
     const cfg = props[a.id] ?? suggestProp(infos[a.id]?.broker ?? '', infos[a.id]?.phase ?? '', a.balance)
     const s = evaluateProp(trades.filter((t) => t.account === a.id), cfg, nowServer, a.profit)
-    return [a.id, { dailyLimit: s.dailyLimit, floor: s.floor, maxLossLimit: s.maxLossLimit }]
+    return [a.id, { dailyLimit: s.dailyLimit, floor: s.floor, maxLossLimit: s.maxLossLimit, dayRef: dayRefOfPreset(cfg.preset) }]
   })), [bridge.accounts, infos, props, trades, Math.floor(nowServer / 600000)])
 
-  const uiFor = (id: string): GuardUi => uis[id] ?? { ...DEFAULT_GUARD_UI, source: propLimits[id] ? 'prop' : 'custom' }
+  const uiFor = (id: string): GuardUi => ({ ...DEFAULT_GUARD_UI, ...(uis[id] ?? { source: propLimits[id] ? 'prop' : 'custom' }) })
   const configFor = (id: string) => {
     const a = bridge.accounts.find((x) => x.id === id)
     return buildGuard(uiFor(id), settings.serverOffset, a?.balance ?? 0, propLimits[id])
@@ -115,6 +115,9 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
           const on = !!snap?.guards[a.id]?.enabled
           const st = snap?.states[a.id]
           const lock = snap?.locks[a.id]
+          const nowS = Date.now() / 1000
+          const hardUntil = lock?.unlock_at && lock.unlock_at > nowS ? lock.unlock_at : 0
+          const hm = (t: number) => new Date(t * 1000).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
           const cfg = configFor(a.id)
           const set = (p: Partial<GuardUi>) => setUis({ ...uis, [a.id]: { ...ui, ...p } })
           return (
@@ -125,7 +128,7 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
                   <div className="chips">{infos[a.id] && badges(infos[a.id]).map((b) => <span key={b} className="chip">{b}</span>)}{!a.tradable && <span className="chip">Chỉ cảnh báo (mật khẩu view)</span>}</div>
                 </div>
                 <label className="switch">
-                  <input type="checkbox" checked={on} onChange={(e) => push(a.id, e.target.checked)} />
+                  <input type="checkbox" checked={on} disabled={on && !!hardUntil} title={on && hardUntil ? 'Đang khoá cứng: không tắt được tới khi hết khoá' : undefined} onChange={(e) => push(a.id, e.target.checked)} />
                   <span>{on ? 'Đang bảo vệ' : 'Tắt'}</span>
                 </label>
               </div>
@@ -133,8 +136,8 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
               {lock && (
                 <div className="lock-banner">
                   <strong>⛔ Đang khoá vào lệnh</strong>
-                  <span>{lock.reason}. Mở lại lúc {new Date(lock.until * 1000).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}.</span>
-                  <button className="ghost mini" onClick={() => unlock(a.id)}>Mở khoá</button>
+                  <span>{lock.reason}. Tự mở lúc {hm(lock.until)}.{hardUntil >= lock.until ? ' Khoá cứng: không mở tay được.' : hardUntil ? ` Mở tay được sau ${hm(hardUntil).split(' ')[0]}.` : ''}</span>
+                  {!hardUntil && <button className="ghost mini" onClick={() => unlock(a.id)}>Mở khoá</button>}
                 </div>
               )}
 
@@ -148,6 +151,10 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
                   </div>
                   {cfg.daily_limit > 0 && <Meter value={st.used} label="Đã dùng giới hạn lỗ ngày" />}
                   {cfg.floor > 0 && <Meter value={st.floor_used} label="Đã dùng giới hạn lỗ tổng" />}
+                  {st.stops?.on && st.positions > 0 && (
+                    <p className="stops-line">🛡️ SL khẩn cấp trên sàn: {st.stops.protected}/{st.positions} lệnh đã có SL, nếu tất cả cùng chạm thì lỗ thêm tối đa {money(st.stops.budget, st.currency)}.{st.stops.over.length > 0 && <span className="neg"> {st.stops.over.join(', ')} đã lỗ quá phần được phép: bảo vệ sẽ đóng khi chạm mức hành động.</span>}</p>
+                  )}
+                  {st.ref_ok === false && <p className="notice">ⓘ Quỹ này tính lỗ ngày từ số cao hơn giữa số dư và equity đầu ngày, nhưng bridge không chạy lúc 0h nên chưa biết equity đầu ngày. Hôm nay tạm tính theo số dư đầu ngày; nếu bạn giữ lệnh lãi qua đêm, lỗ thật theo quỹ có thể cao hơn số hiện ở đây.</p>}
                   {st.error && <p className="notice bad">⚠ {st.error}</p>}
                 </>
               )}
@@ -164,6 +171,12 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
                   {ui.source === 'custom' && <>
                     <Field label="Lỗ tối đa mỗi ngày (% số dư)"><Num value={ui.dailyPct} onChange={(v) => set({ dailyPct: v })} step={0.5} min={0} /></Field>
                     <Field label="Lỗ tối đa tổng (% số dư)" hint="0 = không áp dụng"><Num value={ui.totalPct} onChange={(v) => set({ totalPct: v })} step={0.5} min={0} /></Field>
+                    <Field label="Tính lỗ ngày từ">
+                      <select value={ui.dayRef} onChange={(e) => set({ dayRef: e.target.value as GuardUi['dayRef'] })}>
+                        <option value="balance">Số dư đầu ngày (kiểu FTMO)</option>
+                        <option value="higher">Số cao hơn giữa số dư và equity đầu ngày (kiểu The5ers)</option>
+                      </select>
+                    </Field>
                   </>}
                   <Field label="Cảnh báo lần 1 (%)"><Num value={ui.warn1} onChange={(v) => set({ warn1: v })} min={0} /></Field>
                   <Field label="Cảnh báo lần 2 (%)"><Num value={ui.warn2} onChange={(v) => set({ warn2: v })} min={0} /></Field>
@@ -172,8 +185,10 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
                   <Field label="Tối đa lệnh mỗi ngày" hint="0 = không áp dụng"><Num value={ui.maxTrades} onChange={(v) => set({ maxTrades: Math.max(0, Math.round(v || 0)) })} min={0} /></Field>
                 </div>
                 <label className="inline wrap" style={{ marginTop: 10 }}><input type="checkbox" className="check" checked={ui.closeOnBreach} disabled={!a.tradable} onChange={(e) => set({ closeOnBreach: e.target.checked })} /> Đóng hết lệnh khi chạm mức hành động{!a.tradable && ' (cần mật khẩu giao dịch và allow_trading)'}</label>
+                <label className="inline wrap"><input type="checkbox" className="check" checked={ui.hardStop} disabled={!a.tradable} onChange={(e) => set({ hardStop: e.target.checked })} /> Tự gắn SL khẩn cấp trên sàn: vẫn bảo vệ khi máy tắt hay giá chạy nhanh. Chỉ siết SL, không bao giờ nới SL bạn đã đặt.</label>
+                <label className="inline wrap"><input type="checkbox" className="check" checked={ui.hardLock} disabled={!!hardUntil} onChange={(e) => set({ hardLock: e.target.checked })} /> Khoá cứng: chạm giới hạn lỗ thì không mở tay được tới hết ngày; khoá vì thua liên tiếp hay quá số lệnh phải chờ 30 phút</label>
                 <label className="inline wrap"><input type="checkbox" className="check" checked={ui.closeNew} disabled={!a.tradable} onChange={(e) => set({ closeNew: e.target.checked })} /> Đang khoá mà mở lệnh mới từ MT5 thì đóng luôn</label>
-                <p className="muted small">Sẽ gửi: lỗ ngày tối đa {cfg.daily_limit ? money(cfg.daily_limit, a.currency) : 'không giới hạn'} · sàn equity {cfg.floor ? money(cfg.floor, a.currency) : 'không áp dụng'} · hành động ở {Math.round(cfg.act_at * 100)}%.</p>
+                <p className="muted small">Sẽ gửi: lỗ ngày tối đa {cfg.daily_limit ? money(cfg.daily_limit, a.currency) : 'không giới hạn'} · sàn equity {cfg.floor ? money(cfg.floor, a.currency) : 'không áp dụng'} · hành động ở {Math.round(cfg.act_at * 100)}% · lỗ ngày tính từ {cfg.day_ref === 'higher' ? 'số cao hơn giữa số dư và equity đầu ngày' : 'số dư đầu ngày'}.</p>
                 <button className="primary" onClick={() => push(a.id, true)}>{on ? 'Lưu thay đổi' : 'Bật bảo vệ với cài đặt này'}</button>
               </details>
             </section>

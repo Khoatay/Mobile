@@ -203,7 +203,7 @@ describe('Pro', () => {
   })
 })
 
-import { buildGuard, copyVolume, DEFAULT_GUARD_UI, guardChanged } from './automation'
+import { buildGuard, copyVolume, dayRefOfPreset, DEFAULT_GUARD_UI, guardChanged } from './automation'
 
 describe('bảo vệ và copy lệnh', () => {
   it('giới hạn theo luật quỹ hoặc % số dư', () => {
@@ -211,6 +211,12 @@ describe('bảo vệ và copy lệnh', () => {
     expect(g).toMatchObject({ daily_limit: 5000, floor: 90000, max_loss: 10000, act_at: 0.95, warn_at: [0.7, 0.9], max_consec_losses: 3, server_offset: 2 })
     const c = buildGuard({ ...DEFAULT_GUARD_UI, source: 'custom', dailyPct: 2, totalPct: 6, warn2: 96 }, 3, 20000)
     expect(c).toMatchObject({ daily_limit: 400, floor: 18800, max_loss: 1200, warn_at: [0.7] })
+    expect(g).toMatchObject({ hard_stop: true, hard_lock: true, day_ref: 'balance' })
+    expect(buildGuard(DEFAULT_GUARD_UI, 2, 100000, { dailyLimit: 5000, floor: 90000, maxLossLimit: 10000, dayRef: dayRefOfPreset('5ers-hs-1') }).day_ref).toBe('higher')
+    expect(dayRefOfPreset('ftmo-2s-1')).toBe('balance')
+    // cài đặt cũ lưu trước khi có tuỳ chọn mới vẫn bật SL khẩn cấp và khoá cứng
+    const old = { ...DEFAULT_GUARD_UI } as Partial<typeof DEFAULT_GUARD_UI>; delete old.hardStop; delete old.hardLock
+    expect(buildGuard(old as typeof DEFAULT_GUARD_UI, 2, 1000)).toMatchObject({ hard_stop: true, hard_lock: true })
     expect(guardChanged(g, { ...g })).toBe(false)
     expect(guardChanged(g, { ...g, daily_limit: 4999.5 })).toBe(true)
     expect(guardChanged(undefined, g)).toBe(true)

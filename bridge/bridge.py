@@ -20,6 +20,7 @@ import asyncio
 import base64
 import io
 import json
+import math
 import multiprocessing as mp
 import os
 import sys
@@ -235,7 +236,10 @@ class Mt5:
         result = mt5.order_send(request)
         if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
             raise RuntimeError(f"Lệnh không khớp: {(str(result.retcode) + ' ' + result.comment) if result else mt5.last_error()}")
-        print(f"[lệnh] tài khoản {self.cfg.get('login')}: {request['symbol']} {request['volume']} lot, deal {result.deal}, giá {result.price}")
+        if request.get("action") == mt5.TRADE_ACTION_SLTP:
+            print(f"[sửa] tài khoản {self.cfg.get('login')}: {request['symbol']} #{request.get('position')} SL {request.get('sl')} TP {request.get('tp')}")
+        else:
+            print(f"[lệnh] tài khoản {self.cfg.get('login')}: {request['symbol']} {request.get('volume')} lot, deal {result.deal}, giá {result.price}")
         return {"order": result.order, "deal": result.deal, "price": result.price, "volume": result.volume}
 
     def order(self, p):
@@ -317,6 +321,63 @@ class Mt5:
                 raise ValueError(f"Không thấy lệnh đang mở số {ticket}")
             pos = found[0]
             return self._send({"action": mt5.TRADE_ACTION_SLTP, "symbol": pos.symbol, "position": pos.ticket, "sl": float(sl or 0), "tp": float(tp or 0)})
+
+    def emergency_stops(self, budget, min_move_points=5):
+        """SL khẩn cấp phía sàn: siết SL sao cho nếu mọi lệnh cùng chạm SL thì tổng lỗ không vượt `budget` (tiền tài khoản).
+        Chạy cả khi bridge/máy tắt vì SL nằm trên máy chủ sàn. Chỉ siết, không bao giờ nới SL người dùng đã đặt.
+        Mỗi lệnh được giữ phần đang lỗ hiện tại, cộng một phần chia đều của khoảng còn lại; lệnh nào SL sẵn đã nằm trong
+        phần của mình thì giữ nguyên, phần dư dồn cho các lệnh khác."""
+        with self.lock:
+            self._tradable()
+            mt5 = self.mt5
+            plans = []
+            for p in mt5.positions_get() or ():
+                info, tick = mt5.symbol_info(p.symbol), mt5.symbol_info_tick(p.symbol)
+                if info is None or tick is None or not info.point:
+                    continue
+                buy = p.type == 0
+                d = 1000 * info.point
+                per = mt5.order_calc_profit(mt5.ORDER_TYPE_BUY if buy else mt5.ORDER_TYPE_SELL, p.symbol, p.volume, p.price_open, p.price_open + (d if buy else -d))
+                if not per or per <= 0:
+                    continue
+                pp = per / d  # tiền lãi/lỗ khi giá đi 1.0 theo chiều lệnh
+                sgn = 1 if buy else -1
+                loss_at = lambda price, p=p, sgn=sgn, pp=pp: -((price - p.price_open) * sgn * pp + p.swap)
+                base = max(0.0, loss_at(tick.bid if buy else tick.ask))  # đang lỗ bao nhiêu ở giá hiện tại
+                extra = (loss_at(p.sl) - base) if p.sl > 0 else float("inf")  # SL hiện tại cho lỗ thêm bao nhiêu
+                plans.append({"p": p, "info": info, "tick": tick, "buy": buy, "pp": pp, "sgn": sgn, "base": base, "extra": extra})
+            left = float(budget) - sum(x["base"] for x in plans)  # khoảng lỗ thêm còn được phép, chia cho các lệnh
+            plans.sort(key=lambda x: x["extra"])
+            n = len(plans)
+            changed, over, errors = [], [], []
+            for i, x in enumerate(plans):
+                share = left / (n - i)
+                if x["extra"] <= share:
+                    left -= x["extra"]
+                    continue
+                left -= share
+                p, info, tick = x["p"], x["info"], x["tick"]
+                if share <= 0:
+                    over.append(f"{p.symbol} #{p.ticket}")
+                    continue
+                raw = p.price_open - x["sgn"] * (x["base"] + share + p.swap) / x["pp"]
+                pt = info.point
+                sl = (math.ceil(raw / pt - 1e-9) if x["buy"] else math.floor(raw / pt + 1e-9)) * pt  # làm tròn về phía chặt hơn
+                sl = round(sl, info.digits)
+                gap = max(info.trade_stops_level, info.trade_freeze_level, 1) * pt
+                if (x["buy"] and sl >= tick.bid - gap) or (not x["buy"] and sl <= tick.ask + gap):
+                    over.append(f"{p.symbol} #{p.ticket}")  # đã lỗ quá phần của mình: để bảo vệ đóng lệnh
+                    continue
+                if p.sl > 0 and (sl <= p.sl if x["buy"] else sl >= p.sl):
+                    continue
+                if p.sl > 0 and abs(sl - p.sl) < min_move_points * pt:
+                    continue
+                try:
+                    self._send({"action": mt5.TRADE_ACTION_SLTP, "symbol": p.symbol, "position": p.ticket, "sl": sl, "tp": p.tp})
+                    changed.append({"ticket": p.ticket, "symbol": p.symbol, "old": p.sl, "new": sl})
+                except Exception as e:
+                    errors.append(f"{p.symbol} #{p.ticket}: {e}")
+            return {"changed": changed, "over": over, "errors": errors, "positions": n}
 
     def copy_open(self, p):
         """Mở lệnh chép từ tài khoản nguồn. Giống order() nhưng cho phép SL trống nếu lệnh nguồn không có SL."""

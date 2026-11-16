@@ -228,7 +228,7 @@ function mockAnalysis(f: MarketFeatures): Analysis {
 }
 
 // ---------- tự động hoá giả lập (bảo vệ, cảnh báo, copy lệnh)
-import type { AutoEvent, AutomationSnapshot, CopierConfig, GuardConfig } from './automation'
+import type { AutoEvent, AutomationSnapshot, CopierConfig, GuardConfig, GuardStops } from './automation'
 const auto = {
   guards: {} as Record<string, GuardConfig>,
   locks: {} as AutomationSnapshot['locks'],
@@ -239,6 +239,7 @@ const auto = {
   copier: { enabled: false, master: '', followers: [], copy_sltp: true } as CopierConfig,
 }
 // Lỗ đã chốt hôm nay của từng tài khoản (giả lập), để thanh "đã dùng" có số.
+const stopsSeen: Record<string, string> = {}
 const closedToday: Record<string, number> = { '520011': -1450, '730045': -320, '218551005': -6.4, '411902': 0 }
 function autoSnapshot(): AutomationSnapshot {
   const states: AutomationSnapshot['states'] = {}
@@ -251,11 +252,23 @@ function autoSnapshot(): AutomationSnapshot {
     const floorUsed = g.floor > 0 && g.max_loss > 0 ? Math.max(0, (g.max_loss - (l.equity - g.floor)) / g.max_loss) : 0
     const level = Math.max(used, floorUsed)
     if (g.enabled && level >= g.act_at && !auto.locks[a.id]) {
-      auto.locks[a.id] = { until: Math.floor(T0 / 1000) + 12 * 3600, reason: `Chạm ${Math.round(level * 100)}% giới hạn lỗ trong ngày`, at: Date.now() / 1000 }
-      auto.events.unshift({ at: Date.now(), kind: 'lock', account: a.id, label: a.label, text: `${auto.locks[a.id].reason}. Khoá vào lệnh tới hết ngày máy chủ. Đã đóng ${a.positions.length} lệnh.` })
+      const until = Math.floor(T0 / 1000) + 12 * 3600
+      auto.locks[a.id] = { until, reason: `Chạm ${Math.round(level * 100)}% giới hạn lỗ trong ngày`, at: Date.now() / 1000, kind: 'limit', unlock_at: g.hard_lock ? until : 0 }
+      auto.events.unshift({ at: Date.now(), kind: 'lock', account: a.id, label: a.label, text: `${auto.locks[a.id].reason}. Khoá vào lệnh tới hết ngày máy chủ.${g.hard_lock ? ' Khoá cứng: không mở tay được.' : ''} Đã đóng ${a.positions.length} lệnh.` })
       a.positions = []
     }
-    states[a.id] = { day_loss: Number(dayLoss.toFixed(2)), used, floor_used: floorUsed, level, equity: l.equity, currency: a.currency, consec_losses: a.id === '520011' ? 2 : 0, trades: a.id === '520011' ? 3 : 1, positions: a.positions.length, tradable: a.tradable, error: '', updated: Date.now() }
+    let stops: GuardStops | undefined
+    if (g.hard_stop && a.tradable && a.positions.length && level < g.act_at) {
+      const budget = Math.max(0, Math.min(g.daily_limit > 0 ? g.act_at * g.daily_limit + (closedToday[a.id] ?? 0) : Infinity, g.floor > 0 ? l.balance - g.floor - (1 - g.act_at) * g.max_loss : Infinity))
+      const key = a.positions.map((p) => p.ticket).join(',')
+      if (stopsSeen[a.id] !== key) {
+        stopsSeen[a.id] = key
+        const bare = a.positions.filter((p) => !p.sl)
+        if (bare.length) auto.events.unshift({ at: Date.now(), kind: 'stop', account: a.id, label: a.label, text: `SL khẩn cấp trên sàn (tổng lỗ tối đa ${budget.toFixed(2)} ${a.currency} nếu mọi lệnh chạm SL): gắn SL cho ${bare.map((p) => `${p.symbol} #${p.ticket}`).join(', ')}.` })
+      }
+      stops = { on: true, protected: a.positions.length, over: [], budget: Number(budget.toFixed(2)), at: Date.now() }
+    }
+    states[a.id] = { stops, ref_ok: true, day_loss: Number(dayLoss.toFixed(2)), used, floor_used: floorUsed, level, equity: l.equity, currency: a.currency, consec_losses: a.id === '520011' ? 2 : 0, trades: a.id === '520011' ? 3 : 1, positions: a.positions.length, tradable: a.tradable, error: '', updated: Date.now() }
   }
   return { guards: auto.guards, states, locks: auto.locks, events: auto.events.slice(0, 100), alerts: auto.alerts, copier: auto.copier, copyState: { started: 0, last: Date.now(), error: '' }, telegram: true }
 }
@@ -386,6 +399,8 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
   if (path === '/telegram/send') return { sent: true, target: body.target }
   if (path === '/automation/guard') {
     const id = String(body.account)
+    const lk = auto.locks[id]
+    if (lk?.unlock_at && lk.unlock_at > Date.now() / 1000 && (!body.config || !(body.config as GuardConfig).enabled)) throw new Error('Đang khoá cứng: không tắt được bảo vệ cho tới khi hết khoá.')
     if (body.config) {
       const g = body.config as GuardConfig
       const was = auto.guards[id]?.enabled
@@ -394,7 +409,7 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
     } else delete auto.guards[id]
     return autoSnapshot()
   }
-  if (path === '/automation/unlock') { const id = String(body.account); delete auto.locks[id]; auto.events.unshift({ at: Date.now(), kind: 'unlock', account: id, label: find(id).label, text: 'Đã mở khoá bằng tay.' }); closedToday[id] = 0; return autoSnapshot() }
+  if (path === '/automation/unlock') { const id = String(body.account); const lk = auto.locks[id]; if (lk?.unlock_at && lk.unlock_at > Date.now() / 1000) throw new Error(lk.unlock_at >= lk.until ? 'Khoá cứng vì chạm giới hạn lỗ: tự mở lúc hết ngày máy chủ, không mở tay được.' : 'Khoá cứng: chưa hết 30 phút chờ.'); delete auto.locks[id]; auto.events.unshift({ at: Date.now(), kind: 'unlock', account: id, label: find(id).label, text: 'Đã mở khoá bằng tay.' }); closedToday[id] = 0; return autoSnapshot() }
   if (path === '/automation/alerts') { auto.alerts = { news: !!body.news, minutes: Number(body.minutes) || 30, notify: !!body.notify }; return autoSnapshot() }
   if (path === '/automation/copier') {
     const c = body.config as CopierConfig

@@ -453,3 +453,4 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 .chat-panel > p { padding: 0 18px 12px; margin: 4px 0 0; }
 .persona-editor-head { display: flex; gap: 18px; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; }
 .persona-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px; margin-bottom: 12px; }
+.stops-line { margin: 8px 0 0; font-size: 13px; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--pos) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--pos) 25%, transparent); }
