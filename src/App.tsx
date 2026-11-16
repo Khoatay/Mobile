@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { resolveInfos, type AccountInfo } from './lib/accounts'
-import { useBridge, useTelegramMessages } from './lib/bridge'
+import { PREVIEW, useBridge, useTelegramMessages } from './lib/bridge'
 import { DEFAULT_PROFILE, type Profile } from './lib/share'
 import { usePersistent, useSettings, useTrades } from './lib/store'
 import Account from './pages/Account'
@@ -49,6 +49,8 @@ export default function App() {
   }, [bridge.accounts])
 
   return (
+    <>
+    {PREVIEW && <div className="preview-bar">Bản xem trước: dữ liệu giả lập, không nối MT5 hay Telegram thật. Lệnh, tin nhắn và tài khoản ở đây đều là mẫu.</div>}
     <div className="app">
       <aside className="sidebar">
         <div className="brand">{profile.brand || 'FX Desk'}{profile.tagline && <small>{profile.tagline}</small>}</div>
@@ -85,5 +87,6 @@ export default function App() {
         {tab === 'me' && <Personalize profile={profile} setProfile={setProfile} />}
       </main>
     </div>
+    </>
   )
 }

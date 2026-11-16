@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ask } from '../lib/ask'
 import { Field, Num, Tile } from '../components/Field'
 import { badges, bridgeType, BROKERS, GROUP_SUGGESTIONS, groupsOf, PHASES, ROLE_TEXT, type AccountInfo, type Env, type InfoMap, type Role } from '../lib/accounts'
 import { bridgeGet, bridgePost, type BridgeState, type LiveAccount, type LivePosition, type Mt5Deal, type Mt5Order } from '../lib/bridge'
@@ -86,7 +87,7 @@ function OrderTicket({ accounts, trades, settings, onDone, infos }: { accounts: 
   async function submit() {
     const summary = `${side === 'buy' ? 'BUY' : 'SELL'} ${lots.toFixed(2)} lot ${symbol} trên "${infos[acc.id]?.label ?? acc.label}" (${acc.login})\n` +
       `Giá khoảng ${price} · SL ${sl}${Number.isFinite(tp) ? ` · TP ${tp}` : ''}\nLỗ tối đa khoảng ${money(risk, acc.currency)}\n\nGửi lệnh THẬT này?`
-    if (!confirm(summary)) return
+    if (!(await ask(summary, 'Gửi lệnh'))) return
     setBusy(true)
     try {
       const r = await bridgePost<{ deal: number; price: number; volume: number }>('/order', { account: acc.id, symbol, side, volume: lots, sl, tp: Number.isFinite(tp) ? tp : 0 })
@@ -337,9 +338,9 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
     return `Đã cập nhật ${got.length}/${QUOTE_KEYS.length} tỷ giá từ ${name(accounts[0].id)}.`
   })
 
-  const closePosition = (acc: LiveAccount, p: LivePosition) => {
+  const closePosition = async (acc: LiveAccount, p: LivePosition) => {
     const label = `${normalizeSymbol(p.symbol)} ${p.volume.toFixed(2)} lot`
-    if (!confirm(`Đóng lệnh ${label} trên "${name(acc.id)}" theo giá thị trường?`)) return
+    if (!(await ask(`Đóng lệnh ${label} trên "${name(acc.id)}" theo giá thị trường?`, 'Đóng lệnh', true))) return
     run(async () => {
       const r = await bridgePost<{ price: number }>('/close', { account: acc.id, ticket: p.ticket })
       bridge.refresh()
@@ -347,8 +348,8 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
     })
   }
 
-  const removeAccount = (id: string) => {
-    if (!confirm(`Gỡ "${name(id)}" khỏi bridge? Bridge sẽ ngừng kết nối và xoá tài khoản này khỏi config.json. Lệnh đã có trong Nhật ký vẫn giữ nguyên.`)) return
+  const removeAccount = async (id: string) => {
+    if (!(await ask(`Gỡ "${name(id)}" khỏi bridge? Bridge sẽ ngừng kết nối và xoá tài khoản này khỏi config.json. Lệnh đã có trong Nhật ký vẫn giữ nguyên.`, 'Gỡ tài khoản', true))) return
     run(async () => {
       await bridgePost('/accounts/remove', { account: id })
       setTab('overview')

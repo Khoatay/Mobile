@@ -36,7 +36,11 @@ export interface Candle { t: number; o: number; h: number; l: number; c: number 
 
 export interface TgMessage { channel: string; id: number; date: number; text: string }
 
+/** Bản xem trước (build với VITE_PREVIEW=1) dùng bridge giả lập ngay trong trang. */
+export const PREVIEW = import.meta.env.VITE_PREVIEW === '1'
+
 export async function bridgeGet<T>(path: string): Promise<T> {
+  if (PREVIEW) return (await (await import('./mockBridge')).mockGet(path)) as T
   const res = await fetch(BRIDGE_URL + path, { signal: AbortSignal.timeout(15000) })
   const body = await res.json()
   if (!res.ok) throw new Error(body?.error ?? `Lỗi ${res.status}`)
@@ -44,6 +48,7 @@ export async function bridgeGet<T>(path: string): Promise<T> {
 }
 
 export async function bridgePost<T>(path: string, body: unknown): Promise<T> {
+  if (PREVIEW) return (await (await import('./mockBridge')).mockPost(path, body as Record<string, unknown>)) as T
   const res = await fetch(BRIDGE_URL + path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-FXDesk': '1' },

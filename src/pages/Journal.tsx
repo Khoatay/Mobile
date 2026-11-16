@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { ask } from '../lib/ask'
 import { Field, Num } from '../components/Field'
 import { demoTrades } from '../lib/demo'
 import { normalizeSymbol, PAIRS } from '../lib/forex'
@@ -141,7 +142,7 @@ export default function Journal({ trades, setTrades, settings, patch, labels }: 
             </label>
             <button disabled={!trades.length} onClick={() => download('nhat-ky-lenh.csv', toCsv(trades), 'text/csv')}>Xuất CSV</button>
             <button className="ghost danger" disabled={!trades.length}
-              onClick={() => { if (confirm(`Xoá toàn bộ ${trades.length} lệnh? Không hoàn tác được.`)) { setTrades([]); setMessages([]) } }}>Xoá tất cả</button>
+              onClick={async () => { if (await ask(`Xoá toàn bộ ${trades.length} lệnh? Không hoàn tác được.`, 'Xoá tất cả', true)) { setTrades([]); setMessages([]) } }}>Xoá tất cả</button>
           </div>
         </div>
         {rows.length === 0 ? (

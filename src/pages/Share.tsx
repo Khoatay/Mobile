@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ask } from '../lib/ask'
 import { Field, Num } from '../components/Field'
 import ScopeSelect from '../components/ScopeSelect'
 import { inScope, scopeLabel, type InfoMap } from '../lib/accounts'
@@ -70,7 +71,7 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
   }
 
   async function send() {
-    if (!confirm(`Gửi bài này${withImage ? ' kèm ảnh' : ''} lên nhóm "${sendTo}"?\nMọi thành viên trong nhóm sẽ thấy.`)) return
+    if (!(await ask(`Gửi bài này${withImage ? ' kèm ảnh' : ''} lên nhóm "${sendTo}"?\nMọi thành viên trong nhóm sẽ thấy.`, 'Gửi bài'))) return
     setBusy(true)
     try {
       await bridgePost('/telegram/send', { target: sendTo, text: caption, image: withImage ? canvas.current!.toDataURL('image/png') : '' })

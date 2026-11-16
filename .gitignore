@@ -7,3 +7,4 @@ dist
 bridge/config.json
 bridge/*.session*
 __pycache__
+dist-preview
