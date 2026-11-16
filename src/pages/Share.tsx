@@ -8,12 +8,31 @@ import { PAIRS } from '../lib/forex'
 import { signed } from '../lib/format'
 import { fmtServerTime } from '../lib/parse'
 import { drawBanner, PERIODS, periodTrades, resultPost, signalPost, statsPost, type Period, type Post, type Profile } from '../lib/share'
+import { loadImage } from '../lib/images'
+import { parseSignal, type Signal } from '../lib/signals'
+import type { TgMessage } from '../lib/bridge'
+import type { UserProfile } from '../lib/user'
 import { netOf, type Settings, type Side, type Trade } from '../lib/types'
 
 type Kind = 'signal' | 'result' | 'stats'
-interface Props { bridge: BridgeState; trades: Trade[]; settings: Settings; profile: Profile; labels: Record<string, string>; infos: InfoMap }
+interface Props { bridge: BridgeState; trades: Trade[]; settings: Settings; profile: Profile; labels: Record<string, string>; infos: InfoMap; user: UserProfile; messages: TgMessage[]; isPro: boolean; proUrl: string }
 
-export default function Share({ bridge, trades, settings, profile, labels, infos }: Props) {
+export default function Share({ bridge, trades, settings, profile, labels, infos, user, messages, isPro, proUrl }: Props) {
+  const [source, setSource] = useState<'own' | 'telegram'>('own')
+  const [credit, setCredit] = useState(true)
+  const [picked, setPicked] = useState('')
+  const [avatarImg, setAvatarImg] = useState<HTMLImageElement | null>(null)
+  useEffect(() => { loadImage(user.avatar).then(setAvatarImg) }, [user.avatar])
+  // Tín hiệu đọc được từ các kênh Telegram đang theo dõi, mới nhất trước.
+  const tgSignals = useMemo(() => messages.map(parseSignal).filter((x): x is Signal => !!x && x.entry != null && x.sl != null).sort((a, b) => b.time - a.time).slice(0, 40), [messages])
+  function applySignal(id: string) {
+    const sg = tgSignals.find((x) => x.id === id)
+    setPicked(id)
+    if (!sg) return
+    setSymbol(sg.symbol); setSide(sg.side); setEntry(sg.entry ?? NaN); setSl(sg.sl ?? NaN)
+    setTp1(sg.tps[0] ?? NaN); setTp2(sg.tps[1] ?? NaN)
+  }
+  const pickedSignal = tgSignals.find((x) => x.id === picked)
   const [kind, setKind] = useState<Kind>('signal')
   const [symbol, setSymbol] = useState('XAUUSD')
   const [side, setSide] = useState<Side>('buy')
@@ -41,7 +60,8 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
   const post: Post | null = useMemo(() => {
     if (kind === 'signal') {
       if (![entry, sl].every(Number.isFinite)) return null
-      return signalPost({ symbol, side, entry, sl, tps: [tp1, tp2].filter(Number.isFinite), note }, profile)
+      const src = source === 'telegram' && credit && pickedSignal ? `Nguồn tham khảo: ${pickedSignal.channel}` : ''
+      return signalPost({ symbol, side, entry, sl, tps: [tp1, tp2].filter(Number.isFinite), note: [note, src].filter(Boolean).join('\n') }, profile)
     }
     if (kind === 'result') {
       const t = recent.find((x) => x.id === tradeId) ?? recent[0]
@@ -50,11 +70,13 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
     const pool = trades.filter((t) => inScope(scope, t.account, infos))
     const list = periodTrades(pool, period, Date.now() + settings.serverOffset * 3_600_000)
     return list.length ? statsPost(list, scope ? `${PERIODS[period]} · ${scopeLabel(scope, infos)}` : PERIODS[period], ccy, profile) : null
-  }, [kind, symbol, side, entry, sl, tp1, tp2, note, tradeId, period, scope, infos, trades, recent, profile, ccy, settings.serverOffset])
+  }, [kind, symbol, side, entry, sl, tp1, tp2, note, tradeId, period, scope, infos, trades, recent, profile, ccy, settings.serverOffset, source, credit, pickedSignal])
 
   // Nội dung bài tự viết lại khi dữ liệu đổi; sau đó người dùng sửa tay được.
   useEffect(() => { setCaption(post?.caption ?? '') }, [post])
-  useEffect(() => { if (post && canvas.current) drawBanner(canvas.current, post.spec, profile) }, [post, profile])
+  // Ảnh kết quả lệnh và thống kê có ảnh đại diện, tên của người đăng.
+  const author = kind !== 'signal' && (user.displayName || user.avatar) ? { name: user.displayName || user.username, handle: user.username ? `@${user.username}` : undefined, image: avatarImg } : undefined
+  useEffect(() => { if (post && canvas.current) drawBanner(canvas.current, post.spec, profile, author) }, [post, profile, avatarImg, user.displayName, user.username, kind])
 
   const wrongSide = kind === 'signal' && [entry, sl].every(Number.isFinite) && (side === 'buy' ? sl >= entry : sl <= entry)
 
@@ -95,6 +117,34 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
         <div>
           <section className="card">
             {kind === 'signal' && (
+              <div className="source-row">
+                <div className="seg">
+                  <button className={source === 'own' ? 'active' : ''} aria-pressed={source === 'own'} onClick={() => setSource('own')}>Tự viết</button>
+                  <button className={source === 'telegram' ? 'active' : ''} aria-pressed={source === 'telegram'} onClick={() => setSource('telegram')}>Chép từ kênh Telegram <span className="chip pro">Pro</span></button>
+                </div>
+              </div>
+            )}
+            {kind === 'signal' && source === 'telegram' && (!isPro ? (
+              <div className="pro-lock">
+                <strong>Tính năng Pro</strong>
+                <p className="muted small">Chọn một tín hiệu từ các kênh Telegram bạn theo dõi, app điền sẵn cặp, chiều, giá vào, SL, TP để bạn chỉnh và đăng lại.</p>
+                {proUrl ? <a className="button primary" href={proUrl} target="_blank" rel="noopener noreferrer">Nâng cấp Pro</a> : <span className="muted small">Liên hệ quản trị cộng đồng để nâng cấp.</span>}
+              </div>
+            ) : (
+              <div className="tg-pick">
+                {tgSignals.length === 0 ? <p className="muted small">Chưa đọc được tín hiệu nào từ kênh Telegram. Kết nối Telegram ở bridge và chọn kênh ở <code>channels</code>.</p> : (
+                  <Field label="Tín hiệu từ kênh">
+                    <select value={picked} onChange={(e) => applySignal(e.target.value)}>
+                      <option value="">Chọn tín hiệu…</option>
+                      {tgSignals.map((x) => <option key={x.id} value={x.id}>{new Date(x.time).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · {x.channel} · {x.symbol} {x.side === 'buy' ? 'Buy' : 'Sell'} {x.entry}</option>)}
+                    </select>
+                  </Field>
+                )}
+                <label className="inline wrap"><input type="checkbox" className="check" checked={credit} onChange={(e) => setCredit(e.target.checked)} /> Ghi tên kênh nguồn vào bài đăng</label>
+                {pickedSignal && <div className="msg wide tg-quote">{pickedSignal.text}</div>}
+              </div>
+            ))}
+            {kind === 'signal' && (source === 'own' || isPro) && (
               <div className="prop-form">
                 <Field label="Cặp tiền"><select value={symbol} onChange={(e) => setSymbol(e.target.value)}>{PAIRS.map((p) => <option key={p}>{p}</option>)}</select></Field>
                 <Field group label="Chiều">

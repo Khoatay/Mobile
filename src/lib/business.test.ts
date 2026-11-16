@@ -164,3 +164,30 @@ describe('nhập file AI khác', () => {
     expect(t).not.toContain('ok')
   })
 })
+
+import { normalizePack } from './brandpack'
+import { mergePartners, partnerFor, partnerLinks } from './partners'
+import { telegramUrl } from './catalog'
+
+describe('gói cấu hình', () => {
+  it('chuẩn hoá gói thiếu trường và gộp đối tác', () => {
+    const p = normalizePack({ brand: { brand: 'Alpha' }, partners: [{ id: 'ftmo', url: 'https://a', visible: true, name: 'X', kind: 'tool' }, { id: 'fn', name: 'FundedNext', kind: 'prop', url: 'https://fn', code: '', cta: '', pitch: '', visible: true, custom: true }], offers: 'sai' })
+    expect(p.brand).toMatchObject({ brand: 'Alpha', accent: '#2a78d6', disclaimer: true })
+    expect(p.offers).toEqual([])
+    const ftmo = p.partners.find((x) => x.id === 'ftmo')!
+    expect(ftmo).toMatchObject({ url: 'https://a', name: 'FTMO', kind: 'prop' })
+    expect(p.partners[p.partners.length - 1].id).toBe('fn')
+    expect(partnerFor('FundedNext 50K', p.partners)?.id).toBe('fn')
+    expect(normalizePack(null).partners).toHaveLength(6)
+  })
+  it('chỉ lấy link đang bật', () => {
+    const list = mergePartners([{ id: 'exness', name: '', kind: 'broker', url: 'https://ex', code: 'A', cta: 'Mở tài khoản', pitch: '', visible: true }, { id: 'ftmo', name: '', kind: 'prop', url: 'https://f', code: '', cta: '', pitch: '', visible: false }])
+    expect(Object.keys(partnerLinks(list))).toEqual(['exness'])
+    expect(partnerLinks(list).exness).toMatchObject({ url: 'https://ex', code: 'A', cta: 'Mở tài khoản', name: 'Exness' })
+  })
+  it('link Telegram', () => {
+    expect(telegramUrl('@fxdesk_free')).toBe('https://t.me/fxdesk_free')
+    expect(telegramUrl('t.me/+abcDEF')).toBe('https://t.me/+abcDEF')
+    expect(telegramUrl('https://t.me/x')).toBe('https://t.me/x')
+  })
+})

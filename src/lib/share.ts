@@ -16,6 +16,8 @@ export interface Profile {
   hideMoney: boolean
   /** Link IB, affiliate quỹ và công cụ, kèm mã giảm giá nếu có. */
   partners: PartnerLinks
+  /** Người dùng bản trader đã tự chọn màu nhấn (thay cho màu của IB). */
+  accentCustom?: boolean
 }
 
 export const DEFAULT_PROFILE: Profile = { brand: 'FX Desk', tagline: '', accent: '#2a78d6', link: '', disclaimer: true, hideMoney: true, partners: {} }
@@ -107,7 +109,10 @@ export function statsPost(trades: Trade[], periodLabel: string, ccy: string, p: 
 }
 
 /** Vẽ banner vuông 1080px lên canvas. Chữ dùng font hệ thống nên hiển thị được tiếng Việt. */
-export function drawBanner(canvas: HTMLCanvasElement, spec: BannerSpec, p: Profile) {
+/** Tác giả hiện ở góc trên bên phải banner: ảnh đại diện tròn và tên. */
+export interface BannerAuthor { name: string; handle?: string; image: HTMLImageElement | null }
+
+export function drawBanner(canvas: HTMLCanvasElement, spec: BannerSpec, p: Profile, author?: BannerAuthor) {
   const W = 1080
   canvas.width = canvas.height = W
   const g = canvas.getContext('2d')
@@ -129,7 +134,32 @@ export function drawBanner(canvas: HTMLCanvasElement, spec: BannerSpec, p: Profi
   g.fillStyle = '#f0efec'
   g.font = font(40, 700)
   g.fillText(p.brand || 'FX Desk', 80, 110)
-  if (p.tagline) { g.fillStyle = '#9a988f'; g.font = font(26); g.fillText(p.tagline, 80, 152, W - 160) }
+  if (p.tagline) { g.fillStyle = '#9a988f'; g.font = font(26); g.fillText(p.tagline, 80, 152, author ? W - 520 : W - 160) }
+
+  if (author && (author.name || author.image)) {
+    const r = 40, cx = W - 80 - r, cy = 108
+    g.save()
+    g.beginPath(); g.arc(cx, cy, r + 4, 0, Math.PI * 2); g.fillStyle = p.accent; g.fill()
+    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.closePath(); g.clip()
+    if (author.image) {
+      const s = Math.min(author.image.width, author.image.height)
+      g.drawImage(author.image, (author.image.width - s) / 2, (author.image.height - s) / 2, s, s, cx - r, cy - r, r * 2, r * 2)
+    } else {
+      const grad = g.createLinearGradient(cx - r, cy - r, cx + r, cy + r)
+      grad.addColorStop(0, '#8fd3ff'); grad.addColorStop(1, '#b49cff')
+      g.fillStyle = grad; g.fillRect(cx - r, cy - r, r * 2, r * 2)
+      const words = author.name.trim().split(/\s+/)
+      const ini = (words.length > 1 ? words[0][0] + words[words.length - 1][0] : author.name.slice(0, 2)).toUpperCase()
+      g.fillStyle = '#0b1322'; g.font = font(32, 700); g.textAlign = 'center'; g.textBaseline = 'middle'
+      g.fillText(ini, cx, cy + 2)
+    }
+    g.restore()
+    g.textAlign = 'right'; g.textBaseline = 'alphabetic'
+    g.fillStyle = '#f0efec'; g.font = font(30, 700)
+    g.fillText(author.name, cx - r - 22, author.handle ? 102 : 118, 360)
+    if (author.handle) { g.fillStyle = '#9a988f'; g.font = font(24); g.fillText(author.handle, cx - r - 22, 138, 360) }
+    g.textAlign = 'left'
+  }
 
   g.fillStyle = p.accent
   g.font = font(30, 600)

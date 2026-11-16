@@ -39,7 +39,9 @@ export function FundPanel({ id: key, allTrades, settings, bridge, infos, links }
   const [configs, setConfigs] = usePersistent<Record<string, PropConfig>>('fx.props', {})
   const nowServer = Date.now() + settings.serverOffset * 3_600_000
   const cfg = configs[key] ?? suggestProp(infos[key]?.broker ?? '', infos[key]?.phase ?? '', bridge.accounts.find((a) => a.id === key)?.balance)
-  const partner = partnerFor(infos[key]?.broker ?? '')
+  const broker = (infos[key]?.broker ?? '').toLowerCase()
+  // Đối tác có sẵn, hoặc đối tác IB tự thêm có tên khớp với broker của tài khoản.
+  const partner = partnerFor(broker) ?? Object.entries(links ?? {}).map(([id, v]) => ({ id, name: v.name ?? id })).find((x) => broker && broker.includes(x.name.toLowerCase()))
   const link = partner && links?.[partner.id]
   const setCfg = (c: PropConfig) => setConfigs({ ...configs, [key]: c })
   const trades = allTrades.filter((t) => t.account === key)
@@ -127,9 +129,9 @@ export function FundPanel({ id: key, allTrades, settings, bridge, infos, links }
         <section className="card partner-cta">
           <div>
             <strong>{s.state === 'failed' ? `Thử lại với ${partner.name}?` : `Qua vòng rồi. Mua thêm tài khoản ${partner.name}?`}</strong>
-            <p className="muted small">{link.code ? `Mã giảm giá: ${link.code}. ` : ''}Mua qua link giới thiệu của {infos[key]?.label ? 'bạn' : 'cộng đồng'}.</p>
+            <p className="muted small">{[link.pitch, link.code ? `Mã giảm giá: ${link.code}` : ''].filter(Boolean).join(' · ') || 'Mua qua link giới thiệu của cộng đồng.'}</p>
           </div>
-          <a className="button primary" href={link.url} target="_blank" rel="noopener noreferrer">Mở {partner.name}</a>
+          <a className="button primary" href={link.url} target="_blank" rel="noopener noreferrer">{link.cta || `Mở ${partner.name}`}</a>
         </section>
       )}
 

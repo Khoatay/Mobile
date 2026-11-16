@@ -371,9 +371,39 @@ export function seed() {
   for (const a of accounts.filter((x) => x.type !== 'prop')) ledger.push(...balanceDealsToEntries(historyOf(a).deals, a.id, a.label))
   put('fx.ledger', ledger)
   const day0 = (d: number) => new Date(T0 + d * 86_400_000).toISOString().slice(0, 10)
-  put('fx.offers', [
-    { id: 'ex1', partner: 'ftmo', partnerName: '', kind: 'prop', title: '(Ví dụ) Giảm giá challenge cuối năm', detail: 'Ưu đãi mẫu để xem giao diện, không phải khuyến mãi thật. Thay bằng ưu đãi bạn đã kiểm tra trên trang của quỹ.', code: 'MAU-XEM-THU', url: '', expires: day0(2), pinned: true, createdAt: T0 },
-    { id: 'ex2', partner: 'exness', partnerName: '', kind: 'broker', title: '(Ví dụ) Hoàn phí cho tài khoản mới', detail: 'Ưu đãi mẫu. Ghi rõ điều kiện: tài khoản mới, nạp tối thiểu, thời hạn.', code: '', url: '', expires: day0(20), pinned: false, createdAt: T0 - 1 },
-    { id: 'ex3', partner: 'tradingview', partnerName: '', kind: 'tool', title: '(Ví dụ) Giảm giá gói Premium', detail: 'Ưu đãi mẫu.', code: '', url: '', expires: '', pinned: false, createdAt: T0 - 2 },
-  ])
+  // Ảnh mẫu vẽ bằng SVG (khung xem trước chặn ảnh từ trang khác).
+  const art = (title: string, sub: string, c1: string, c2: string, icon = '') => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient><radialGradient id="r" cx="0.85" cy="0.1" r="0.8"><stop offset="0" stop-color="#fff" stop-opacity="0.28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs><rect width="1200" height="675" fill="url(#g)"/><rect width="1200" height="675" fill="url(#r)"/><g fill="none" stroke="#fff" stroke-opacity="0.18" stroke-width="3"><path d="M0 520 L160 470 L300 500 L460 380 L600 420 L760 300 L900 340 L1060 200 L1200 230"/></g><text x="80" y="300" font-family="Arial, sans-serif" font-size="96" font-weight="700" fill="#fff">${icon}${title}</text><text x="84" y="380" font-family="Arial, sans-serif" font-size="40" fill="#fff" fill-opacity="0.85">${sub}</text><text x="84" y="600" font-family="Arial, sans-serif" font-size="28" fill="#fff" fill-opacity="0.6">ẢNH MẪU · XEM TRƯỚC</text></svg>`)
+  const now = T0
+  put('fx.brandpack', {
+    version: 1,
+    brand: { brand: 'FX Desk', tagline: '', accent: '#2a78d6', link: '', disclaimer: true },
+    partners: [
+      { id: 'exness', name: 'Exness', kind: 'broker', url: 'https://www.exness.com', code: '', cta: 'Mở tài khoản Exness', pitch: '(Ví dụ) Hoàn một phần phí cho khách của nhóm', visible: true },
+      { id: 'icmarkets', name: 'IC Markets', kind: 'broker', url: 'https://www.icmarkets.com', code: '', cta: '', pitch: '', visible: true },
+      { id: 'ftmo', name: 'FTMO', kind: 'prop', url: 'https://ftmo.com', code: 'VIDU10', cta: 'Mua challenge FTMO', pitch: '(Ví dụ) Mã giảm giá riêng cho cộng đồng', visible: true },
+      { id: 'the5ers', name: 'The5ers', kind: 'prop', url: 'https://the5ers.com', code: '', cta: '', pitch: '', visible: true },
+      { id: 'tentrade', name: 'TenTrade', kind: 'prop', url: '', code: '', cta: '', pitch: '', visible: true },
+      { id: 'tradingview', name: 'TradingView', kind: 'tool', url: 'https://www.tradingview.com', code: '', cta: '', pitch: '', visible: true },
+    ],
+    offers: [
+      { id: 'ex1', partner: 'ftmo', partnerName: '', kind: 'prop', title: '(Ví dụ) Giảm giá challenge cuối năm', detail: 'Ưu đãi mẫu để xem giao diện, không phải khuyến mãi thật. Thay bằng ưu đãi bạn đã kiểm tra trên trang của quỹ.', code: 'MAU-XEM-THU', url: '', expires: day0(2), pinned: true, image: art('FTMO', 'Giảm giá challenge cuối năm', '#1b2a6b', '#f2b33d', ''), cta: 'Mua challenge', createdAt: now },
+      { id: 'ex2', partner: 'exness', partnerName: '', kind: 'broker', title: '(Ví dụ) Hoàn phí cho tài khoản mới', detail: 'Ưu đãi mẫu. Ghi rõ điều kiện: tài khoản mới, nạp tối thiểu, thời hạn.', code: '', url: '', expires: day0(20), pinned: false, image: art('Exness', 'Hoàn phí tài khoản mới', '#0b3d2e', '#2fd39a'), cta: '', createdAt: now - 1 },
+      { id: 'ex3', partner: 'tradingview', partnerName: '', kind: 'tool', title: '(Ví dụ) Giảm giá gói Premium', detail: 'Ưu đãi mẫu.', code: '', url: '', expires: '', pinned: false, image: art('TradingView', 'Gói Premium', '#131722', '#2962ff'), cta: '', createdAt: now - 2 },
+      { id: 'ex4', partner: 'the5ers', partnerName: '', kind: 'prop', title: '(Ví dụ) Tặng thêm 10% cho gói High Stakes', detail: 'Ưu đãi mẫu.', code: '', url: '', expires: day0(9), pinned: false, image: '', cta: '', createdAt: now - 3 },
+    ],
+    products: [
+      { id: 'pd1', category: 'ea', name: '(Ví dụ) Gold Scalper EA', tagline: 'Bot scalping vàng phiên Âu–Mỹ, mỗi lệnh có SL cứng', description: 'Sản phẩm mẫu để xem giao diện. Mô tả cách bot vào lệnh, khung thời gian, mức rủi ro mặc định, yêu cầu VPS.', features: ['Chạy trên MT5', 'Có bản demo dùng thử 7 ngày', 'Hỗ trợ cài đặt qua Telegram', 'Cập nhật miễn phí 1 năm'], price: '2.490.000đ', oldPrice: '3.490.000đ', image: art('Gold Scalper', 'EA cho MT5', '#3a2405', '#f2b33d', ''), buyUrl: '', buyLabel: 'Mua bản quyền', badge: 'Bán chạy', visible: true, createdAt: now },
+      { id: 'pd2', category: 'mt5', name: '(Ví dụ) SMC Structure MT5', tagline: 'Tự vẽ BOS, CHoCH, order block, FVG trên MT5', description: 'Sản phẩm mẫu.', features: ['Đa khung thời gian', 'Cảnh báo khi có CHoCH', 'Không vẽ lại (no repaint)'], price: '990.000đ', oldPrice: '', image: art('SMC Structure', 'Indicator MT5', '#0b1f3a', '#5cc2ff'), buyUrl: '', buyLabel: '', badge: 'Mới', visible: true, createdAt: now - 1 },
+      { id: 'pd3', category: 'tv', name: '(Ví dụ) Liquidity Map', tagline: 'Đánh dấu thanh khoản phiên Á, đỉnh đáy ngày và tuần trên TradingView', description: 'Sản phẩm mẫu.', features: ['Pine Script v5', 'Mời vào script riêng tư theo username TradingView'], price: '29 USD/tháng', oldPrice: '', image: art('Liquidity Map', 'Indicator TradingView', '#131722', '#b49cff'), buyUrl: '', buyLabel: 'Đăng ký', badge: '', visible: true, createdAt: now - 2 },
+      { id: 'pd4', category: 'pdf', name: '(Ví dụ) Sổ tay ICT tiếng Việt', tagline: 'PDF 120 trang, tóm tắt khái niệm và ví dụ', description: 'Sản phẩm mẫu.', features: ['120 trang', 'Kèm bộ quy tắc .md nạp được vào app'], price: 'Miễn phí cho khách IB', oldPrice: '199.000đ', image: '', buyUrl: '', buyLabel: 'Nhận sách', badge: '', visible: true, createdAt: now - 3 },
+    ],
+    communities: [
+      { id: 'cm1', kind: 'channel', name: '(Ví dụ) Thư viện sách trading', description: 'Kênh chia sẻ sách và tài liệu về giao dịch, quản lý vốn, tâm lý.', perk: 'Tải miễn phí sách PDF mỗi tuần', condition: '', url: 'https://t.me/', image: '', visible: true, createdAt: now },
+      { id: 'cm2', kind: 'channel', name: '(Ví dụ) Khoá học miễn phí', description: 'Tổng hợp khoá học và video miễn phí về ICT, SMC, price action.', perk: 'Lộ trình học từ cơ bản tới nâng cao', condition: '', url: 'https://t.me/', image: '', visible: true, createdAt: now - 1 },
+      { id: 'cm3', kind: 'group', name: '(Ví dụ) Nhóm chat cộng đồng', description: 'Hỏi đáp, chia sẻ lệnh, thảo luận thị trường mỗi ngày.', perk: 'Phân tích sáng và lịch tin mạnh mỗi ngày', condition: '', url: 'https://t.me/', image: '', visible: true, createdAt: now - 2 },
+      { id: 'cm4', kind: 'group', name: '(Ví dụ) Nhóm VIP', description: 'Tín hiệu đã duyệt, bảng thành tích tự ghi từ MT5.', perk: 'Tín hiệu và bảng thành tích công khai', condition: 'Dành cho khách mở tài khoản dưới link IB', url: 'https://t.me/', image: '', visible: true, createdAt: now - 3 },
+    ],
+    proForAll: false, proUrl: 'https://t.me/', updatedAt: now,
+  })
 }

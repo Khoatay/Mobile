@@ -13,12 +13,20 @@ Công cụ cho người giao dịch forex, chạy trên trình duyệt máy tín
 - **Tín hiệu Telegram** (cần bridge): đọc lệnh từ các kênh bạn chọn, gom theo cặp tiền, đánh giá độ trùng khớp giữa các kênh và với xu hướng H4, và chấm thành tích từng kênh bằng dữ liệu giá từ MT5.
 - **Học kiến thức** (cần bridge và khoá API): tạo bộ kiến thức cho từng phương pháp (ICT, SMC, kết hợp…), nạp PDF, ghi chú và phụ đề video, dạy agent qua trò chuyện. Agent tóm thành một bộ quy tắc rõ ràng, sửa tay được, đánh dấu những điều nó tự suy ra.
 - **Phân tích AI** (cần bridge, MT5 và khoá API): chọn bộ kiến thức và danh sách cặp tiền; app tính sẵn các đặc điểm giá từ nến D1/H4/H1/M15 (cấu trúc, BOS/CHoCH, FVG, order block, thanh khoản, đỉnh đáy ngày và tuần trước, biên phiên Á) rồi agent chỉ áp đúng bộ quy tắc đó, cho ra xu hướng chính, thiên hướng từng khung, bảng kiểm tra điều kiện, và lệnh đề xuất kèm khối lượng theo % rủi ro, hoặc nói rõ cần chờ gì.
-- **Ưu đãi**: danh sách ưu đãi của sàn, quỹ và công cụ (mã giảm giá, hạn dùng, ghim), tự dùng link giới thiệu đã lưu, sao chép hoặc gửi bài lên Telegram; ưu đãi hết hạn tự ẩn.
+- **Cửa hàng**: bot trade (EA MT5), indicator MT5 và TradingView, khoá học, tài liệu; ảnh, nhãn, giá, giá cũ, điểm nổi bật, link mua.
+- **Nhóm cộng đồng**: các kênh và nhóm Telegram của IB với quà, điều kiện tham gia và nút vào nhóm.
+- **Ưu đãi**: ảnh feature, một ưu đãi nổi bật, danh sách ưu đãi của sàn, quỹ và công cụ (mã giảm giá, hạn dùng, ghim), tự dùng link giới thiệu đã lưu, sao chép hoặc gửi bài lên Telegram; ưu đãi hết hạn tự ẩn.
 - **Hồ sơ**: ảnh đại diện, tên hiển thị, tên người dùng, giới thiệu, phong cách và thị trường giao dịch. Hiện lưu trên máy; đăng nhập sẽ có khi nối máy chủ.
 - **Tin tức**: lịch kinh tế tuần này (lọc theo mức độ và theo đồng tiền đang giữ lệnh, cảnh báo tin mạnh sắp ra), và luồng tin từ các kênh Telegram.
 - **Thu chi đầu tư**: ghi khoản bỏ ra (phí quỹ, nạp tài khoản, công cụ, khoá học) và thu về (rút từ quỹ, từ tài khoản, backcom, affiliate); lấy nạp/rút từ MT5; tính lãi/lỗ tổng và tỷ suất trên tiền bỏ ra.
 - **Chia sẻ cộng đồng**: tạo banner và nội dung cho tín hiệu, kết quả lệnh, thống kê theo ngày/tuần/tháng; tải ảnh, sao chép, hoặc gửi thẳng lên nhóm Telegram trong danh sách cho phép.
 - **Hướng dẫn** và **Cá nhân hoá**: bài hướng dẫn dùng app, kết nối, quỹ (cách vận hành, luật từng chương trình), sàn và giao dịch cơ bản, kèm nút mở link giới thiệu của bạn; link IB, affiliate và mã giảm giá khai báo một chỗ ở Cá nhân hoá; thư viện link bài viết, video của riêng bạn; tên thương hiệu, màu, link giới thiệu, dòng cảnh báo, ẩn số tiền khi chia sẻ.
+
+## Bản IB và bản trader
+
+- **Bản IB** (mặc định, `npm run build`): chỉnh link giới thiệu (link, mã, chữ trên nút, câu giới thiệu, ẩn/hiện, thêm đối tác), ưu đãi, cửa hàng, nhóm cộng đồng và cài đặt Pro; xuất gói cấu hình `brand.json`. Công tắc "Xem như người dùng" ở cuối thanh bên để xem giao diện của trader.
+- **Bản trader** (`npm run build:trader`, ra thư mục `dist-trader/`): chỉ xem. Đọc `brand.json` đóng gói cùng app, hoặc từ link đặt bằng `VITE_BRAND_URL` (ví dụ một GitHub Gist), nên sửa gói là người dùng thấy bản mới mà không phải cài lại.
+- Việc chặn tính năng Pro hiện dựa vào gói cấu hình (`proForAll`), chưa có xác minh theo từng người; xác minh thật cần máy chủ và đăng nhập.
 
 ## Bản xem trước
 

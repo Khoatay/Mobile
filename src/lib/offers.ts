@@ -15,12 +15,16 @@ export interface Offer {
   /** yyyy-mm-dd, rỗng = không hết hạn. */
   expires: string
   pinned: boolean
+  /** Ảnh feature: data URL (đã thu nhỏ) hoặc link ảnh. */
+  image?: string
+  /** Chữ trên nút, trống = "Nhận ưu đãi". */
+  cta?: string
   createdAt: number
 }
 
 export const OFFER_KIND_TEXT: Record<OfferKind, string> = { broker: 'Sàn', prop: 'Quỹ', tool: 'Công cụ', other: 'Khác' }
 
-export const blankOffer = (): Offer => ({ id: `o${Date.now()}`, partner: 'ftmo', partnerName: '', kind: 'prop', title: '', detail: '', code: '', url: '', expires: '', pinned: false, createdAt: Date.now() })
+export const blankOffer = (): Offer => ({ id: `o${Date.now()}`, partner: 'ftmo', partnerName: '', kind: 'prop', title: '', detail: '', code: '', url: '', expires: '', pinned: false, image: '', cta: '', createdAt: Date.now() })
 
 export function offerName(o: Offer): string {
   return PARTNERS.find((p) => p.id === o.partner)?.name ?? (o.partnerName || 'Đối tác')

@@ -158,9 +158,9 @@ function PartnerButton({ id, links, label }: { id: string; links?: PartnerLinks;
   if (!v?.url) return null
   return (
     <span className="partner-link">
-      <a className="button primary" href={v.url} target="_blank" rel="noopener noreferrer">{label}</a>
+      <a className="button primary" href={v.url} target="_blank" rel="noopener noreferrer">{v.cta || label}</a>
       {v.code && <span className="chip">Mã: {v.code}</span>}
-      <span className="muted small">Link giới thiệu cho {p.name}</span>
+      <span className="muted small">{v.pitch || `Link giới thiệu cho ${p.name}`}</span>
     </span>
   )
 }

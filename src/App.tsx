@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import Avatar from './components/Avatar'
 import Icon, { type IconName } from './components/Icon'
 import { DEFAULT_USER, type UserProfile } from './lib/user'
+import { useBrandPack } from './lib/brandpack'
+import { EDITION } from './lib/edition'
+import { partnerLinks } from './lib/partners'
 import { resolveInfos, type AccountInfo } from './lib/accounts'
 import { PREVIEW, useBridge, useTelegramMessages } from './lib/bridge'
 import { DEFAULT_PROFILE, type Profile } from './lib/share'
@@ -16,6 +19,8 @@ import Journal from './pages/Journal'
 import Ledger from './pages/Ledger'
 import News from './pages/News'
 import Offers from './pages/Offers'
+import Shop from './pages/Shop'
+import Community from './pages/Community'
 import ProfilePage from './pages/Profile'
 import Personalize from './pages/Personalize'
 import Prop from './pages/Prop'
@@ -25,8 +30,8 @@ import Signals from './pages/Signals'
 const GROUPS = [
   { title: 'Giao dịch', tone: 'gold', tabs: [['calc', 'Tính lot', 'calc'], ['account', 'Tài khoản', 'terminal'], ['prop', 'Quỹ', 'shield']] },
   { title: 'Phân tích', tone: 'sky', tabs: [['journal', 'Nhật ký lệnh', 'journal'], ['stats', 'Thống kê', 'chart'], ['learn', 'Học kiến thức', 'bulb'], ['ai', 'Phân tích AI', 'sparkle'], ['signals', 'Tín hiệu Telegram', 'send'], ['news', 'Tin tức', 'news']] },
-  { title: 'Kinh doanh', tone: 'mint', tabs: [['ledger', 'Thu chi đầu tư', 'coins'], ['offers', 'Ưu đãi', 'gift'], ['share', 'Chia sẻ cộng đồng', 'megaphone']] },
-  { title: 'Khác', tone: 'lilac', tabs: [['guides', 'Hướng dẫn', 'book'], ['profile', 'Hồ sơ', 'user'], ['me', 'Cá nhân hoá', 'palette']] },
+  { title: 'Cộng đồng', tone: 'mint', tabs: [['offers', 'Ưu đãi', 'gift'], ['shop', 'Cửa hàng', 'bag'], ['community', 'Nhóm cộng đồng', 'users'], ['share', 'Chia sẻ cộng đồng', 'megaphone']] },
+  { title: 'Cá nhân', tone: 'lilac', tabs: [['ledger', 'Thu chi đầu tư', 'coins'], ['guides', 'Hướng dẫn', 'book'], ['profile', 'Hồ sơ', 'user'], ['me', 'Cá nhân hoá', 'palette']] },
 ] as const
 type Tab = (typeof GROUPS)[number]['tabs'][number][0]
 
@@ -35,7 +40,17 @@ export default function App() {
   const [settings, patchSettings] = useSettings()
   const [trades, setTrades] = useTrades()
   const [stored, setProfile] = usePersistent<Profile>('fx.profile', DEFAULT_PROFILE)
-  const profile = useMemo(() => ({ ...DEFAULT_PROFILE, ...stored }), [stored])
+  const { pack, setPack, loading: packLoading, error: packError } = useBrandPack()
+  // Bản IB có thể xem thử giao diện của người dùng bản trader.
+  const [viewAs, setViewAs] = usePersistent('fx.viewAs', false)
+  const canEdit = EDITION === 'owner' && !viewAs
+  const isPro = canEdit || pack.proForAll
+  // Bản trader lấy thương hiệu từ gói cấu hình của IB; màu nhấn và việc ẩn tiền là lựa chọn riêng của người dùng.
+  const profile = useMemo(() => {
+    const base = { ...DEFAULT_PROFILE, ...stored }
+    return EDITION === 'trader' ? { ...base, ...pack.brand, accent: stored.accentCustom ? stored.accent : pack.brand.accent } : base
+  }, [stored, pack.brand])
+  const links = useMemo(() => partnerLinks(pack.partners), [pack.partners])
   const bridge = useBridge()
   const [storedUser, setUser] = usePersistent<UserProfile>('fx.user', DEFAULT_USER)
   const user = useMemo(() => ({ ...DEFAULT_USER, ...storedUser }), [storedUser])
@@ -83,6 +98,12 @@ export default function App() {
           <Avatar src={user.avatar} name={user.displayName || user.username} size={32} />
           <span className="user-text"><strong>{user.displayName || 'Đặt tên của bạn'}</strong><small>{user.username ? `@${user.username}` : 'Hồ sơ'}</small></span>
         </button>
+        {EDITION === 'owner' && (
+          <label className={viewAs ? 'mode-switch on' : 'mode-switch'}>
+            <input type="checkbox" checked={viewAs} onChange={(e) => setViewAs(e.target.checked)} />
+            <span><strong>{viewAs ? 'Đang xem như người dùng' : 'Bản IB'}</strong><small>{viewAs ? 'Bỏ chọn để chỉnh cấu hình' : 'Xem như người dùng'}</small></span>
+          </label>
+        )}
         <p className="side-note bridge-state">
           <span className={bridge.accounts.length ? 'led on' : 'led'} />{' '}
           {!bridge.online ? 'Bridge chưa chạy' : `${bridge.accounts.length}/${bridge.metas.length} tài khoản MT5 đã nối`}
@@ -90,21 +111,25 @@ export default function App() {
         <p className="side-note plain">Dữ liệu chỉ lưu trên trình duyệt của máy này.</p>
       </aside>
       <main className="main">
+        {EDITION === 'trader' && packLoading && <p className="muted small">Đang tải cấu hình của cộng đồng…</p>}
+        {EDITION === 'trader' && packError && <p className="notice bad">⚠ {packError} Ưu đãi, cửa hàng và nhóm cộng đồng sẽ trống cho tới khi tải được.</p>}
         {tab === 'calc' && <Calculator settings={settings} patch={patchSettings} />}
         {tab === 'journal' && <Journal trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} labels={labels} />}
         {tab === 'stats' && <Dashboard trades={trades} settings={settings} infos={infos} goJournal={() => setTab('journal')} />}
-        {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} infos={infos} goAccounts={() => setTab('account')} links={profile.partners} />}
-        {tab === 'account' && <Account bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} infos={infos} setInfo={setInfo} links={profile.partners} />}
+        {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} infos={infos} goAccounts={() => setTab('account')} links={links} />}
+        {tab === 'account' && <Account bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} infos={infos} setInfo={setInfo} links={links} />}
         {tab === 'signals' && <Signals bridge={bridge} settings={settings} messages={messages} />}
         {tab === 'learn' && <Learn bridge={bridge} />}
         {tab === 'ai' && <Analyze bridge={bridge} settings={settings} />}
         {tab === 'news' && <News bridge={bridge} messages={messages} />}
         {tab === 'ledger' && <Ledger bridge={bridge} settings={settings} labels={labels} infos={infos} />}
-        {tab === 'share' && <Share bridge={bridge} trades={trades} settings={settings} profile={profile} labels={labels} infos={infos} />}
-        {tab === 'offers' && <Offers links={profile.partners} bridge={bridge} disclaimer={profile.disclaimer} />}
+        {tab === 'share' && <Share bridge={bridge} trades={trades} settings={settings} profile={profile} labels={labels} infos={infos} user={user} messages={messages} isPro={isPro} proUrl={pack.proUrl} />}
+        {tab === 'offers' && <Offers links={links} bridge={bridge} disclaimer={profile.disclaimer} pack={pack} setPack={canEdit ? setPack : null} />}
+        {tab === 'shop' && <Shop pack={pack} setPack={canEdit ? setPack : null} />}
+        {tab === 'community' && <Community pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'profile' && <ProfilePage user={user} setUser={setUser} trades={trades} />}
-        {tab === 'guides' && <Guides links={profile.partners} />}
-        {tab === 'me' && <Personalize profile={profile} setProfile={setProfile} />}
+        {tab === 'guides' && <Guides links={links} />}
+        {tab === 'me' && <Personalize profile={profile} setProfile={setProfile} pack={pack} setPack={setPack} canEdit={canEdit} />}
       </main>
     </div>
     </>
