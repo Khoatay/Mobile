@@ -49,7 +49,7 @@ function Editor({ value, books, onSave, onCancel, onDelete }: { value: Partial<P
       <div>
         <div className="field-label">Kiến thức dùng khi trò chuyện</div>
         <div className="chips" style={{ marginTop: 6 }}>
-          {books.length === 0 && <span className="muted small">Chưa có bộ kiến thức nào. Tạo ở trang Học kiến thức.</span>}
+          {books.length === 0 && <span className="muted small">Chưa có bộ kiến thức nào. Tạo ở trang AI học trade.</span>}
           {books.map((b) => { const on = (p.playbooks ?? []).includes(b.id); return <button key={b.id} className={on ? 'chip-toggle on' : 'chip-toggle'} aria-pressed={on} onClick={() => set({ playbooks: on ? (p.playbooks ?? []).filter((x) => x !== b.id) : [...(p.playbooks ?? []), b.id] })}>{b.name}</button> })}
         </div>
       </div>
@@ -106,10 +106,11 @@ export default function Chat({ bridge, trades, infos }: { bridge: BridgeState; t
     } finally { setBusy(false) }
   }
 
-  if (!bridge.online) return (<><h1>Trò chuyện AI</h1><AiSetup online={false} /></>)
+  if (!bridge.online) return (<><h1>Vịt Vàng Talk</h1><AiSetup online={false} /></>)
   return (
     <>
-      <h1>Trò chuyện AI</h1>
+      <h1>Vịt Vàng Talk</h1>
+      <p className="muted">Trò chuyện với nhân vật AI do chính bạn tạo: tính cách, phẩm giá, cách nói chuyện và kiến thức trade đều do bạn dạy.</p>
       {ai && !ai.configured && <AiSetup online />}
       {err && <p className="notice bad">⚠ {err}</p>}
       <div className="chat-layout">

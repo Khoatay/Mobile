@@ -16,7 +16,7 @@ Ghi chú từ buổi trao đổi ngày 16/11/2026. Chưa triển khai; dùng đ�
 | IB rebate (Exness, IC Markets) | Lặp lại theo lot khách trade | Nguồn chính. App miễn phí là quà đổi lấy việc mở tài khoản dưới link. |
 | Affiliate quỹ (FTMO, The5ers, TenTrade) | Một lần mỗi lượt mua | Trader rớt và mua lại nhiều lần. Đặt link ở phần Quỹ và Hướng dẫn. |
 | Bán app cho IB khác | Thuê bao tháng | Giai đoạn 3, khi đã có số liệu thật từ cộng đồng của mình. |
-| VIP cho người không dưới link | Thuê bao tháng | Phân tích AI có chi phí thật, cần giới hạn hoặc thu phí. |
+| VIP cho người không dưới link | Thuê bao tháng | AI phân tích có chi phí thật, cần giới hạn hoặc thu phí. |
 | Nhóm tín hiệu | Quyền lợi kèm IB, không bán riêng | Giảm rủi ro pháp lý và uy tín. |
 | Khoá học, PDF, bộ kiến thức | Một lần | Mồi kéo khách hơn là nguồn lãi. |
 | Affiliate sách | Rất ít | Chỉ để làm nội dung. |

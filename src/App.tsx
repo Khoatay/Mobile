@@ -38,7 +38,7 @@ import Signals from './pages/Signals'
 
 const GROUPS = [
   { title: 'Giao dịch', tone: 'gold', tabs: [['calc', 'Tính lot', 'calc'], ['account', 'Tài khoản', 'terminal'], ['prop', 'Quỹ', 'shield'], ['guard', 'Bảo vệ', 'lock'], ['copier', 'Copy lệnh', 'copy']] },
-  { title: 'Phân tích', tone: 'sky', tabs: [['journal', 'Nhật ký lệnh', 'journal'], ['stats', 'Thống kê', 'chart'], ['learn', 'Học kiến thức', 'bulb'], ['ai', 'Phân tích AI', 'sparkle'], ['chat', 'Trò chuyện AI', 'chat'], ['signals', 'Tín hiệu Telegram', 'send'], ['news', 'Tin tức', 'news']] },
+  { title: 'Phân tích', tone: 'sky', tabs: [['journal', 'Nhật ký lệnh', 'journal'], ['stats', 'Thống kê', 'chart'], ['learn', 'AI học trade', 'bulb'], ['ai', 'AI phân tích', 'sparkle'], ['chat', 'Vịt Vàng Talk', 'chat'], ['signals', 'Tín hiệu Telegram', 'send'], ['news', 'Tin tức', 'news']] },
   { title: 'Cộng đồng', tone: 'mint', tabs: [['offers', 'Ưu đãi', 'gift'], ['shop', 'Cửa hàng', 'bag'], ['community', 'Nhóm cộng đồng', 'users'], ['share', 'Chia sẻ cộng đồng', 'megaphone'], ['track', 'Thành tích công khai', 'trophy']] },
   { title: 'Cá nhân', tone: 'lilac', tabs: [['pro', 'Gói Pro', 'crown'], ['ledger', 'Thu chi đầu tư', 'coins'], ['guides', 'Hướng dẫn', 'book'], ['profile', 'Hồ sơ', 'user'], ['me', 'Cá nhân hoá', 'palette']] },
 ] as const
@@ -62,7 +62,7 @@ export default function App() {
   const links = useMemo(() => partnerLinks(pack.partners), [pack.partners])
   const locked = useMemo(() => lockedTabs(pack.proFeatures, isPro), [pack.proFeatures, isPro])
   const featureLocked = (id: string) => !isPro && pack.proFeatures.includes(id)
-  // Lệnh từ trang Phân tích AI chuyển sang trang Chia sẻ để đăng thành tín hiệu.
+  // Lệnh từ trang AI phân tích chuyển sang trang Chia sẻ để đăng thành tín hiệu.
   const [draft, setDraft] = useState<(SignalDraft & { credit: string }) | null>(null)
   const lockOf = (t: string) => PRO_FEATURES.find((f) => f.tab === t && pack.proFeatures.includes(f.id))?.id ?? ''
   const bridge = useBridge()

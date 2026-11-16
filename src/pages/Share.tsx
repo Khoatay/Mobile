@@ -25,7 +25,7 @@ interface Props { bridge: BridgeState; trades: Trade[]; settings: Settings; prof
 export default function Share({ bridge, trades, settings, profile, labels, infos, user, messages, locked, onOpenPro, draft, onDraftUsed, autopost }: Props) {
   const [source, setSource] = useState<'own' | 'telegram' | 'ai'>('own')
   const [analyses] = usePersistent<Record<string, AnalysisResult>>('fx.analyses', {})
-  // Lệnh agent đề xuất ở trang Phân tích AI, mới nhất trước.
+  // Lệnh agent đề xuất ở trang AI phân tích, mới nhất trước.
   const aiTrades = useMemo(() => Object.values(analyses).filter((r) => r.analysis.has_trade && r.analysis.trade.entry != null && r.analysis.trade.sl != null).sort((a, b) => b.at - a.at), [analyses])
   const [aiPicked, setAiPicked] = useState('')
   const [aiCredit, setAiCredit] = useState('')
@@ -62,7 +62,7 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
     const d = aiDraft(r)
     fill(d); setAiCredit(d.credit)
   }
-  // Lệnh chuyển từ trang Phân tích AI (nút "Đăng thành tín hiệu").
+  // Lệnh chuyển từ trang AI phân tích (nút "Đăng thành tín hiệu").
   useEffect(() => {
     if (!draft) return
     setSource('ai'); setAiPicked(draft.symbol); fill(draft); setAiCredit(draft.credit)
@@ -156,16 +156,16 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
               <div className="source-row">
                 <div className="seg">
                   <button className={source === 'own' ? 'active' : ''} aria-pressed={source === 'own'} onClick={() => setSource('own')}>Tự viết</button>
-                  <button className={source === 'ai' ? 'active' : ''} aria-pressed={source === 'ai'} onClick={() => setSource('ai')}>Từ Phân tích AI{locked('copy-ai') && ' 🔒'}</button>
+                  <button className={source === 'ai' ? 'active' : ''} aria-pressed={source === 'ai'} onClick={() => setSource('ai')}>Từ AI phân tích{locked('copy-ai') && ' 🔒'}</button>
                   <button className={source === 'telegram' ? 'active' : ''} aria-pressed={source === 'telegram'} onClick={() => setSource('telegram')}>Từ kênh Telegram{locked('copy-telegram') && ' 🔒'}</button>
                 </div>
               </div>
             )}
             {kind === 'signal' && source === 'ai' && (locked('copy-ai') ? (
-              <ProNote onOpenPro={onOpenPro}>Đăng tín hiệu từ Phân tích AI là tính năng Pro.</ProNote>
+              <ProNote onOpenPro={onOpenPro}>Đăng tín hiệu từ AI phân tích là tính năng Pro.</ProNote>
             ) : (
               <div className="tg-pick">
-                {aiTrades.length === 0 ? <p className="muted small">Chưa có lệnh nào do agent đề xuất. Vào trang Phân tích AI, phân tích vài cặp, rồi bấm "Đăng thành tín hiệu" trên lệnh muốn đăng.</p> : (
+                {aiTrades.length === 0 ? <p className="muted small">Chưa có lệnh nào do agent đề xuất. Vào trang AI phân tích, phân tích vài cặp, rồi bấm "Đăng thành tín hiệu" trên lệnh muốn đăng.</p> : (
                   <Field label="Lệnh agent đề xuất">
                     <select value={aiPicked} onChange={(e) => applyAi(e.target.value)}>
                       <option value="">Chọn lệnh…</option>

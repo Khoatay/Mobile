@@ -126,12 +126,12 @@ export default function Learn({ bridge }: { bridge: BridgeState }) {
 
   const saveRules = () => run('Đang lưu…', async () => { replace(await bridgePost<Playbook>('/kb/save', { id: book!.id, rules: editing })); setEditing(null) })
 
-  if (!bridge.online) return (<><h1>Học kiến thức</h1><AiSetup online={false} /></>)
+  if (!bridge.online) return (<><h1>AI học trade</h1><AiSetup online={false} /></>)
 
   return (
     <>
-      <h1>Học kiến thức</h1>
-      <p className="muted">Dạy agent phương pháp của bạn (ICT, SMC, hoặc kết hợp nhiều trường phái) bằng tài liệu PDF, phụ đề video và trò chuyện. Agent tóm thành một bộ quy tắc rõ ràng; trang Phân tích AI chỉ áp dụng đúng bộ quy tắc đó.</p>
+      <h1>AI học trade</h1>
+      <p className="muted">Dạy agent phương pháp của bạn (ICT, SMC, hoặc kết hợp nhiều trường phái) bằng tài liệu PDF, phụ đề video và trò chuyện. Agent tóm thành một bộ quy tắc rõ ràng; trang AI phân tích chỉ áp dụng đúng bộ quy tắc đó.</p>
       {ai && !ai.configured && <AiSetup online />}
       {err && <p className="notice bad">⚠ {err}</p>}
 
