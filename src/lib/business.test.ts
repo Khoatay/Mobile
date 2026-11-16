@@ -94,3 +94,33 @@ describe('news', () => {
     expect(filterEvents(events, 2, ['EUR']).map((x) => x.title)).toEqual(['PMI'])
   })
 })
+
+import { bridgeType, currenciesIn, defaultInfo, groupsOf, inScope, resolveInfos, scopeLabel } from './accounts'
+
+describe('accounts', () => {
+  const metas = [
+    { id: '1', label: 'Exness', type: 'real' as const, tradable: false, connected: true, error: '' },
+    { id: '2', label: 'FTMO', type: 'prop' as const, tradable: false, connected: false, error: '' },
+  ]
+  const live = [{ ...metas[0], login: 1, server: 's', name: '', currency: 'USD', balance: 1, equity: 1, profit: 0, margin: 0, marginFree: 1, leverage: 100, positions: [] }]
+  const infos = resolveInfos(['3'], { '1': { group: 'Real', broker: 'Exness' }, '2': { group: 'Quỹ A', phase: 'Vòng 1', currency: 'USD' }, '3': { group: 'Quỹ A', label: '', currency: 'EUR' } }, metas, live)
+  it('gộp mặc định từ bridge với nhãn người dùng', () => {
+    expect(infos['1']).toMatchObject({ label: 'Exness', broker: 'Exness', env: 'real', role: 'own', group: 'Real', currency: 'USD' })
+    expect(infos['2']).toMatchObject({ role: 'prop', phase: 'Vòng 1' })
+    expect(infos['3'].label).toBe('3')
+    expect(defaultInfo('9', { label: 'D', type: 'demo' })).toMatchObject({ env: 'demo', role: 'own' })
+    expect(bridgeType({ env: 'real', role: 'prop' })).toBe('prop')
+    expect(bridgeType({ env: 'demo', role: 'prop' })).toBe('demo')
+  })
+  it('phạm vi theo nhóm và tài khoản', () => {
+    expect(groupsOf(infos)).toEqual(['Quỹ A', 'Real'])
+    expect(inScope('', undefined, infos)).toBe(true)
+    expect(inScope('g:Quỹ A', '2', infos)).toBe(true)
+    expect(inScope('g:Quỹ A', '1', infos)).toBe(false)
+    expect(inScope('g:Quỹ A', undefined, infos)).toBe(false)
+    expect(inScope('a:1', '1', infos)).toBe(true)
+    expect(scopeLabel('g:Real', infos)).toBe('Nhóm Real')
+    expect(scopeLabel('a:2', infos)).toBe('FTMO')
+    expect(currenciesIn('g:Quỹ A', infos)).toEqual(['USD', 'EUR'])
+  })
+})

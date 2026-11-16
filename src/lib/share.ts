@@ -86,6 +86,8 @@ export function periodTrades(trades: Trade[], period: Period, nowServer: number)
 }
 
 export function statsPost(trades: Trade[], periodLabel: string, ccy: string, p: Profile): Post {
+  // Chỉ hạ chữ đầu, để tên nhóm hay tài khoản ghép phía sau giữ nguyên.
+  const period = periodLabel.charAt(0).toLowerCase() + periodLabel.slice(1)
   const s = computeStats(trades, 0)
   const pipsList = trades.map(pipsOf).filter((x): x is number => x != null)
   const pips = pipsList.reduce((a, b) => a + b, 0)
@@ -94,9 +96,9 @@ export function statsPost(trades: Trade[], periodLabel: string, ccy: string, p: 
   const rows: [string, string][] = [['Số lệnh', String(s.n)], ['Tỷ lệ thắng', pct(s.winRate, 0)], ['Thắng / thua', `${s.wins} / ${s.losses}`], ['Profit factor', pf]]
   if (s.rCount) rows.push(['Tổng R', `${signed(rSum, 1)}R`])
   if (!p.hideMoney) rows.push(['Lãi/lỗ ròng', `${signed(s.net)} ${ccy}`])
-  const lines = [`📈 Thống kê ${periodLabel.toLowerCase()}`, `Tổng: ${signed(pips, 0)} pip qua ${s.n} lệnh`, `Tỷ lệ thắng: ${pct(s.winRate, 0)} (${s.wins} thắng, ${s.losses} thua)`, `Profit factor: ${pf}`, s.rCount ? `Tổng R: ${signed(rSum, 1)}R` : '', !p.hideMoney ? `Lãi/lỗ ròng: ${signed(s.net)} ${ccy}` : ''].filter(Boolean)
+  const lines = [`📈 Thống kê ${period}`, `Tổng: ${signed(pips, 0)} pip qua ${s.n} lệnh`, `Tỷ lệ thắng: ${pct(s.winRate, 0)} (${s.wins} thắng, ${s.losses} thua)`, `Profit factor: ${pf}`, s.rCount ? `Tổng R: ${signed(rSum, 1)}R` : '', !p.hideMoney ? `Lãi/lỗ ròng: ${signed(s.net)} ${ccy}` : ''].filter(Boolean)
   return {
-    spec: { kicker: `Thống kê ${periodLabel.toLowerCase()}`, title: `${s.n} lệnh`, big: `${signed(pips, 0)} pip`, tone: pips > 0 ? 'pos' : pips < 0 ? 'neg' : 'neutral', rows },
+    spec: { kicker: `Thống kê ${period}`, title: `${s.n} lệnh`, big: `${signed(pips, 0)} pip`, tone: pips > 0 ? 'pos' : pips < 0 ? 'neg' : 'neutral', rows },
     caption: join(lines.join('\n'), footer(p)),
   }
 }

@@ -21,6 +21,7 @@ import base64
 import io
 import json
 import multiprocessing as mp
+import os
 import sys
 import threading
 import time
@@ -37,8 +38,37 @@ LOCAL_HOSTS = {"127.0.0.1", "localhost"}
 
 def load_config():
     if not CONFIG_PATH.exists():
-        sys.exit("Chưa có config.json. Hãy sao chép config.example.json thành config.json rồi điền thông tin.")
-    return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        print("Chưa có config.json: tạo file trống. Hãy thêm tài khoản ở trang Tài khoản MT5 trong app.")
+        save_config({"accounts": []})
+    try:
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
+    except ValueError as e:
+        sys.exit(f"config.json sai cú pháp: {e}\nThường do thiếu dấu phẩy, thiếu ngoặc kép, hoặc dùng một dấu \\ thay vì \\\\ trong đường dẫn.")
+
+
+def save_config(cfg):
+    """Ghi ra file tạm rồi đổi tên, để mất điện giữa chừng không làm hỏng config.json."""
+    tmp = CONFIG_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, CONFIG_PATH)
+
+
+def find_terminals():
+    """Tìm các bản MT5 (terminal64.exe) ở những nơi bộ cài hay đặt, sâu tối đa 2 cấp thư mục."""
+    roots = [os.environ.get(k) for k in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA")] + ["C:\\MT5"]
+    found = []
+    for root in filter(None, roots):
+        if not os.path.isdir(root):
+            continue
+        for first in os.scandir(root):
+            if not first.is_dir():
+                continue
+            candidates = [first.path] + ([d.path for d in os.scandir(first.path) if d.is_dir()] if first.name.lower() == "programs" else [])
+            for folder in candidates:
+                exe = os.path.join(folder, "terminal64.exe")
+                if os.path.isfile(exe):
+                    found.append(exe)
+    return sorted(set(found), key=str.lower)
 
 
 # ----------------------------------------------------------------------------- MT5
@@ -298,6 +328,12 @@ class Account:
         self.proc = mp.Process(target=worker_main, args=(self.cfg, child), daemon=True)
         self.proc.start()
 
+    def stop(self):
+        try:
+            self.proc.kill()
+        except Exception:
+            pass
+
     def _call(self, method, args, timeout):
         if not self.proc.is_alive():
             self.start()
@@ -328,19 +364,85 @@ class Account:
         return {"id": self.id, "label": self.label, "type": self.type, "tradable": self.tradable, **self.last}
 
 
-def load_accounts(cfg):
-    raw = cfg.get("accounts") or ([cfg["mt5"]] if cfg.get("mt5", {}).get("login") else [])
-    raw = [a for a in raw if a.get("login")]
-    paths = [str(a.get("terminal_path") or "").lower() for a in raw]
-    if len(set(paths)) < len(paths):
-        sys.exit(
-            "Mỗi tài khoản cần một bản MT5 ở thư mục riêng: hãy điền terminal_path khác nhau cho từng tài khoản.\n"
-            "Cách làm: cài MT5 thêm lần nữa vào thư mục khác, hoặc sao chép cả thư mục MT5 rồi đặt \"portable\": true."
-        )
-    ids = [str(a.get("id") or a.get("login")) for a in raw]
-    if len(set(ids)) < len(ids):
-        sys.exit("Có hai tài khoản trùng id/login trong config.json.")
-    return [Account(a) for a in raw]
+class Registry:
+    """Danh sách tài khoản đang chạy, đồng bộ với config.json. Thêm và gỡ được khi bridge đang chạy."""
+
+    FIELDS = ("id", "label", "type", "login", "password", "server", "terminal_path", "portable", "allow_trading", "max_lot")
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.lock = threading.Lock()
+        raw = cfg.get("accounts") or ([cfg["mt5"]] if cfg.get("mt5", {}).get("login") else [])
+        raw = [a for a in raw if a.get("login")]
+        paths = [str(a.get("terminal_path") or "").lower() for a in raw]
+        if len(set(paths)) < len(paths):
+            sys.exit(
+                "Mỗi tài khoản cần một bản MT5 ở thư mục riêng: hãy điền terminal_path khác nhau cho từng tài khoản.\n"
+                "Cách làm: cài MT5 thêm lần nữa vào thư mục khác, hoặc sao chép cả thư mục MT5 rồi đặt \"portable\": true."
+            )
+        ids = [str(a.get("id") or a.get("login")) for a in raw]
+        if len(set(ids)) < len(ids):
+            sys.exit("Có hai tài khoản trùng id/login trong config.json.")
+        self.items = [Account(a) for a in raw]
+
+    def list(self):
+        with self.lock:
+            return list(self.items)
+
+    def get(self, account_id):
+        with self.lock:
+            return next((a for a in self.items if a.id == account_id), None)
+
+    def _persist(self):
+        self.cfg.pop("mt5", None)
+        self.cfg["accounts"] = [a.cfg for a in self.items]
+        save_config(self.cfg)
+
+    def add(self, body):
+        try:
+            login = int(str(body.get("login", "")).strip())
+        except ValueError:
+            raise ValueError("Số tài khoản phải là số")
+        password, server = str(body.get("password") or ""), str(body.get("server") or "").strip()
+        path = str(body.get("terminal_path") or "").strip().strip('"')
+        if not password or not server:
+            raise ValueError("Cần nhập mật khẩu và tên máy chủ")
+        if not path.lower().endswith("terminal64.exe") or not os.path.isfile(path):
+            raise ValueError(f"Không thấy file terminal64.exe tại: {path}")
+        cfg = {
+            "id": str(login), "label": str(body.get("label") or login).strip()[:40],
+            "type": body.get("type") if body.get("type") in Account.TYPES else "real",
+            "login": login, "password": password, "server": server, "terminal_path": path,
+        }
+        if body.get("allow_trading"):
+            cfg["allow_trading"] = True
+            cfg["max_lot"] = max(0.01, float(body.get("max_lot") or 0.1))
+        with self.lock:
+            if any(a.id == cfg["id"] for a in self.items):
+                raise ValueError(f"Tài khoản {login} đã có trong danh sách")
+            owner = next((a for a in self.items if str(a.cfg.get("terminal_path", "")).lower() == path.lower()), None)
+            if owner:
+                raise ValueError(f"Bản MT5 này đang dùng cho \"{owner.label}\". Mỗi tài khoản cần một bản MT5 riêng")
+            account = Account(cfg)
+            self.items.append(account)
+            self._persist()
+        print(f"[mt5] Đã thêm {account.label} ({account.type}){' — CHO PHÉP VÀO LỆNH' if account.tradable else ''}")
+        return {"id": account.id}
+
+    def remove(self, account_id):
+        with self.lock:
+            account = next((a for a in self.items if a.id == account_id), None)
+            if account is None:
+                raise ValueError(f"Không có tài khoản {account_id}")
+            self.items.remove(account)
+            self._persist()
+        account.stop()
+        print(f"[mt5] Đã gỡ {account.label}")
+        return {"removed": account_id}
+
+    def terminals(self):
+        used = {str(a.cfg.get("terminal_path", "")).lower(): a.label for a in self.list()}
+        return [{"path": p, "usedBy": used.get(p.lower())} for p in find_terminals()]
 
 
 # ------------------------------------------------------------------------ Telegram
@@ -516,8 +618,7 @@ class Calendar:
 
 # ---------------------------------------------------------------------------- HTTP
 
-def make_handler(accounts, tg):
-    by_id = {a.id: a for a in accounts}
+def make_handler(registry, tg):
     calendar = Calendar()
 
     def send_post(body):
@@ -531,11 +632,13 @@ def make_handler(accounts, tg):
     def pick(q):
         """Tài khoản theo ?account=...; không ghi thì lấy tài khoản đầu tiên (dùng cho nến và tỷ giá)."""
         if q.get("account"):
-            if q["account"] not in by_id:
+            account = registry.get(q["account"])
+            if account is None:
                 raise ValueError(f"Không có tài khoản {q['account']}")
-            return by_id[q["account"]]
+            return account
+        accounts = registry.list()
         if not accounts:
-            raise RuntimeError("Chưa khai báo tài khoản MT5 nào trong config.json")
+            raise RuntimeError("Chưa có tài khoản MT5 nào. Thêm ở trang Tài khoản MT5")
         return accounts[0]
 
     def snapshot(a):
@@ -545,6 +648,7 @@ def make_handler(accounts, tg):
             return {"id": a.id, "label": a.label, "type": a.type, "tradable": a.tradable, "connected": False, "error": str(e)}
 
     def parallel(fn):
+        accounts = registry.list()
         out = [None] * len(accounts)
         def run(i):
             out[i] = fn(accounts[i])
@@ -605,6 +709,7 @@ def make_handler(accounts, tg):
                 "/prices": lambda: pick(q).call("prices", [s for s in q.get("symbols", "").split(",") if s]),
                 "/telegram/messages": lambda: tg.since(int(q.get("after", 0))),
                 "/calendar": calendar.get,
+                "/terminals": registry.terminals,
             }
             if url.path not in routes:
                 return self.send(404, {"error": "Không có đường dẫn này"})
@@ -624,6 +729,10 @@ def make_handler(accounts, tg):
                 return self.send(400, {"error": "Dữ liệu gửi lên không phải JSON"})
             if url.path == "/order":
                 self.answer(lambda: pick({"account": str(body["account"])}).call("order", body))
+            elif url.path == "/accounts/add":
+                self.answer(lambda: registry.add(body))
+            elif url.path == "/accounts/remove":
+                self.answer(lambda: registry.remove(str(body["account"])))
             elif url.path == "/telegram/send":
                 self.answer(lambda: send_post(body))
             elif url.path == "/close":
@@ -639,12 +748,12 @@ def main():
     tg = Telegram(cfg.get("telegram"))
     if len(sys.argv) > 1 and sys.argv[1] == "login":
         return tg.login()
-    accounts = load_accounts(cfg)
-    for a in accounts:
+    registry = Registry(cfg)
+    for a in registry.list():
         print(f"[mt5] {a.label} ({a.type}){' — CHO PHÉP VÀO LỆNH' if a.tradable else ''}: đang kết nối…")
     tg.start()
     port = int(cfg.get("port", 8787))
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(accounts, tg))
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(registry, tg))
     print(f"FX Desk bridge đang chạy tại http://127.0.0.1:{port} (Ctrl+C để dừng)")
     try:
         server.serve_forever()

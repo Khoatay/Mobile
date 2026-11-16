@@ -3,6 +3,7 @@ import { Field, Num, Tile } from '../components/Field'
 import { money, signed } from '../lib/format'
 import { DEFAULT_PROP, evaluateProp, PRESETS, type PropConfig } from '../lib/prop'
 import { usePersistent } from '../lib/store'
+import type { InfoMap } from '../lib/accounts'
 import type { BridgeState } from '../lib/bridge'
 import type { Settings, Trade } from '../lib/types'
 
@@ -32,12 +33,12 @@ const STATE = {
 
 export const ALL = '*'
 
-export default function Prop({ trades: allTrades, settings, bridge, labels }: { trades: Trade[]; settings: Settings; bridge: BridgeState; labels: Record<string, string> }) {
+export default function Prop({ trades: allTrades, settings, bridge, labels, infos }: { trades: Trade[]; settings: Settings; bridge: BridgeState; labels: Record<string, string>; infos: InfoMap }) {
   // Mỗi tài khoản có bộ luật riêng; "*" là toàn bộ Nhật ký không tách tài khoản.
   const [configs, setConfigs] = usePersistent<Record<string, PropConfig>>('fx.props', {})
   const ids = Object.keys(labels)
   const [picked, setPicked] = useState<string | null>(null)
-  const key = picked ?? bridge.metas.find((m) => m.type === 'prop')?.id ?? ALL
+  const key = picked ?? Object.keys(infos).find((id) => infos[id].role === 'prop') ?? ALL
   const cfg = configs[key] ?? DEFAULT_PROP
   const setCfg = (c: PropConfig) => setConfigs({ ...configs, [key]: c })
   const trades = useMemo(() => (key === ALL ? allTrades : allTrades.filter((t) => t.account === key)), [allTrades, key])
@@ -72,7 +73,7 @@ export default function Prop({ trades: allTrades, settings, bridge, labels }: { 
           {ids.length > 0 && (
             <Field label="Tài khoản">
               <select value={key} onChange={(e) => setPicked(e.target.value)}>
-                {ids.map((id) => <option key={id} value={id}>{labels[id]}</option>)}
+                {ids.map((id) => <option key={id} value={id}>{labels[id]}{infos[id]?.phase ? ` · ${infos[id].phase}` : ''}</option>)}
                 <option value={ALL}>Toàn bộ Nhật ký (không tách)</option>
               </select>
             </Field>

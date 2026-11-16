@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Field, Num } from '../components/Field'
+import ScopeSelect from '../components/ScopeSelect'
+import { inScope, scopeLabel, type InfoMap } from '../lib/accounts'
 import { bridgePost, type BridgeState } from '../lib/bridge'
 import { PAIRS } from '../lib/forex'
 import { signed } from '../lib/format'
@@ -8,9 +10,9 @@ import { drawBanner, PERIODS, periodTrades, resultPost, signalPost, statsPost, t
 import { netOf, type Settings, type Side, type Trade } from '../lib/types'
 
 type Kind = 'signal' | 'result' | 'stats'
-interface Props { bridge: BridgeState; trades: Trade[]; settings: Settings; profile: Profile; labels: Record<string, string> }
+interface Props { bridge: BridgeState; trades: Trade[]; settings: Settings; profile: Profile; labels: Record<string, string>; infos: InfoMap }
 
-export default function Share({ bridge, trades, settings, profile, labels }: Props) {
+export default function Share({ bridge, trades, settings, profile, labels, infos }: Props) {
   const [kind, setKind] = useState<Kind>('signal')
   const [symbol, setSymbol] = useState('XAUUSD')
   const [side, setSide] = useState<Side>('buy')
@@ -21,7 +23,7 @@ export default function Share({ bridge, trades, settings, profile, labels }: Pro
   const [note, setNote] = useState('')
   const [tradeId, setTradeId] = useState('')
   const [period, setPeriod] = useState<Period>('week')
-  const [account, setAccount] = useState('')
+  const [scope, setScope] = useState('')
   const [caption, setCaption] = useState('')
   const [target, setTarget] = useState('')
   const [withImage, setWithImage] = useState(true)
@@ -44,10 +46,10 @@ export default function Share({ bridge, trades, settings, profile, labels }: Pro
       const t = recent.find((x) => x.id === tradeId) ?? recent[0]
       return t ? resultPost(t, ccy, profile) : null
     }
-    const pool = account ? trades.filter((t) => t.account === account) : trades
+    const pool = trades.filter((t) => inScope(scope, t.account, infos))
     const list = periodTrades(pool, period, Date.now() + settings.serverOffset * 3_600_000)
-    return list.length ? statsPost(list, PERIODS[period], ccy, profile) : null
-  }, [kind, symbol, side, entry, sl, tp1, tp2, note, tradeId, period, account, trades, recent, profile, ccy, settings.serverOffset])
+    return list.length ? statsPost(list, scope ? `${PERIODS[period]} · ${scopeLabel(scope, infos)}` : PERIODS[period], ccy, profile) : null
+  }, [kind, symbol, side, entry, sl, tp1, tp2, note, tradeId, period, scope, infos, trades, recent, profile, ccy, settings.serverOffset])
 
   // Nội dung bài tự viết lại khi dữ liệu đổi; sau đó người dùng sửa tay được.
   useEffect(() => { setCaption(post?.caption ?? '') }, [post])
@@ -117,9 +119,7 @@ export default function Share({ bridge, trades, settings, profile, labels }: Pro
             {kind === 'stats' && (
               <div className="prop-form">
                 <Field label="Kỳ"><select value={period} onChange={(e) => setPeriod(e.target.value as Period)}>{Object.entries(PERIODS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
-                {accountIds.length > 0 && (
-                  <Field label="Tài khoản"><select value={account} onChange={(e) => setAccount(e.target.value)}><option value="">Mọi tài khoản</option>{accountIds.map((a) => <option key={a} value={a}>{labels[a] ?? a}</option>)}</select></Field>
-                )}
+                {accountIds.length > 0 && <Field label="Tài khoản"><ScopeSelect value={scope} onChange={setScope} infos={infos} ids={accountIds} /></Field>}
               </div>
             )}
             {wrongSide && <p className="warn">⚠ Stop loss đang nằm sai phía so với giá vào.</p>}

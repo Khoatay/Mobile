@@ -5,11 +5,12 @@ import { bridgeGet, type BridgeState, type Mt5Deal } from '../lib/bridge'
 import { money, pct, signed } from '../lib/format'
 import { balanceDealsToEntries, CATEGORIES, categoryLabel, ledgerCsv, summarize, type Flow, type LedgerEntry } from '../lib/ledger'
 import { download, usePersistent } from '../lib/store'
+import type { InfoMap } from '../lib/accounts'
 import type { Settings } from '../lib/types'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
-export default function Ledger({ bridge, settings, labels }: { bridge: BridgeState; settings: Settings; labels: Record<string, string> }) {
+export default function Ledger({ bridge, settings, labels, infos }: { bridge: BridgeState; settings: Settings; labels: Record<string, string>; infos: InfoMap }) {
   const [entries, setEntries] = usePersistent<LedgerEntry[]>('fx.ledger', [])
   const [flow, setFlow] = useState<Flow>('out')
   const [category, setCategory] = useState(CATEGORIES.out[0].id)
@@ -19,8 +20,8 @@ export default function Ledger({ bridge, settings, labels }: { bridge: BridgeSta
   const [msg, setMsg] = useState('')
   const ccy = settings.accountCcy
 
-  // Tiền còn nằm trong tài khoản của chính bạn: tài khoản thật và tài khoản copy trade. Vốn quỹ không tính.
-  const own = bridge.accounts.filter((a) => a.type === 'real' || a.type === 'copy')
+  // Tiền còn nằm trong tài khoản Real của chính bạn (kể cả tài khoản cho copy). Vốn quỹ và tài khoản demo không tính.
+  const own = bridge.accounts.filter((a) => infos[a.id]?.env === 'real' && infos[a.id]?.role !== 'prop')
   const held = own.reduce((s, a) => s + a.equity, 0)
   const s = useMemo(() => summarize(entries, held), [entries, held])
   const sorted = useMemo(() => [...entries].sort((a, b) => b.date.localeCompare(a.date)), [entries])
@@ -38,9 +39,9 @@ export default function Ledger({ bridge, settings, labels }: { bridge: BridgeSta
       try {
         const h = await bridgeGet<{ deals: Mt5Deal[] }>(`/history?days=3650&account=${a.id}`)
         const ids = new Set(all.map((e) => e.id))
-        const fresh = balanceDealsToEntries(h.deals, a.id, a.label).filter((e) => !ids.has(e.id))
+        const fresh = balanceDealsToEntries(h.deals, a.id, labels[a.id] ?? a.label).filter((e) => !ids.has(e.id))
         all = [...all, ...fresh]
-        parts.push(`${a.label}: thêm ${fresh.length} dòng`)
+        parts.push(`${labels[a.id] ?? a.label}: thêm ${fresh.length} dòng`)
       } catch (e) { parts.push(`${a.label}: lỗi (${e instanceof Error ? e.message : 'không rõ'})`) }
     }
     setEntries(all)
@@ -54,7 +55,7 @@ export default function Ledger({ bridge, settings, labels }: { bridge: BridgeSta
         <Tile label="Đã bỏ ra" value={money(s.out, ccy)} sub="Phí quỹ, nạp tài khoản, công cụ, khoá học…" />
         <Tile label="Đã thu về" value={money(s.in, ccy)} sub="Rút từ quỹ, từ tài khoản, backcom, affiliate…" />
         <Tile label="Dòng tiền ròng" value={`${signed(s.net)} ${ccy}`} sub="Thu về trừ bỏ ra" />
-        <Tile label="Còn trong tài khoản của bạn" value={own.length ? money(s.held, ccy) : '–'} sub={own.length ? own.map((a) => a.label).join(', ') : 'Nối tài khoản thật qua MT5 để tính'} />
+        <Tile label="Còn trong tài khoản của bạn" value={own.length ? money(s.held, ccy) : '–'} sub={own.length ? own.map((a) => labels[a.id] ?? a.label).join(', ') : 'Nối tài khoản Real qua MT5 để tính'} />
         <Tile label="Lãi/lỗ tổng" value={`${signed(s.total)} ${ccy}`} sub={own.length ? 'Dòng tiền ròng + tiền còn trong tài khoản. Chỉ đúng khi đã ghi đủ mọi lần nạp.' : 'Chưa gồm tiền còn trong tài khoản thật'} />
         <Tile label="Tỷ suất trên tiền bỏ ra" value={s.roi == null ? '–' : `${s.roi > 0 ? '+' : ''}${pct(s.roi)}`} sub="Lãi/lỗ tổng chia tổng đã bỏ ra" />
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { resolveInfos, type AccountInfo } from './lib/accounts'
 import { useBridge, useTelegramMessages } from './lib/bridge'
 import { DEFAULT_PROFILE, type Profile } from './lib/share'
 import { usePersistent, useSettings, useTrades } from './lib/store'
@@ -34,13 +35,18 @@ export default function App() {
   useEffect(() => { document.documentElement.style.setProperty('--accent', profile.accent) }, [profile.accent])
   useEffect(() => { document.title = profile.brand || 'FX Desk' }, [profile.brand])
 
-  // Tên hiển thị cho từng tài khoản: nhãn đặt trong bridge nếu có, không thì là số tài khoản.
-  const labels = useMemo(() => {
-    const out: Record<string, string> = {}
-    for (const t of trades) if (t.account) out[t.account] = t.account
-    for (const m of bridge.metas) out[m.id] = m.label
-    return out
-  }, [trades, bridge.metas])
+  // Nhãn từng tài khoản (tên, broker, nhóm…): mặc định từ bridge, phần người dùng sửa lưu trong trình duyệt.
+  const [storedInfo, setStoredInfo] = usePersistent<Record<string, Partial<AccountInfo>>>('fx.accountInfo', {})
+  const tradeAccounts = useMemo(() => [...new Set(trades.map((t) => t.account).filter((a): a is string => !!a))], [trades])
+  const infos = useMemo(() => resolveInfos(tradeAccounts, storedInfo, bridge.metas, bridge.accounts), [tradeAccounts, storedInfo, bridge.metas, bridge.accounts])
+  const setInfo = (id: string, p: Partial<AccountInfo>) => setStoredInfo((all) => ({ ...all, [id]: { ...all[id], ...p } }))
+  const labels = useMemo(() => Object.fromEntries(Object.entries(infos).map(([id, i]) => [id, i.label])), [infos])
+
+  // Ghi lại tiền tệ của tài khoản khi đọc được từ MT5, để vẫn biết khi bridge tắt.
+  useEffect(() => {
+    const changed = bridge.accounts.filter((a) => storedInfo[a.id]?.currency !== a.currency)
+    if (changed.length) setStoredInfo((all) => ({ ...all, ...Object.fromEntries(changed.map((a) => [a.id, { ...all[a.id], currency: a.currency }])) }))
+  }, [bridge.accounts])
 
   return (
     <div className="app">
@@ -68,13 +74,13 @@ export default function App() {
       <main className="main">
         {tab === 'calc' && <Calculator settings={settings} patch={patchSettings} />}
         {tab === 'journal' && <Journal trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} labels={labels} />}
-        {tab === 'stats' && <Dashboard trades={trades} settings={settings} labels={labels} goJournal={() => setTab('journal')} />}
-        {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} labels={labels} />}
-        {tab === 'account' && <Account bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} />}
+        {tab === 'stats' && <Dashboard trades={trades} settings={settings} infos={infos} goJournal={() => setTab('journal')} />}
+        {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} labels={labels} infos={infos} />}
+        {tab === 'account' && <Account bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} infos={infos} setInfo={setInfo} />}
         {tab === 'signals' && <Signals bridge={bridge} settings={settings} messages={messages} />}
         {tab === 'news' && <News bridge={bridge} messages={messages} />}
-        {tab === 'ledger' && <Ledger bridge={bridge} settings={settings} labels={labels} />}
-        {tab === 'share' && <Share bridge={bridge} trades={trades} settings={settings} profile={profile} labels={labels} />}
+        {tab === 'ledger' && <Ledger bridge={bridge} settings={settings} labels={labels} infos={infos} />}
+        {tab === 'share' && <Share bridge={bridge} trades={trades} settings={settings} profile={profile} labels={labels} infos={infos} />}
         {tab === 'guides' && <Guides />}
         {tab === 'me' && <Personalize profile={profile} setProfile={setProfile} />}
       </main>

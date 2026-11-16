@@ -23,6 +23,7 @@ function load<T>(key: string, fallback: T): T {
 
 export function usePersistent<T>(key: string, fallback: T) {
   const [value, setValue] = useState<T>(() => load(key, fallback))
+  // setValue nhận cả hàm cập nhật, như useState.
   useEffect(() => {
     try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* bộ nhớ đầy hoặc bị chặn */ }
   }, [key, value])
