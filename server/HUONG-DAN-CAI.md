@@ -39,7 +39,7 @@ Nhập mật khẩu root (gõ không hiện chữ, cứ gõ rồi Enter). Hoặc
 Trong máy:
 
 ```bash
-git clone -b claude/wonderful-carson-w464oh https://github.com/khoatay/mobile.git
+git clone -b claude/vibe-code-trader-finance-jtwj46 https://github.com/khoatay/mobile.git
 ```
 
 Nếu kho code để riêng tư, GitHub hỏi tên đăng nhập và mật khẩu: mật khẩu là một **Personal access token** (GitHub → Settings → Developer settings → Personal access tokens), không phải mật khẩu GitHub.
@@ -78,6 +78,8 @@ Nhập số điện thoại riêng (dạng `+84…`), mã Telegram gửi về, m
 2. Tín hiệu → dán `@tên` một kênh công khai → Thêm. Tên kênh hiện ra là máy chủ đã vào kênh.
 3. Tài khoản → Nối Telegram → bấm Start trong bot.
 4. Hỏi AI → hỏi thử một câu.
+
+Bản đầy đủ cho máy tính ở `https://ten-mien-cua-ban.com/pc` (mở bằng Chrome hoặc Edge). Các trang cần MT5 (tài khoản, bảo vệ, copy lệnh, AI phân tích) dùng bridge chạy trên máy Windows của người dùng; trong `bridge/config.json` của họ thêm `"web_origins": ["https://ten-mien-cua-ban.com"]`.
 
 Trên điện thoại, mở trang bằng trình duyệt → Chia sẻ → **Thêm vào màn hình chính** để dùng như app.
 

@@ -39,6 +39,8 @@ from brain import Brain, Knowledge, Personas, chat
 HERE = Path(__file__).resolve().parent
 CONFIG_PATH = HERE / "config.json"
 LOCAL_HOSTS = {"127.0.0.1", "localhost"}
+# Trang web được phép gọi bridge ngoài trang chạy trên máy này, ví dụ bản đầy đủ đặt trên tên miền: "web_origins" trong config.json.
+WEB_ORIGINS = set()
 
 
 def load_config():
@@ -815,7 +817,7 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot):
             host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
             origin = self.headers.get("Origin")
             origin_host = urlparse(origin).hostname if origin else None
-            return host in LOCAL_HOSTS and (origin is None or origin_host in LOCAL_HOSTS)
+            return host in LOCAL_HOSTS and (origin is None or origin_host in LOCAL_HOSTS or origin.rstrip("/") in WEB_ORIGINS)
 
         def send(self, code, body):
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -823,8 +825,9 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))
             origin = self.headers.get("Origin")
-            if origin and urlparse(origin).hostname in LOCAL_HOSTS:
+            if origin and (urlparse(origin).hostname in LOCAL_HOSTS or origin.rstrip("/") in WEB_ORIGINS):
                 self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Access-Control-Allow-Private-Network", "true")  # Chrome: trang https gọi vào máy cục bộ
                 self.send_header("Access-Control-Allow-Headers", "Content-Type, X-FXDesk")
                 self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                 self.send_header("Vary", "Origin")
@@ -953,6 +956,7 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot):
 
 def main():
     cfg = load_config()
+    WEB_ORIGINS.update(str(o).rstrip("/") for o in cfg.get("web_origins") or [])
     tg = Telegram(cfg.get("telegram"))
     if len(sys.argv) > 1 and sys.argv[1] == "login":
         return tg.login()

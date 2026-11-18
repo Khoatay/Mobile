@@ -42,6 +42,8 @@ import Share from './pages/Share'
 import Signals from './pages/Signals'
 import LiteApp from './lite/LiteApp'
 import ModePicker from './lite/ModePicker'
+/** Bản đầy đủ đặt trên tên miền ở /pc: vào thẳng giao diện đầy đủ, không hỏi chọn. */
+const ON_WEB_PC = typeof location !== 'undefined' && location.pathname.startsWith('/pc/')
 import ModeSwitch from './lite/ModeSwitch'
 import type { Mode } from './lite/plain'
 
@@ -56,7 +58,7 @@ type Tab = (typeof GROUPS)[number]['tabs'][number][0]
 export default function App() {
   const [tab, setTab] = useState<Tab>('calc')
   // Bản đơn giản cho người mới hoặc bản đầy đủ; '' = chưa chọn, hỏi ở màn hình chào.
-  const [mode, setMode] = usePersistent<Mode | ''>('fx.mode', '')
+  const [mode, setMode] = usePersistent<Mode | ''>('fx.mode', ON_WEB_PC ? 'full' : '')
   const [settings, patchSettings] = useSettings()
   const [trades, setTrades] = useTrades()
   const [stored, setProfile] = usePersistent<Profile>('fx.profile', DEFAULT_PROFILE)
