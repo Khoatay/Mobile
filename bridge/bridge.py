@@ -217,6 +217,8 @@ class Mt5:
     # ------------------------------------------------------------- vào / đóng lệnh
 
     def _tradable(self):
+        if self.cfg.get("type") == "view":
+            raise ValueError("Tài khoản Only view chỉ để theo dõi, không vào hay đóng lệnh được")
         if not self.cfg.get("allow_trading"):
             raise ValueError('Tài khoản này chưa bật "allow_trading" trong config.json')
         if not self.ensure():
@@ -449,14 +451,15 @@ def worker_main(cfg, conn):
 class Account:
     """Một tài khoản MT5 = một tiến trình con. Tiến trình chính chỉ chuyển yêu cầu."""
 
-    TYPES = ("real", "prop", "copy", "demo")
+    # "view": tài khoản của người khác, chỉ theo dõi bằng mật khẩu view; không bao giờ cho vào lệnh.
+    TYPES = ("real", "prop", "copy", "demo", "view")
 
     def __init__(self, cfg):
         self.cfg = cfg
         self.id = str(cfg.get("id") or cfg.get("login"))
         self.label = str(cfg.get("label") or self.id)
         self.type = cfg.get("type") if cfg.get("type") in self.TYPES else "real"
-        self.tradable = bool(cfg.get("allow_trading"))
+        self.tradable = bool(cfg.get("allow_trading")) and self.type != "view"
         self.lock = threading.Lock()
         self.last = {"connected": False, "error": "Đang kết nối…"}
         self.start()

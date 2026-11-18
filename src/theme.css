@@ -488,3 +488,25 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 @media (max-width: 600px) { .quote-needs li { grid-template-columns: minmax(0, 1fr); gap: 4px; } }
 .chip-role { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 99px; background: var(--raised); color: var(--muted); margin-right: 4px; }
 .chip-role.lot { background: color-mix(in srgb, var(--neg) 12%, transparent); color: var(--neg); }
+
+/* Tài khoản: 4 nhóm và các tài khoản con */
+.cat-blurb { margin: 10px 0 8px; font-size: 13.5px; }
+.subtabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.chip-tab { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 6px 13px; font-size: 13.5px; background: var(--surface); border: 1px solid var(--border); }
+.chip-tab small { font-size: 11px; color: var(--muted); }
+.chip-tab.active { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent); font-weight: 600; }
+.chip-tab.add { border-style: dashed; color: var(--accent); }
+.chip.cat-real { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.chip.cat-prop { background: color-mix(in srgb, var(--gold) 20%, transparent); color: #a86a00; }
+.chip.cat-copy { background: color-mix(in srgb, #6250d6 14%, transparent); color: #6250d6; }
+.chip.cat-view { background: var(--raised); color: var(--ink-2); }
+.row-card { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.row-card p { margin: 2px 0 0; }
+.copy-ways { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 10px; }
+@media (max-width: 860px) { .copy-ways { grid-template-columns: minmax(0, 1fr); } }
+.copy-way { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; background: var(--page); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.copy-way h4 { margin: 2px 0; font-size: 15px; }
+.copy-way p, .copy-way ul { margin: 0; color: var(--ink-2); line-height: 1.55; }
+.copy-way ul { padding-left: 18px; }
+.copy-way > :last-child { margin-top: auto; }
+.notice-card { border-left: 3px solid var(--accent); }

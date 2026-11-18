@@ -44,11 +44,11 @@
 .lite-step span { width: 26px; height: 26px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 13px; color: #fff; background: var(--accent); }
 .lite-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .lite-chips.three { grid-template-columns: repeat(3, 1fr); }
-.chip { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--raised); min-height: 56px; }
-.chip small { color: var(--muted); font-size: 12px; }
-.chip.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--accent); }
-.chip.active small { color: inherit; }
-.chip.mini { display: inline-flex; flex-direction: row; min-height: 0; padding: 6px 12px; }
+.lchip { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--raised); min-height: 56px; }
+.lchip small { color: var(--muted); font-size: 12px; }
+.lchip.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--accent); }
+.lchip.active small { color: inherit; }
+.lchip.mini { display: inline-flex; flex-direction: row; min-height: 0; padding: 6px 12px; }
 .lite-select { margin-top: 10px; width: 100%; }
 .lite-money { display: flex; gap: 8px; }
 .lite-money input { flex: 1; min-width: 0; font-family: var(--font-num); font-size: 22px; padding: 10px 12px; }

@@ -2,7 +2,11 @@ import { fromOf, neededQuotes } from '../lib/quotes'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ask } from '../lib/ask'
 import { Field, Num, Tile } from '../components/Field'
-import { badges, bridgeType, BROKERS, GROUP_SUGGESTIONS, groupsOf, PHASES, ROLE_TEXT, type AccountInfo, type Env, type InfoMap, type Role } from '../lib/accounts'
+import { badges, bridgeType, BROKERS, CATEGORIES, categoryOf, GROUP_SUGGESTIONS, groupsOf, isView, PHASES, ROLE_TEXT, type AccountInfo, type Category, type Env, type InfoMap, type Role } from '../lib/accounts'
+import EquityChart from '../components/EquityChart'
+import { computeStats } from '../lib/stats'
+import { netOf } from '../lib/types'
+import { partnerFor } from '../lib/partners'
 import { bridgeGet, bridgePost, type BridgeState, type LiveAccount, type LivePosition, type Mt5Deal, type Mt5Order } from '../lib/bridge'
 import { calcPosition, normalizeSymbol, PAIRS, parseSymbol, pipSize, QUOTE_KEYS } from '../lib/forex'
 import { money, signed } from '../lib/format'
@@ -23,6 +27,8 @@ interface Props {
   infos: InfoMap
   setInfo: (id: string, info: Partial<AccountInfo>) => void
   links?: PartnerLinks
+  /** Mở trang Copy lệnh với tài khoản này làm nguồn. */
+  onCopyFrom?: (id: string) => void
 }
 type Msg = { ok: boolean; text: string } | null
 const errText = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
@@ -155,20 +161,20 @@ function InfoEditor({ info, onChange, groups }: { info: AccountInfo; onChange: (
           {(['real', 'demo'] as Env[]).map((v) => <button key={v} className={info.env === v ? 'active' : ''} aria-pressed={info.env === v} onClick={() => onChange({ env: v })}>{v === 'real' ? 'Real' : 'Demo'}</button>)}
         </div>
       </Field>
-      <Field label="Vai trò">
+      <Field label="Nhóm tài khoản" hint="Đổi để chuyển sang tab khác">
         <select value={info.role} onChange={(e) => onChange({ role: e.target.value as Role })}>
           {(Object.keys(ROLE_TEXT) as Role[]).map((r) => <option key={r} value={r}>{ROLE_TEXT[r]}</option>)}
         </select>
       </Field>
-      <Field label="Giai đoạn" hint="Với tài khoản quỹ">
+      {info.role === 'prop' && <Field label="Giai đoạn" hint="Với tài khoản quỹ">
         <input list="phases" value={info.phase} placeholder="Vòng 1, Vòng 2…" onChange={(e) => onChange({ phase: e.target.value })} />
         <datalist id="phases">{PHASES.map((p) => <option key={p} value={p} />)}</datalist>
-      </Field>
-      <Field label="Nhóm" hint="Gộp thống kê theo nhóm này">
+      </Field>}
+      {info.role !== 'view' && <Field label="Nhóm" hint="Gộp thống kê theo nhóm này">
         <input list="acc-groups" value={info.group} placeholder="Real, Quỹ A…" onChange={(e) => onChange({ group: e.target.value })} />
         <datalist id="acc-groups">{[...new Set([...groups, ...GROUP_SUGGESTIONS])].map((g) => <option key={g} value={g} />)}</datalist>
-      </Field>
-      <Field label="Ghi chú"><input value={info.note} placeholder="VD: mua ngày 01/11, hết hạn 30/11" onChange={(e) => onChange({ note: e.target.value })} /></Field>
+      </Field>}
+      <Field label="Ghi chú"><input value={info.note} placeholder={info.role === 'view' ? 'VD: anh Nam, chiến lược vàng phiên Âu' : 'VD: mua ngày 01/11, hết hạn 30/11'} onChange={(e) => onChange({ note: e.target.value })} /></Field>
     </div>
   )
 }
@@ -207,8 +213,9 @@ function PositionsTable({ rows, infos, busy, onClose, showAccount }: { rows: (Li
 }
 
 /** Thêm tài khoản vào bridge ngay từ app; bridge tự lưu vào config.json. */
-function AddAccount({ bridge, groups, onAdded }: { bridge: BridgeState; groups: string[]; onAdded: (id: string, info: AccountInfo) => void }) {
-  const blank: AccountInfo = { label: '', broker: '', env: 'real', role: 'own', phase: '', group: '', note: '' }
+function AddAccount({ bridge, groups, onAdded, role }: { bridge: BridgeState; groups: string[]; onAdded: (id: string, info: AccountInfo) => void; role: Role }) {
+  const blank: AccountInfo = { label: '', broker: '', env: 'real', role, phase: '', group: '', note: '' }
+  const view = role === 'view'
   const [info, setInfo] = useState<AccountInfo>(blank)
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
@@ -233,7 +240,7 @@ function AddAccount({ bridge, groups, onAdded }: { bridge: BridgeState; groups: 
     try {
       const r = await bridgePost<{ id: string }>('/accounts/add', {
         label: info.label || login, type: bridgeType(info), login, password, server, terminal_path: path,
-        allow_trading: trading, max_lot: maxLot,
+        allow_trading: trading && !view, max_lot: maxLot,
       })
       onAdded(r.id, { ...info, label: info.label || login })
       setInfo(blank); setLogin(''); setPassword(''); setServer(''); setPath(''); setTrading(false)
@@ -245,11 +252,18 @@ function AddAccount({ bridge, groups, onAdded }: { bridge: BridgeState; groups: 
 
   return (
     <>
+      {view && (
+        <section className="card notice-card">
+          <h3>Theo dõi tài khoản của người khác</h3>
+          <p className="muted small">Bạn cần số tài khoản, máy chủ và <strong>mật khẩu view (investor)</strong> do chủ tài khoản đưa. App thấy số dư, equity và lệnh đang mở của họ trực tiếp, vài giây cập nhật một lần, nhưng không đặt hay đóng lệnh được.</p>
+          <p className="muted small">Mỗi tài khoản theo dõi cần một bản MT5 riêng trên máy, mỗi bản tốn khoảng 150–300 MB RAM. Máy thường theo dõi 5–10 tài khoản cùng lúc là hợp lý.</p>
+        </section>
+      )}
       <section className="card">
         <h3>Thông tin đăng nhập MT5</h3>
         <div className="prop-form">
           <Field label="Số tài khoản"><input inputMode="numeric" value={login} onChange={(e) => setLogin(e.target.value.replace(/\D/g, ''))} /></Field>
-          <Field label="Mật khẩu" hint="Mật khẩu view chỉ xem được; mật khẩu giao dịch mới vào lệnh được"><input type="password" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+          <Field label={view ? 'Mật khẩu view (investor)' : 'Mật khẩu'} hint={view ? 'Người đó lấy trong MT5: Tools → Options → Server → Change (investor). Chỉ xem được, không đặt lệnh được.' : 'Mật khẩu view chỉ xem được; mật khẩu giao dịch mới vào lệnh được'}><input type="password" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
           <Field label="Máy chủ" hint="Chép đúng như trong MT5: File → Login to Trade Account"><input value={server} placeholder="Exness-MT5Real29" onChange={(e) => setServer(e.target.value.trim())} /></Field>
           <Field label="Bản MT5 dùng cho tài khoản này">
             <select value={path} onChange={(e) => setPath(e.target.value)}>
@@ -273,10 +287,11 @@ function AddAccount({ bridge, groups, onAdded }: { bridge: BridgeState; groups: 
       <section className="card">
         <h3>Nhãn tài khoản</h3>
         <InfoEditor info={info} groups={groups} onChange={(p) => setInfo({ ...info, ...p })} />
-        <label className="inline wrap" style={{ marginTop: 12 }}>
+        {!view && <label className="inline wrap" style={{ marginTop: 12 }}>
           <input type="checkbox" className="check" checked={trading} onChange={(e) => setTrading(e.target.checked)} /> Cho phép vào lệnh từ app (cần mật khẩu giao dịch)
-        </label>
-        {trading && <div className="row" style={{ marginTop: 8, maxWidth: 260 }}><Field label="Khối lượng tối đa mỗi lệnh (lot)"><Num value={maxLot} onChange={setMaxLot} step={0.01} min={0.01} /></Field></div>}
+        </label>}
+        {view && <p className="muted small" style={{ marginTop: 12 }}>Chỉ theo dõi tài khoản mà chủ tài khoản đã đồng ý chia sẻ mật khẩu view với bạn.</p>}
+        {!view && trading && <div className="row" style={{ marginTop: 8, maxWidth: 260 }}><Field label="Khối lượng tối đa mỗi lệnh (lot)"><Num value={maxLot} onChange={setMaxLot} step={0.01} min={0.01} /></Field></div>}
         <div className="actions" style={{ marginTop: 12 }}>
           <button className="primary" disabled={busy || !login || !password || !server || !path} onClick={submit}>{busy ? 'Đang thêm…' : 'Thêm tài khoản'}</button>
         </div>
@@ -287,8 +302,97 @@ function AddAccount({ bridge, groups, onAdded }: { bridge: BridgeState; groups: 
   )
 }
 
-export default function Account({ bridge, trades, setTrades, settings, patch, infos, setInfo, links }: Props) {
-  const [tab, setTab] = useState<string>('overview')
+/** Hiệu suất của một tài khoản (thường là Only view): đọc lịch sử từ MT5, tính ngay, không lưu vào Nhật ký của bạn. */
+function Performance({ id, currency, serverOffset }: { id: string; currency: string; serverOffset: number }) {
+  const [days, setDays] = useState(30)
+  const [list, setList] = useState<Trade[] | null>(null)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    let stop = false
+    setList(null); setErr('')
+    bridgeGet<{ deals: Mt5Deal[]; orders: Mt5Order[] }>(`/history?days=${days}&account=${id}`)
+      .then((h) => { if (!stop) setList(dealsToTrades(h.deals, h.orders, id)) })
+      .catch((e) => { if (!stop) setErr(errText(e)) })
+    return () => { stop = true }
+  }, [id, days])
+  const s = useMemo(() => (list ? computeStats(list, serverOffset) : null), [list, serverOffset])
+  const recent = useMemo(() => (list ? [...list].sort((a, b) => b.closeTime - a.closeTime).slice(0, 8) : []), [list])
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h3>Kết quả giao dịch</h3>
+        <div className="seg">
+          {[7, 30, 90, 365].map((d) => <button key={d} className={days === d ? 'active' : ''} aria-pressed={days === d} onClick={() => setDays(d)}>{d === 365 ? '1 năm' : `${d} ngày`}</button>)}
+        </div>
+      </div>
+      {err && <p className="notice bad">⚠ {err}</p>}
+      {!s && !err && <p className="muted">Đang đọc lịch sử…</p>}
+      {s && s.n === 0 && <p className="muted">Không có lệnh nào đóng trong {days} ngày qua.</p>}
+      {s && s.n > 0 && (
+        <>
+          <div className="tiles wide">
+            <Tile tone={s.net} label="Lãi/lỗ ròng" value={`${signed(s.net)} ${currency}`} sub={`${s.n} lệnh`} />
+            <Tile label="Tỷ lệ thắng" value={`${Math.round(s.winRate * 100)}%`} sub={`${s.wins} thắng · ${s.losses} thua`} />
+            <Tile label="Profit factor" value={Number.isFinite(s.profitFactor) ? s.profitFactor.toFixed(2) : '∞'} sub="Lãi gộp / lỗ gộp" />
+            <Tile tone="neg" label="Sụt giảm lớn nhất" value={money(s.maxDrawdown, currency)} sub={`Chuỗi thua dài nhất ${s.maxLosingStreak} lệnh`} />
+          </div>
+          <EquityChart points={s.equity} ccy={currency} />
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Đóng lúc</th><th>Cặp</th><th>Chiều</th><th className="num">Lot</th><th className="num">Lãi/lỗ</th></tr></thead>
+              <tbody>{recent.map((t) => { const n = netOf(t); return <tr key={t.id}><td className="nowrap">{fmtServerTime(t.closeTime).slice(0, 16)}</td><td>{t.symbol}</td><td>{t.side === 'buy' ? 'Buy' : 'Sell'}</td><td className="num">{t.volume.toFixed(2)}</td><td className="num strong"><span className={n > 0 ? 'pip pos' : n < 0 ? 'pip neg' : 'pip'} />{signed(n)}</td></tr> })}</tbody>
+            </table>
+          </div>
+          <p className="muted small">Đọc trực tiếp từ MT5 mỗi lần mở, không đưa vào Nhật ký hay Thống kê của bạn.</p>
+        </>
+      )}
+    </section>
+  )
+}
+
+/** Hai cách copy lệnh của một tài khoản Only view: chép ngay trên app, hoặc theo dõi chiến lược của họ trên nền tảng copy trade của sàn. */
+function CopyGuide({ id, info, links, onCopyFrom }: { id: string; info: AccountInfo; links?: PartnerLinks; onCopyFrom?: (id: string) => void }) {
+  const partner = partnerFor(info.broker)
+  const link = partner ? links?.[partner.id] : undefined
+  const broker = info.broker || 'sàn của họ'
+  return (
+    <section className="card">
+      <h3>Muốn copy lệnh của người này?</h3>
+      <p className="muted small">Có hai cách. Chỉ copy khi chủ tài khoản đồng ý, và luôn thử trên tài khoản demo trước.</p>
+      <div className="copy-ways">
+        <div className="copy-way">
+          <span className="chip">Cách 1</span>
+          <h4>Copy ngay trên app</h4>
+          <p className="small">Bridge thấy lệnh mới của họ và mở lệnh tương tự trên tài khoản của bạn trong vài giây. Lot tự chỉnh được: nhân hệ số, theo tỷ lệ số dư hoặc lot cố định.</p>
+          <ul className="small">
+            <li><b>Cần:</b> một tài khoản của bạn có mật khẩu giao dịch và bật "Cho phép vào lệnh từ app".</li>
+            <li><b>Cần:</b> máy tính chạy bridge luôn bật. Tắt máy là ngừng chép.</li>
+            <li><b>Lưu ý:</b> trễ vài giây nên giá vào có thể khác họ; chỉ chép lệnh mở sau khi bật.</li>
+          </ul>
+          <button className="primary" onClick={() => onCopyFrom?.(id)}>Thiết lập copy từ tài khoản này</button>
+        </div>
+        <div className="copy-way">
+          <span className="chip">Cách 2</span>
+          <h4>Copy qua nền tảng của {broker}</h4>
+          <p className="small">Nhiều sàn có sẵn copy trade, ví dụ Exness Social Trading. Nếu người này đăng chiến lược trên đó, bạn mở tài khoản copy ở cùng sàn và bấm theo dõi họ.</p>
+          <ul className="small">
+            <li><b>Ưu điểm:</b> chạy trên máy chủ của sàn, không cần bật máy tính, không trễ vì máy bạn.</li>
+            <li><b>Cách làm:</b> xin họ tên hoặc link chiến lược → mở tài khoản copy ở {broker} → nạp tiền, bấm theo dõi, đặt mức dừng lỗ cho cả chiến lược.</li>
+            <li>Sau đó thêm tài khoản copy đó vào tab <b>Copy trade</b> để theo dõi chung trong app.</li>
+          </ul>
+          {link?.url
+            ? <a className="button primary" href={link.url} target="_blank" rel="noreferrer">{link.cta || `Mở tài khoản copy ở ${partner!.name}`}</a>
+            : <p className="muted small">{info.broker ? `Chưa có link mở tài khoản ${info.broker}.` : 'Ghi broker của tài khoản này ở phần Nhãn để app gợi ý link mở tài khoản.'}</p>}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+export default function Account({ bridge, trades, setTrades, settings, patch, infos, setInfo, links, onCopyFrom }: Props) {
+  // tab: 'overview' hoặc một nhóm; sel: '' (danh sách của nhóm), 'add', hoặc số tài khoản.
+  const [tab, setTab] = useState<'overview' | Category>('overview')
+  const [sel, setSel] = useState('')
   const [days, setDays] = useState(90)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg>(null)
@@ -296,19 +400,23 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
   const live = (id: string) => accounts.find((a) => a.id === id)
   const fileOnly = useMemo(() => [...new Set(trades.map((t) => t.account).filter((a): a is string => !!a && !metas.some((m) => m.id === a)))], [trades, metas])
   const ids = [...metas.map((m) => m.id), ...fileOnly]
+  const catIds = (c: Category) => ids.filter((id) => categoryOf(infos[id]) === c)
+  const ownIds = ids.filter((id) => !isView(infos[id]))
+  const ownLive = accounts.filter((a) => !isView(infos[a.id]))
   const groups = groupsOf(infos)
-  const tradable = accounts.filter((a) => a.tradable)
-  const currencies = [...new Set(accounts.map((a) => a.currency))]
-  const total = (f: (a: LiveAccount) => number) => accounts.reduce((s, a) => s + f(a), 0)
+  const tradable = ownLive.filter((a) => a.tradable)
   const positionsOf = (list: LiveAccount[]) => list.flatMap((a) => a.positions.map((p) => ({ ...p, acc: a })))
   const name = (id: string) => infos[id]?.label ?? id
+  const go = (t: 'overview' | Category, s = '') => { setTab(t); setSel(s); setMsg(null) }
 
-  // Tài khoản vừa thêm chưa có trong danh sách của bridge ngay; giữ tab của nó cho tới khi bridge báo về.
+  // Tài khoản vừa thêm chưa có trong danh sách của bridge ngay; giữ nó cho tới khi bridge báo về.
   const pending = useRef<string | null>(null)
   useEffect(() => {
     if (pending.current && ids.includes(pending.current)) pending.current = null
-    if (tab !== 'overview' && tab !== 'add' && tab !== pending.current && !ids.includes(tab)) setTab('overview')
-  }, [tab, ids.join()])
+    if (sel && sel !== 'add' && sel !== pending.current && !ids.includes(sel)) setSel('')
+    // Đổi nhóm của tài khoản đang mở (trong phần Nhãn): đi theo nó sang tab mới.
+    if (sel && ids.includes(sel) && tab !== 'overview' && categoryOf(infos[sel]) !== tab) setTab(categoryOf(infos[sel]))
+  }, [sel, tab, ids.join(), infos])
 
   async function run(fn: () => Promise<string>) {
     setBusy(true)
@@ -356,7 +464,7 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
     if (!(await ask(`Gỡ "${name(id)}" khỏi bridge? Bridge sẽ ngừng kết nối và xoá tài khoản này khỏi config.json. Lệnh đã có trong Nhật ký vẫn giữ nguyên.`, 'Gỡ tài khoản', true))) return
     run(async () => {
       await bridgePost('/accounts/remove', { account: id })
-      setTab('overview')
+      setSel('')
       bridge.refresh()
       return `Đã gỡ ${name(id)}.`
     })
@@ -373,148 +481,207 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
   )
 
   const tabs = (
-    <div className="tabs" role="tablist" aria-label="Tài khoản">
-      <button role="tab" aria-selected={tab === 'overview'} className={tab === 'overview' ? 'tab active' : 'tab'} onClick={() => setTab('overview')}>Tổng quan</button>
-      {ids.map((id) => (
-        <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'tab active' : 'tab'} onClick={() => setTab(id)}>
-          <span className={live(id) ? 'led on' : 'led'} /> {name(id)}
-          {infos[id]?.phase && <small>{infos[id].phase}</small>}
+    <div className="tabs" role="tablist" aria-label="Nhóm tài khoản">
+      <button role="tab" aria-selected={tab === 'overview'} className={tab === 'overview' ? 'tab active' : 'tab'} onClick={() => go('overview')}>Tổng quan</button>
+      {CATEGORIES.map((c) => (
+        <button key={c.id} role="tab" aria-selected={tab === c.id} className={tab === c.id ? `tab active cat-${c.id}` : `tab cat-${c.id}`} onClick={() => go(c.id)}>
+          {c.label} <small>{catIds(c.id).length}</small>
         </button>
       ))}
-      <button role="tab" aria-selected={tab === 'add'} className={tab === 'add' ? 'tab active add' : 'tab add'} onClick={() => setTab('add')}>+ Thêm tài khoản</button>
     </div>
   )
 
   const notice = msg && <p className={msg.ok ? 'notice' : 'notice bad'}>{msg.ok ? '✓' : '⚠'} {msg.text}</p>
 
-  // ---------- tab Thêm tài khoản
-  if (tab === 'add') {
+  /** Bảng tài khoản: dùng ở Tổng quan (mọi tài khoản của bạn) và ở từng nhóm. */
+  const table = (list: string[], showCat: boolean, total = true) => {
+    const liveList = list.map(live).filter((a): a is LiveAccount => !!a)
+    const ccys = [...new Set(liveList.map((a) => a.currency))]
+    const sum = (f: (a: LiveAccount) => number) => liveList.reduce((s, a) => s + f(a), 0)
     return (
-      <>
-        <h1>Tài khoản</h1>
-        {tabs}
-        <AddAccount bridge={bridge} groups={groups} onAdded={(id, info) => { pending.current = id; setInfo(id, info); setTab(id) }} />
-      </>
-    )
-  }
-
-  // ---------- tab một tài khoản
-  if (tab !== 'overview') {
-    const id = tab
-    const info = infos[id]
-    const a = live(id)
-    const meta = metas.find((m) => m.id === id)
-    const count = trades.filter((t) => t.account === id).length
-    return (
-      <>
-        <h1>Tài khoản</h1>
-        {tabs}
-        <section className="card">
-          <div className="card-head">
-            <h3>{name(id)} <span className="muted small">· {a ? `${a.login} · ${a.server}` : id}</span></h3>
-            {a && syncControls([a], 'Đưa lịch sử vào Nhật ký')}
-          </div>
-          {!meta && <p className="muted small">Tài khoản này chỉ có trong Nhật ký (nhập từ file báo cáo), chưa nối qua bridge.</p>}
-          {meta && !a && <p className="notice bad">⚠ Chưa kết nối: {meta.error || 'đang thử lại…'}</p>}
-          {a && (
-            <div className="tiles wide">
-              <Tile label="Số dư" value={money(a.balance, a.currency)} sub={`Đòn bẩy 1:${a.leverage}`} />
-              <Tile tone={a.profit} label="Equity" value={money(a.equity, a.currency)} sub={`Lãi/lỗ đang treo ${signed(a.profit)}`} />
-              <Tile label="Ký quỹ còn trống" value={money(a.marginFree, a.currency)} sub={`Đang dùng ${money(a.margin)}`} />
-            </div>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>Tài khoản</th><th>Nhãn</th>{showCat && <th>Nhóm</th>}<th className="num">Số dư</th><th className="num">Equity</th><th className="num">Đang treo</th><th className="num">Lệnh mở</th><th>Trạng thái</th></tr></thead>
+          <tbody>
+            {list.map((id) => {
+              const a = live(id)
+              const meta = metas.find((m) => m.id === id)
+              const info = infos[id]
+              return (
+                <tr key={id} className="clickable" onClick={() => go(categoryOf(info), id)}>
+                  <td><strong>{name(id)}</strong><div className="muted small">{a ? `${a.login} · ${a.server}` : id}</div></td>
+                  <td>{info && badges(info).filter((b) => b !== ROLE_TEXT[info.role]).map((b) => <span key={b} className="chip">{b}</span>)}{meta?.tradable && <span className="chip trade">Vào lệnh được</span>}</td>
+                  {showCat && <td><span className={`chip cat-${categoryOf(info)}`}>{CATEGORIES.find((c) => c.id === categoryOf(info))!.label}</span></td>}
+                  {a ? (
+                    <>
+                      <td className="num">{money(a.balance, a.currency)}</td>
+                      <td className="num strong">{money(a.equity, a.currency)}</td>
+                      <td className="num"><span className={a.profit > 0 ? 'pip pos' : a.profit < 0 ? 'pip neg' : 'pip'} />{signed(a.profit)}</td>
+                      <td className="num">{a.positions.length}</td>
+                      <td className="nowrap"><span className="led on" /> Đã nối</td>
+                    </>
+                  ) : <td colSpan={5} className="muted">{meta ? `⚠ ${meta.error || 'Chưa kết nối'}` : 'Chỉ có trong Nhật ký'}</td>}
+                </tr>
+              )
+            })}
+          </tbody>
+          {total && liveList.length > 1 && ccys.length === 1 && (
+            <tfoot>
+              <tr>
+                <td className="strong">Tổng</td><td />{showCat && <td />}
+                <td className="num strong">{money(sum((a) => a.balance), ccys[0])}</td>
+                <td className="num strong">{money(sum((a) => a.equity), ccys[0])}</td>
+                <td className="num strong">{signed(sum((a) => a.profit))}</td>
+                <td className="num strong">{positionsOf(liveList).length}</td><td />
+              </tr>
+            </tfoot>
           )}
-          <p className="muted small">{count} lệnh của tài khoản này trong Nhật ký.</p>
-          {notice}
-        </section>
-        <section className="card">
-          <h3>Nhãn tài khoản</h3>
-          {info && <InfoEditor info={info} groups={groups} onChange={(p) => setInfo(id, p)} />}
-          <p className="muted small">Nhãn lưu trên trình duyệt này. Nhóm dùng để gộp thống kê ở trang Thống kê và Chia sẻ.</p>
-        </section>
-        {info?.role === 'prop' && (
-          <section className="fund-embed">
-            <h2 className="section-title">Theo dõi quỹ</h2>
-            <FundPanel id={id} allTrades={trades} settings={settings} bridge={bridge} infos={infos} links={links} />
+        </table>
+        {total && liveList.length > 1 && ccys.length > 1 && <p className="muted small">Các tài khoản dùng tiền tệ khác nhau ({ccys.join(', ')}) nên không cộng tổng.</p>}
+      </div>
+    )
+  }
+
+  // ---------- Tổng quan: mọi tài khoản của bạn (không gồm Only view)
+  if (tab === 'overview') {
+    const viewCount = catIds('view').length
+    return (
+      <>
+        <h1>Tài khoản</h1>
+        {!bridge.online && <BridgeSetup />}
+        {(bridge.online || ids.length > 0) && tabs}
+        {bridge.online && ownIds.length === 0 && (
+          <section className="card empty">
+            <p>Chưa có tài khoản nào của bạn.</p>
+            <div className="actions" style={{ justifyContent: 'center' }}>{CATEGORIES.filter((c) => c.id !== 'view').map((c) => <button key={c.id} onClick={() => go(c.id, 'add')}>+ {c.label}</button>)}</div>
           </section>
         )}
-        {a && <PositionsTable rows={positionsOf([a])} infos={infos} busy={busy} onClose={closePosition} showAccount={false} />}
-        {a?.tradable && <OrderTicket accounts={[a]} trades={trades} settings={settings} onDone={bridge.refresh} infos={infos} />}
-        {meta && (
+        {ownIds.length > 0 && (
           <section className="card">
-            <h3>Gỡ tài khoản</h3>
-            <p className="muted small">Ngừng kết nối và xoá khỏi <code>config.json</code>. Lệnh trong Nhật ký và nhãn vẫn giữ.</p>
-            <button className="ghost danger" disabled={busy} onClick={() => removeAccount(id)}>Gỡ khỏi bridge</button>
+            <div className="card-head">
+              <h3>{ownLive.length}/{ownIds.filter((id) => metas.some((m) => m.id === id)).length} tài khoản của bạn đang kết nối</h3>
+              {syncControls(ownLive, 'Đưa lịch sử mọi tài khoản vào Nhật ký')}
+            </div>
+            {table(ownIds, true)}
+            {ownLive.some((a) => infos[a.id]?.role === 'prop') && ownLive.length > 1 && <p className="muted small">Tổng gồm cả vốn của quỹ, không phải tiền của bạn.</p>}
+            <p className="muted small">Bấm vào một dòng để xem chi tiết và sửa nhãn. Tài khoản Only view không tính vào đây.</p>
+            {notice}
           </section>
         )}
+        {viewCount > 0 && (
+          <section className="card row-card">
+            <div><strong>Đang theo dõi {viewCount} tài khoản Only view</strong><p className="muted small">Tài khoản của người khác, không tính vào tổng của bạn.</p></div>
+            <button onClick={() => go('view')}>Xem</button>
+          </section>
+        )}
+        {ownLive.length > 0 && <PositionsTable rows={positionsOf(ownLive)} infos={infos} busy={busy} onClose={closePosition} showAccount />}
+        {tradable.length > 0 && <OrderTicket accounts={tradable} trades={trades} settings={settings} onDone={bridge.refresh} infos={infos} />}
       </>
     )
   }
 
-  // ---------- tab Tổng quan
+  // ---------- một nhóm: Real, Quỹ, Copy trade, Only view
+  const cat = CATEGORIES.find((c) => c.id === tab)!
+  const list = catIds(cat.id)
+  const view = cat.id === 'view'
+  const sub = (
+    <div className="subtabs" role="tablist" aria-label={`Tài khoản ${cat.label}`}>
+      <button role="tab" aria-selected={sel === ''} className={sel === '' ? 'chip-tab active' : 'chip-tab'} onClick={() => setSel('')}>Tất cả</button>
+      {list.map((id) => (
+        <button key={id} role="tab" aria-selected={sel === id} className={sel === id ? 'chip-tab active' : 'chip-tab'} onClick={() => setSel(id)}>
+          <span className={live(id) ? 'led on' : 'led'} /> {name(id)}
+          {infos[id]?.env === 'demo' && <small>Demo</small>}{infos[id]?.phase && <small>{infos[id].phase}</small>}
+        </button>
+      ))}
+      <button role="tab" aria-selected={sel === 'add'} className={sel === 'add' ? 'chip-tab add active' : 'chip-tab add'} onClick={() => setSel('add')}>+ Thêm {view ? 'tài khoản theo dõi' : `tài khoản ${cat.label}`}</button>
+    </div>
+  )
+  const header = (<><h1>Tài khoản</h1>{tabs}<p className="muted cat-blurb">{cat.blurb}</p>{sub}</>)
+
+  if (sel === 'add') {
+    return (
+      <>
+        {header}
+        <AddAccount key={cat.id} role={cat.role} bridge={bridge} groups={groups} onAdded={(id, info) => { pending.current = id; setInfo(id, info); setSel(id) }} />
+      </>
+    )
+  }
+
+  if (sel === '') {
+    const liveList = list.map(live).filter((a): a is LiveAccount => !!a)
+    return (
+      <>
+        {header}
+        {!bridge.online && <BridgeSetup />}
+        {list.length === 0 ? (
+          <section className="card empty">
+            <p>{view ? 'Chưa theo dõi tài khoản nào.' : `Chưa có tài khoản ${cat.label} nào.`}</p>
+            <button className="primary" onClick={() => setSel('add')}>+ Thêm {view ? 'tài khoản theo dõi' : `tài khoản ${cat.label}`}</button>
+          </section>
+        ) : (
+          <section className="card">
+            <div className="card-head">
+              <h3>{liveList.length}/{list.length} tài khoản đang kết nối</h3>
+              {!view && syncControls(liveList, 'Đưa lịch sử vào Nhật ký')}
+            </div>
+            {table(list, false, !view)}
+            {view && <p className="muted small">Số liệu đọc trực tiếp từ MT5 bằng mật khẩu view, vài giây cập nhật một lần. Bấm vào một tài khoản để xem kết quả giao dịch và cách copy lệnh.</p>}
+            {notice}
+          </section>
+        )}
+        {liveList.length > 0 && <PositionsTable rows={positionsOf(liveList)} infos={infos} busy={busy} onClose={closePosition} showAccount />}
+      </>
+    )
+  }
+
+  // ---------- một tài khoản
+  const id = sel
+  const info = infos[id]
+  const a = live(id)
+  const meta = metas.find((m) => m.id === id)
+  const count = trades.filter((t) => t.account === id).length
   return (
     <>
-      <h1>Tài khoản</h1>
-      {!bridge.online && <BridgeSetup />}
-      {(bridge.online || ids.length > 0) && tabs}
-      {bridge.online && ids.length === 0 && (
-        <section className="card empty">
-          <p>Chưa có tài khoản nào.</p>
-          <button className="primary" onClick={() => setTab('add')}>+ Thêm tài khoản</button>
+      {header}
+      <section className="card">
+        <div className="card-head">
+          <h3>{name(id)} <span className="muted small">· {a ? `${a.login} · ${a.server}` : id}</span></h3>
+          {a && !view && syncControls([a], 'Đưa lịch sử vào Nhật ký')}
+        </div>
+        {!meta && <p className="muted small">Tài khoản này chỉ có trong Nhật ký (nhập từ file báo cáo), chưa nối qua bridge.</p>}
+        {meta && !a && <p className="notice bad">⚠ Chưa kết nối: {meta.error || 'đang thử lại…'}</p>}
+        {a && (
+          <div className="tiles wide">
+            <Tile label="Số dư" value={money(a.balance, a.currency)} sub={`Đòn bẩy 1:${a.leverage}`} />
+            <Tile tone={a.profit} label="Equity" value={money(a.equity, a.currency)} sub={`Lãi/lỗ đang treo ${signed(a.profit)}`} />
+            <Tile label="Ký quỹ còn trống" value={money(a.marginFree, a.currency)} sub={`Đang dùng ${money(a.margin)}`} />
+          </div>
+        )}
+        {!view && <p className="muted small">{count} lệnh của tài khoản này trong Nhật ký.</p>}
+        {notice}
+      </section>
+      {a && <PositionsTable rows={positionsOf([a])} infos={infos} busy={busy} onClose={closePosition} showAccount={false} />}
+      {view && a && <Performance id={id} currency={a.currency} serverOffset={settings.serverOffset} />}
+      {view && info && <CopyGuide id={id} info={info} links={links} onCopyFrom={onCopyFrom} />}
+      <section className="card">
+        <h3>Nhãn tài khoản</h3>
+        {info && <InfoEditor info={info} groups={groups} onChange={(p) => setInfo(id, p)} />}
+        <p className="muted small">Nhãn lưu trên trình duyệt này.{!view && ' Nhóm dùng để gộp thống kê ở trang Thống kê và Chia sẻ.'}</p>
+      </section>
+      {info?.role === 'prop' && (
+        <section className="fund-embed">
+          <h2 className="section-title">Theo dõi quỹ</h2>
+          <FundPanel id={id} allTrades={trades} settings={settings} bridge={bridge} infos={infos} links={links} />
         </section>
       )}
-      {ids.length > 0 && (
+      {a?.tradable && !view && <OrderTicket accounts={[a]} trades={trades} settings={settings} onDone={bridge.refresh} infos={infos} />}
+      {meta && (
         <section className="card">
-          <div className="card-head">
-            <h3>{accounts.length}/{metas.length} tài khoản đang kết nối</h3>
-            {syncControls(accounts, 'Đưa lịch sử mọi tài khoản vào Nhật ký')}
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead><tr><th>Tài khoản</th><th>Nhãn</th><th>Nhóm</th><th className="num">Số dư</th><th className="num">Equity</th><th className="num">Đang treo</th><th className="num">Lệnh mở</th><th>Trạng thái</th></tr></thead>
-              <tbody>
-                {ids.map((id) => {
-                  const a = live(id)
-                  const meta = metas.find((m) => m.id === id)
-                  const info = infos[id]
-                  return (
-                    <tr key={id} className="clickable" onClick={() => setTab(id)}>
-                      <td><strong>{name(id)}</strong><div className="muted small">{a ? `${a.login} · ${a.server}` : id}</div></td>
-                      <td>{info && badges(info).map((b) => <span key={b} className="chip">{b}</span>)}{meta?.tradable && <span className="chip trade">Vào lệnh được</span>}</td>
-                      <td>{info?.group || <span className="muted">–</span>}</td>
-                      {a ? (
-                        <>
-                          <td className="num">{money(a.balance, a.currency)}</td>
-                          <td className="num strong">{money(a.equity, a.currency)}</td>
-                          <td className="num"><span className={a.profit > 0 ? 'pip pos' : a.profit < 0 ? 'pip neg' : 'pip'} />{signed(a.profit)}</td>
-                          <td className="num">{a.positions.length}</td>
-                          <td className="nowrap"><span className="led on" /> Đã nối</td>
-                        </>
-                      ) : <td colSpan={5} className="muted">{meta ? `⚠ ${meta.error || 'Chưa kết nối'}` : 'Chỉ có trong Nhật ký'}</td>}
-                    </tr>
-                  )
-                })}
-              </tbody>
-              {accounts.length > 1 && currencies.length === 1 && (
-                <tfoot>
-                  <tr>
-                    <td className="strong">Tổng</td><td /><td />
-                    <td className="num strong">{money(total((a) => a.balance), currencies[0])}</td>
-                    <td className="num strong">{money(total((a) => a.equity), currencies[0])}</td>
-                    <td className="num strong">{signed(total((a) => a.profit))}</td>
-                    <td className="num strong">{positionsOf(accounts).length}</td><td />
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-          {accounts.length > 1 && currencies.length > 1 && <p className="muted small">Các tài khoản dùng tiền tệ khác nhau ({currencies.join(', ')}) nên không cộng tổng.</p>}
-          {accounts.some((a) => infos[a.id]?.role === 'prop') && accounts.length > 1 && <p className="muted small">Tổng gồm cả vốn của quỹ, không phải tiền của bạn.</p>}
-          <p className="muted small">Bấm vào một dòng để xem chi tiết và sửa nhãn.</p>
-          {notice}
+          <h3>Gỡ tài khoản</h3>
+          <p className="muted small">Ngừng kết nối và xoá khỏi <code>config.json</code>.{!view && ' Lệnh trong Nhật ký và nhãn vẫn giữ.'}</p>
+          <button className="ghost danger" disabled={busy} onClick={() => removeAccount(id)}>Gỡ khỏi bridge</button>
         </section>
       )}
-      {accounts.length > 0 && <PositionsTable rows={positionsOf(accounts)} infos={infos} busy={busy} onClose={closePosition} showAccount />}
-      {tradable.length > 0 && <OrderTicket accounts={tradable} trades={trades} settings={settings} onDone={bridge.refresh} infos={infos} />}
     </>
   )
 }

@@ -112,9 +112,9 @@ export default function LiteChat({ bridge, trades, infos, goFull }: Props) {
       {(items.length > 1 || !items.some((x) => isDuck(x.name))) && (
         <div className="lite-persona-pick" role="radiogroup" aria-label="Chọn nhân vật">
           {items.map((p) => (
-            <button key={p.id} role="radio" aria-checked={p.id === persona.id} className={p.id === persona.id ? 'chip mini active' : 'chip mini'} onClick={() => setPicked(p.id)}>{p.name}</button>
+            <button key={p.id} role="radio" aria-checked={p.id === persona.id} className={p.id === persona.id ? 'lchip mini active' : 'lchip mini'} onClick={() => setPicked(p.id)}>{p.name}</button>
           ))}
-          {!items.some((x) => isDuck(x.name)) && <button className="chip mini" onClick={addDuck}>+ {DUCK_NAME}</button>}
+          {!items.some((x) => isDuck(x.name)) && <button className="lchip mini" onClick={addDuck}>+ {DUCK_NAME}</button>}
         </div>
       )}
 

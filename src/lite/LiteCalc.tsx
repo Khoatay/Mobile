@@ -30,7 +30,7 @@ export default function LiteCalc({ settings, patch }: Props) {
         <div className="lite-step"><span>1</span>Bạn giao dịch gì?</div>
         <div className="lite-chips">
           {POPULAR.map((p) => (
-            <button key={p.symbol} className={symbol === p.symbol ? 'chip active' : 'chip'} aria-pressed={symbol === p.symbol} onClick={() => pick(p.symbol)}>
+            <button key={p.symbol} className={symbol === p.symbol ? 'lchip active' : 'lchip'} aria-pressed={symbol === p.symbol} onClick={() => pick(p.symbol)}>
               <strong>{p.symbol}</strong><small>{p.name}</small>
             </button>
           ))}
@@ -58,7 +58,7 @@ export default function LiteCalc({ settings, patch }: Props) {
         <div className="lite-step"><span>3</span>Nếu đoán sai, bạn chấp nhận mất bao nhiêu?</div>
         <div className="lite-chips three">
           {RISK_LEVELS.map((l) => (
-            <button key={l.pct} className={settings.riskPct === l.pct ? 'chip active' : 'chip'} aria-pressed={settings.riskPct === l.pct} onClick={() => patch({ riskPct: l.pct })}>
+            <button key={l.pct} className={settings.riskPct === l.pct ? 'lchip active' : 'lchip'} aria-pressed={settings.riskPct === l.pct} onClick={() => patch({ riskPct: l.pct })}>
               <strong>{l.label}</strong>
               <small>{money(settings.balance * l.pct / 100, ccy, 0)} · {l.pct}%</small>
             </button>
@@ -72,7 +72,7 @@ export default function LiteCalc({ settings, patch }: Props) {
         <div className="lite-step"><span>4</span>Cắt lỗ cách giá vào bao xa?</div>
         <div className="lite-chips three">
           {slPresets(symbol).map((p) => (
-            <button key={p.pips} className={sl === p.pips ? 'chip active' : 'chip'} aria-pressed={sl === p.pips} onClick={() => setSl(p.pips)}>
+            <button key={p.pips} className={sl === p.pips ? 'lchip active' : 'lchip'} aria-pressed={sl === p.pips} onClick={() => setSl(p.pips)}>
               <strong>{p.label}</strong><small>{p.pips} pip</small>
             </button>
           ))}
@@ -81,7 +81,7 @@ export default function LiteCalc({ settings, patch }: Props) {
         {sl > 0 && <p className="muted small">Tức là giá {name} đi ngược {priceMove(symbol, sl)} so với giá bạn vào thì lệnh tự đóng (stop loss).</p>}
         <div className="lite-rr">
           <span>Chốt lời gấp</span>
-          {[1, 2, 3].map((x) => <button key={x} className={rr === x ? 'chip mini active' : 'chip mini'} aria-pressed={rr === x} onClick={() => setRr(x)}>{x} lần</button>)}
+          {[1, 2, 3].map((x) => <button key={x} className={rr === x ? 'lchip mini active' : 'lchip mini'} aria-pressed={rr === x} onClick={() => setRr(x)}>{x} lần</button>)}
           <span>khoảng cắt lỗ</span>
         </div>
       </section>

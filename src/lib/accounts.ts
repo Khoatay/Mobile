@@ -1,6 +1,7 @@
 import type { AccountMeta, AccountType, LiveAccount } from './bridge'
 
-export type Role = 'own' | 'prop' | 'copy'
+/** 'view': tài khoản của người khác, theo dõi bằng mật khẩu view (investor) họ chia sẻ. */
+export type Role = 'own' | 'prop' | 'copy' | 'view'
 export type Env = 'real' | 'demo'
 
 /** Nhãn người dùng gắn cho một tài khoản. Lưu trong trình duyệt, theo số tài khoản. */
@@ -18,7 +19,20 @@ export interface AccountInfo {
   currency?: string
 }
 
-export const ROLE_TEXT: Record<Role, string> = { own: 'Tài khoản riêng', prop: 'Quỹ', copy: 'Copy trade (nguồn)' }
+export const ROLE_TEXT: Record<Role, string> = { own: 'Tài khoản riêng', prop: 'Quỹ', copy: 'Copy trade (nguồn)', view: 'Only view (người khác)' }
+
+/** Bốn nhóm ở trang Tài khoản. Real gồm cả tài khoản demo của bạn ở mọi broker. */
+export type Category = 'real' | 'prop' | 'copy' | 'view'
+export const CATEGORIES: { id: Category; label: string; role: Role; blurb: string }[] = [
+  { id: 'real', label: 'Real', role: 'own', blurb: 'Tài khoản của bạn ở các broker, cả real và demo.' },
+  { id: 'prop', label: 'Quỹ', role: 'prop', blurb: 'Tài khoản thi quỹ và tài khoản đã được cấp vốn.' },
+  { id: 'copy', label: 'Copy trade', role: 'copy', blurb: 'Tài khoản dùng để chép lệnh.' },
+  { id: 'view', label: 'Only view', role: 'view', blurb: 'Tài khoản của người khác, theo dõi trực tiếp bằng mật khẩu view họ chia sẻ. Không tính vào tiền, thống kê hay nhật ký của bạn.' },
+]
+export const categoryOf = (info: Pick<AccountInfo, 'role'> | undefined): Category =>
+  info?.role === 'prop' ? 'prop' : info?.role === 'copy' ? 'copy' : info?.role === 'view' ? 'view' : 'real'
+/** Tài khoản Only view không phải của bạn: không cộng vào số dư, thống kê, bảo vệ hay nhật ký. */
+export const isView = (info: Pick<AccountInfo, 'role'> | undefined) => info?.role === 'view'
 export const PHASES = ['Vòng 1', 'Vòng 2', 'Vòng 3', 'Đã cấp vốn', 'Instant funding']
 export const BROKERS = ['Exness', 'FTMO', 'The5ers', 'TenTrade', 'IC Markets', 'XM', 'Pepperstone', 'FundedNext']
 export const GROUP_SUGGESTIONS = ['Real', 'Demo', 'Quỹ FTMO', 'Quỹ The5ers', 'Quỹ TenTrade', 'Copy trade']
@@ -30,7 +44,7 @@ export function defaultInfo(id: string, meta?: Pick<AccountMeta, 'label' | 'type
     label: meta?.label || id,
     broker: '',
     env: t === 'demo' ? 'demo' : 'real',
-    role: t === 'prop' ? 'prop' : t === 'copy' ? 'copy' : 'own',
+    role: t === 'prop' ? 'prop' : t === 'copy' ? 'copy' : t === 'view' ? 'view' : 'own',
     phase: '',
     group: '',
     note: '',
@@ -39,6 +53,7 @@ export function defaultInfo(id: string, meta?: Pick<AccountMeta, 'label' | 'type
 
 /** Ngược lại: loại tài khoản gửi cho bridge khi thêm từ app. */
 export function bridgeType(info: Pick<AccountInfo, 'env' | 'role'>): AccountType {
+  if (info.role === 'view') return 'view'
   if (info.env === 'demo') return 'demo'
   return info.role === 'prop' ? 'prop' : info.role === 'copy' ? 'copy' : 'real'
 }

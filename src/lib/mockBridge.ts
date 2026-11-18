@@ -26,6 +26,8 @@ const accounts: Acc[] = [
   { id: '520011', label: 'FTMO 100K', type: 'prop', tradable: false, currency: 'USD', leverage: 100, base: 100000, scale: 2.5, slice: 1, terminal: 'C:\\Program Files\\FTMO MetaTrader 5\\terminal64.exe', positions: [], connected: true },
   { id: '730045', label: 'The5ers 100K', type: 'prop', tradable: false, currency: 'USD', leverage: 100, base: 100000, scale: 2, slice: 2, terminal: 'C:\\Program Files\\The5ers MetaTrader 5\\terminal64.exe', positions: [], connected: true },
   { id: '411902', label: 'Copy trade', type: 'copy', tradable: false, currency: 'USD', leverage: 200, base: 5000, scale: 0.3, slice: 3, terminal: 'C:\\Program Files\\MT5 Copy\\terminal64.exe', positions: [], connected: true },
+  { id: '88120347', label: 'Anh Nam (Exness)', type: 'view', tradable: false, currency: 'USD', leverage: 500, base: 3000, scale: 0.4, slice: 1, terminal: 'C:\\Program Files\\MT5 View 1\\terminal64.exe', positions: [], connected: true },
+  { id: '77019234', label: 'Chị Lan (vàng)', type: 'view', tradable: false, currency: 'USD', leverage: 200, base: 10000, scale: 0.8, slice: 3, terminal: 'C:\\Program Files\\MT5 View 2\\terminal64.exe', positions: [], connected: true },
 ]
 const FREE_TERMINAL = 'C:\\Program Files\\MT5 Moi\\terminal64.exe'
 
@@ -60,6 +62,9 @@ function openPos(acc: Acc, ticket: number, symbol: string, side: 'buy' | 'sell',
 openPos(accounts[0], 9001, 'XAUUSD', 'buy', 0.02, 3, 80, 160)
 openPos(accounts[1], 9101, 'EURUSD', 'sell', 1.0, 5, 25, 50)
 openPos(accounts[3], 9301, 'GBPJPY', 'buy', 0.1, 20, null, null)
+openPos(accounts[4], 9401, 'XAUUSD', 'sell', 0.3, 2, 60, 120)
+openPos(accounts[5], 9501, 'XAUUSD', 'buy', 0.5, 1, 50, 150)
+openPos(accounts[5], 9502, 'EURUSD', 'buy', 0.8, 6, 20, 40)
 
 function refreshPositions(acc: Acc) {
   for (const p of acc.positions) {
@@ -288,7 +293,12 @@ export async function mockGet(path: string): Promise<unknown> {
   switch (url.pathname) {
     case '/status': return { accounts: accounts.map(meta), telegram: { connected: true, error: '', channels: [...new Set(messages.map((m) => m.channel))], postTargets: ['Nhóm cộng đồng (xem trước)'] } }
     case '/accounts': return accounts.map((a) => (a.connected ? live(a) : meta(a)))
-    case '/history': return historyOf(pick())
+    case '/history': {
+      // Như bridge thật: chỉ lấy deal trong N ngày gần nhất (giờ máy chủ).
+      const h = historyOf(pick()), days = Number(q('days')) || 90
+      const from = (Date.now() + OFFSET * HOUR - days * 86_400_000) / 1000
+      return { deals: h.deals.filter((d) => d.time >= from), orders: h.orders }
+    }
     case '/prices': return Object.fromEntries(q('symbols').split(',').filter((s) => parseSymbol(s)).map((s) => [s, tick(s)]))
     case '/candles': return candles(q('symbol'), q('tf') || 'H1', Math.min(Number(q('count')) || 300, 20000))
     case '/telegram/messages': return messages.filter((m) => m.date > Number(q('after') || 0))
@@ -371,7 +381,7 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
     const owner = accounts.find((a) => a.terminal === terminal)
     if (owner) throw new Error(`Bản MT5 này đang dùng cho "${owner.label}". Mỗi tài khoản cần một bản MT5 riêng`)
     const type = (body.type as AccountType) || 'real'
-    accounts.push({ id, label: String(body.label || id), type, tradable: !!body.allow_trading, currency: 'USD', leverage: 100, base: type === 'prop' ? 100000 : 10000, scale: 1, slice: 0, terminal, positions: [], connected: true })
+    accounts.push({ id, label: String(body.label || id), type, tradable: !!body.allow_trading && type !== 'view', currency: 'USD', leverage: 100, base: type === 'prop' ? 100000 : 10000, scale: 1, slice: 0, terminal, positions: [], connected: true })
     balances.set(id, type === 'prop' ? 100000 : 10000)
     return { id }
   }
@@ -466,7 +476,7 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
 /** Nạp sẵn dữ liệu cho lần mở đầu tiên: Nhật ký đã đồng bộ, nhãn và nhóm tài khoản, vài khoản thu chi. */
 export function seed() {
   const put = (k: string, v: unknown) => { try { if (localStorage.getItem(k) == null) localStorage.setItem(k, JSON.stringify(v)) } catch { /* bộ nhớ bị chặn */ } }
-  const trades = accounts.flatMap((a) => { const h = historyOf(a); return dealsToTrades(h.deals, h.orders, a.id) })
+  const trades = accounts.filter((a) => a.type !== 'view').flatMap((a) => { const h = historyOf(a); return dealsToTrades(h.deals, h.orders, a.id) })
   const setups = ['Breakout', 'Pullback', 'Range']
   trades.forEach((t, i) => { t.setup = setups[i % 3] })
   put('fx.trades', trades)
@@ -488,7 +498,7 @@ export function seed() {
     { id: 's7', date: day(6), flow: 'in', category: 'affiliate', amount: 90, note: 'Hoa hồng giới thiệu' },
   ]
   // Các lần nạp/rút của tài khoản riêng, cùng id với nút "Lấy nạp/rút từ MT5" nên bấm lại không bị trùng.
-  for (const a of accounts.filter((x) => x.type !== 'prop')) ledger.push(...balanceDealsToEntries(historyOf(a).deals, a.id, a.label))
+  for (const a of accounts.filter((x) => x.type !== 'prop' && x.type !== 'view')) ledger.push(...balanceDealsToEntries(historyOf(a).deals, a.id, a.label))
   put('fx.ledger', ledger)
   const day0 = (d: number) => new Date(T0 + d * 86_400_000).toISOString().slice(0, 10)
   // Ảnh mẫu vẽ bằng SVG (khung xem trước chặn ảnh từ trang khác).

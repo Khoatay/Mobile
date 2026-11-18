@@ -6,7 +6,7 @@ import { useBrandPack } from './lib/brandpack'
 import { EDITION } from './lib/edition'
 import { brandName, logoOf } from './lib/brand'
 import { partnerLinks } from './lib/partners'
-import { resolveInfos, type AccountInfo } from './lib/accounts'
+import { isView, resolveInfos, type AccountInfo } from './lib/accounts'
 import { PREVIEW, useBridge, useTelegramMessages } from './lib/bridge'
 import { DEFAULT_PROFILE, type Profile } from './lib/share'
 import { usePersistent, useSettings, useTrades } from './lib/store'
@@ -94,6 +94,10 @@ export default function App() {
   const infos = useMemo(() => resolveInfos(tradeAccounts, storedInfo, bridge.metas, bridge.accounts), [tradeAccounts, storedInfo, bridge.metas, bridge.accounts])
   const setInfo = (id: string, p: Partial<AccountInfo>) => setStoredInfo((all) => ({ ...all, [id]: { ...all[id], ...p } }))
   const labels = useMemo(() => Object.fromEntries(Object.entries(infos).map(([id, i]) => [id, i.label])), [infos])
+  // Tài khoản Only view là của người khác: các trang về tiền, bảo vệ, chia sẻ và AI chỉ thấy tài khoản của bạn.
+  const ownBridge = useMemo(() => ({ ...bridge, accounts: bridge.accounts.filter((a) => !isView(infos[a.id])), metas: bridge.metas.filter((m) => !isView(infos[m.id])) }), [bridge, infos])
+  // Bấm "Copy lệnh của người này" ở trang Tài khoản: mở trang Copy lệnh với tài khoản đó làm nguồn.
+  const [copyFrom, setCopyFrom] = useState('')
 
   // Ghi lại tiền tệ của tài khoản khi đọc được từ MT5, để vẫn biết khi bridge tắt.
   useEffect(() => {
@@ -107,7 +111,7 @@ export default function App() {
     return (
       <>
         {previewBar}
-        <LiteApp settings={settings} patch={patchSettings} trades={trades} setTrades={setTrades} bridge={bridge} infos={infos} user={user} profile={profile} pack={pack} links={links}
+        <LiteApp settings={settings} patch={patchSettings} trades={trades} setTrades={setTrades} bridge={ownBridge} infos={infos} user={user} profile={profile} pack={pack} links={links}
           goFull={(t) => { if (t && GROUPS.some((g) => g.tabs.some(([id]) => id === t))) setTab(t as Tab); setMode('full'); window.scrollTo(0, 0) }} />
       </>
     )
@@ -157,21 +161,21 @@ export default function App() {
         {tab === 'calc' && <Calculator settings={settings} patch={patchSettings} auto={autoQuotes} />}
         {tab === 'journal' && <Journal trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} labels={labels} />}
         {tab === 'stats' && <Dashboard trades={trades} settings={settings} infos={infos} goJournal={() => setTab('journal')} />}
-        {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} infos={infos} goAccounts={() => setTab('account')} links={links} />}
-        {tab === 'account' && <Account bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} infos={infos} setInfo={setInfo} links={links} />}
+        {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={ownBridge} infos={infos} goAccounts={() => setTab('account')} links={links} />}
+        {tab === 'account' && <Account onCopyFrom={(id) => { setCopyFrom(id); setTab('copier') }} bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} infos={infos} setInfo={setInfo} links={links} />}
         {tab === 'signals' && (locked.has('signals') ? <ProLockPage feature={lockOf('signals')} onOpenPro={() => setTab('pro')} /> : <Signals bridge={bridge} settings={settings} messages={messages} />)}
-        {tab === 'guard' && (locked.has('guard') ? <ProLockPage feature={lockOf('guard')} onOpenPro={() => setTab('pro')} /> : <Guard bridge={bridge} trades={trades} settings={settings} infos={infos} />)}
-        {tab === 'copier' && (locked.has('copier') ? <ProLockPage feature={lockOf('copier')} onOpenPro={() => setTab('pro')} /> : <Copier bridge={bridge} infos={infos} />)}
+        {tab === 'guard' && (locked.has('guard') ? <ProLockPage feature={lockOf('guard')} onOpenPro={() => setTab('pro')} /> : <Guard bridge={ownBridge} trades={trades} settings={settings} infos={infos} />)}
+        {tab === 'copier' && (locked.has('copier') ? <ProLockPage feature={lockOf('copier')} onOpenPro={() => setTab('pro')} /> : <Copier bridge={bridge} infos={infos} presetMaster={copyFrom} onPresetUsed={() => setCopyFrom('')} />)}
         {tab === 'learn' && (locked.has('learn') ? <ProLockPage feature={lockOf('learn')} onOpenPro={() => setTab('pro')} /> : <Learn bridge={bridge} />)}
         {tab === 'ai' && (locked.has('ai') ? <ProLockPage feature={lockOf('ai')} onOpenPro={() => setTab('pro')} /> : <Analyze bridge={bridge} settings={settings} shareLocked={featureLocked('copy-ai')} onShare={(d) => { if (featureLocked('copy-ai')) { setTab('pro'); return } setDraft(d); setTab('share') }} />)}
         {tab === 'news' && <News bridge={bridge} messages={messages} />}
-        {tab === 'ledger' && <Ledger bridge={bridge} settings={settings} labels={labels} infos={infos} />}
-        {tab === 'share' && <Share bridge={bridge} trades={trades} settings={settings} profile={profile} labels={labels} infos={infos} user={user} messages={messages} locked={featureLocked} onOpenPro={() => setTab('pro')} draft={draft} onDraftUsed={() => setDraft(null)} autopost={autopost} />}
+        {tab === 'ledger' && <Ledger bridge={ownBridge} settings={settings} labels={labels} infos={infos} />}
+        {tab === 'share' && <Share bridge={ownBridge} trades={trades} settings={settings} profile={profile} labels={labels} infos={infos} user={user} messages={messages} locked={featureLocked} onOpenPro={() => setTab('pro')} draft={draft} onDraftUsed={() => setDraft(null)} autopost={autopost} />}
         {tab === 'offers' && <Offers links={links} bridge={bridge} disclaimer={profile.disclaimer} pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'shop' && <Shop pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'community' && <Community pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'profile' && <ProfilePage user={user} setUser={setUser} trades={trades} />}
-        {tab === 'chat' && <Chat bridge={bridge} trades={trades} infos={infos} />}
+        {tab === 'chat' && <Chat bridge={ownBridge} trades={trades} infos={infos} />}
         {tab === 'track' && <Track trades={trades} infos={infos} profile={profile} links={links} currency={settings.accountCcy} />}
         {tab === 'guides' && <Guides links={links} />}
         {tab === 'me' && <Personalize profile={profile} setProfile={setProfile} canEdit={canEdit} />}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Field, Num } from '../components/Field'
 import { ask } from '../lib/ask'
-import type { InfoMap } from '../lib/accounts'
+import { isView, type InfoMap } from '../lib/accounts'
 import { copyVolume, type AutomationSnapshot, type CopierConfig, type CopyFollower } from '../lib/automation'
 import { bridgePost, type BridgeState } from '../lib/bridge'
 import { BridgeSetup } from './Account'
@@ -10,11 +10,20 @@ import { useAutomation } from './Guard'
 const MODE_TEXT = { multiplier: 'Nhân khối lượng nguồn', balance: 'Theo tỷ lệ số dư', fixed: 'Lot cố định' }
 const errText = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
 
-export default function Copier({ bridge, infos }: { bridge: BridgeState; infos: InfoMap }) {
+/** `presetMaster`: mở từ trang Tài khoản (nút "Copy lệnh của người này"), chọn sẵn tài khoản nguồn. */
+export default function Copier({ bridge, infos, presetMaster = '', onPresetUsed }: { bridge: BridgeState; infos: InfoMap; presetMaster?: string; onPresetUsed?: () => void }) {
   const { snap, setSnap, err } = useAutomation(bridge.online)
   const [cfg, setCfg] = useState<CopierConfig | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   useEffect(() => { if (snap && !cfg) setCfg(snap.copier) }, [snap])
+  useEffect(() => {
+    if (!cfg || !presetMaster) return
+    if (cfg.master !== presetMaster) {
+      setCfg({ ...cfg, master: presetMaster, followers: cfg.followers.filter((f) => f.account !== presetMaster) })
+      setMsg({ ok: true, text: `Đã chọn "${infos[presetMaster]?.label ?? presetMaster}" làm tài khoản nguồn. Thêm tài khoản nhận của bạn rồi bấm Bật copy lệnh.` })
+    }
+    onPresetUsed?.()
+  }, [cfg, presetMaster])
   const name = (id: string) => infos[id]?.label ?? id
   const accounts = bridge.accounts
 
@@ -56,7 +65,7 @@ export default function Copier({ bridge, infos }: { bridge: BridgeState; infos: 
             <span className="muted small">Tài khoản nguồn</span>
             <select value={cfg.master} onChange={(e) => setCfg({ ...cfg, master: e.target.value, followers: cfg.followers.filter((f) => f.account !== e.target.value) })}>
               <option value="">Chọn…</option>
-              {accounts.map((a) => <option key={a.id} value={a.id}>{name(a.id)}</option>)}
+              {accounts.map((a) => <option key={a.id} value={a.id}>{name(a.id)}{isView(infos[a.id]) ? ' (Only view)' : ''}</option>)}
             </select>
             {master && <span className="muted small">Số dư {master.balance.toLocaleString('en-US')} {master.currency}</span>}
           </div>
@@ -86,7 +95,7 @@ export default function Copier({ bridge, infos }: { bridge: BridgeState; infos: 
             <div className="actions">
               <select aria-label="Thêm tài khoản nhận" value="" onChange={(e) => { if (e.target.value) setCfg({ ...cfg, followers: [...cfg.followers, { account: e.target.value, mode: 'balance', value: 1, reverse: false }] }) }} style={{ width: 'auto' }}>
                 <option value="">+ Thêm tài khoản nhận…</option>
-                {accounts.filter((a) => a.id !== cfg.master && !cfg.followers.some((f) => f.account === a.id)).map((a) => <option key={a.id} value={a.id}>{name(a.id)}</option>)}
+                {accounts.filter((a) => a.id !== cfg.master && !isView(infos[a.id]) && !cfg.followers.some((f) => f.account === a.id)).map((a) => <option key={a.id} value={a.id}>{name(a.id)}</option>)}
               </select>
             </div>
           </div>
@@ -102,6 +111,7 @@ export default function Copier({ bridge, infos }: { bridge: BridgeState; infos: 
           <li>Tài khoản đang bị Bảo vệ khoá sẽ không nhận lệnh mới.</li>
           <li>Mỗi lệnh chép mang ghi chú <code>FXD#số lệnh nguồn</code>; đừng sửa ghi chú này trên MT5.</li>
           <li>Một số quỹ cấm hoặc giới hạn việc copy lệnh giữa nhiều tài khoản. Đọc điều khoản của quỹ trước khi bật.</li>
+          <li>Nguồn là tài khoản Only view (của người khác): chỉ chép khi họ đồng ý chia sẻ. Lệnh chép trễ vài giây so với họ nên giá có thể khác; thử trên tài khoản demo trước.</li>
         </ul>
       </section>
 

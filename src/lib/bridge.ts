@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 export const BRIDGE_URL = 'http://127.0.0.1:8787'
 
-export type AccountType = 'real' | 'prop' | 'copy' | 'demo'
-export const ACCOUNT_TYPE: Record<AccountType, string> = { real: 'Thật', prop: 'Quỹ', copy: 'Copy (nguồn)', demo: 'Demo' }
+export type AccountType = 'real' | 'prop' | 'copy' | 'demo' | 'view'
+export const ACCOUNT_TYPE: Record<AccountType, string> = { real: 'Thật', prop: 'Quỹ', copy: 'Copy (nguồn)', demo: 'Demo', view: 'Only view' }
 
 /** Thông tin khai báo của một tài khoản trong config.json của bridge, kèm trạng thái kết nối. */
 export interface AccountMeta { id: string; label: string; type: AccountType; tradable: boolean; connected: boolean; error: string }
