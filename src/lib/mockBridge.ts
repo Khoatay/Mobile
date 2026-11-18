@@ -6,7 +6,7 @@ import { BLANK_PERSONA, DUCK_PERSONA, PERSONA_TEMPLATES, type ChatTurn, type Per
  * Mọi thứ nằm trong bộ nhớ của trang; tải lại trang là về như cũ.
  */
 import type { AccountInfo } from './accounts'
-import type { AccountMeta, AccountType, Candle, LiveAccount, LivePosition, Mt5Deal, Mt5Order, TgMessage } from './bridge'
+import type { AccountMeta, AccountType, Candle, LiveAccount, LivePosition, Mt5Deal, Mt5Order, PendingOrder, TgMessage } from './bridge'
 import type { CalEvent } from './news'
 import { demoTrades } from './demo'
 import { contractSize, parseSymbol, SAMPLE_QUOTES, usdValue } from './forex'
@@ -108,6 +108,14 @@ const balances = new Map(accounts.map((a) => {
   return [a.id, Number(((a.type === 'prop' ? a.base : 0) + net).toFixed(2))]
 }))
 
+// Lệnh chờ mẫu cho tài khoản Exness (xem trước).
+const pending: Record<string, PendingOrder[]> = {
+  '218551005': [
+    { ticket: 7001, symbol: 'XAUUSDm', type: 'buy_limit', volume: 0.02, price: 2588.5, stopLimit: 0, sl: 2581, tp: 2610, time: Math.floor(Date.now() / 1000) - 5400 },
+    { ticket: 7002, symbol: 'EURUSDm', type: 'sell_stop', volume: 0.05, price: 1.0835, stopLimit: 0, sl: 0, tp: 1.079, time: Math.floor(Date.now() / 1000) - 1800 },
+  ],
+}
+const baskets: Record<string, BasketConfig> = {}
 function live(acc: Acc): LiveAccount {
   refreshPositions(acc)
   const balance = balances.get(acc.id) ?? acc.base
@@ -119,7 +127,7 @@ function live(acc: Acc): LiveAccount {
   return {
     ...meta(acc), login: Number(acc.id), server: acc.type === 'prop' ? `${acc.label.split(' ')[0]}-Server` : 'Exness-MT5Real29', name: 'Xem trước',
     currency: acc.currency, balance, equity: Number((balance + profit).toFixed(2)), profit, margin, marginFree: Number((balance + profit - margin).toFixed(2)),
-    leverage: acc.leverage, positions: acc.positions.map((p) => ({ ...p })),
+    leverage: acc.leverage, positions: acc.positions.map((p) => ({ ...p })), orders: (pending[acc.id] ?? []).map((o) => ({ ...o })),
   }
 }
 const meta = (a: Acc): AccountMeta => ({ id: a.id, label: a.label, type: a.type, tradable: a.tradable, connected: a.connected, error: a.connected ? '' : 'MT5 từ chối kết nối: (-6, Authorization failed)' })
@@ -274,7 +282,7 @@ function mockAnalysis(f: MarketFeatures): Analysis {
 }
 
 // ---------- tự động hoá giả lập (bảo vệ, cảnh báo, copy lệnh)
-import type { AutoEvent, AutomationSnapshot, CopierConfig, GuardConfig, GuardStops } from './automation'
+import type { AutoEvent, AutomationSnapshot, BasketConfig, CopierConfig, GuardConfig, GuardStops } from './automation'
 const auto = {
   guards: {} as Record<string, GuardConfig>,
   locks: {} as AutomationSnapshot['locks'],
@@ -323,7 +331,8 @@ function autoSnapshot(): AutomationSnapshot {
     }
     states[a.id] = { stops, ref_ok: true, day_profit: Number(dayProfit.toFixed(2)), profit_used: g.profit_limit ? dayProfit / g.profit_limit : 0, day_loss: Number(dayLoss.toFixed(2)), used, floor_used: floorUsed, level, equity: l.equity, currency: a.currency, consec_losses: a.id === '520011' ? 2 : 0, trades: a.id === '520011' ? 3 : 1, positions: a.positions.length, tradable: a.tradable, error: '', updated: Date.now() }
   }
-  return { guards: auto.guards, states, locks: auto.locks, events: auto.events.slice(0, 100), alerts: auto.alerts, copier: auto.copier, copyState: { started: 0, last: Date.now(), error: '' }, telegram: true }
+  const basketStates = Object.fromEntries(Object.entries(baskets).filter(([, b]) => b.enabled).map(([id, b]) => { const l = live(find(id)); const amt = (m: string, v: number) => (m === 'pct' ? (l.balance * v) / 100 : v); return [id, { floating: Number((l.equity - l.balance).toFixed(2)), tp: amt(b.tp_mode, b.tp_value), sl: amt(b.sl_mode, b.sl_value), positions: l.positions.length, currency: l.currency, error: '', updated: Date.now() }] }))
+  return { baskets, basketStates, guards: auto.guards, states, locks: auto.locks, events: auto.events.slice(0, 100), alerts: auto.alerts, copier: auto.copier, copyState: { started: 0, last: Date.now(), error: '' }, telegram: true }
 }
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -407,6 +416,23 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
       }
     }
     return { order: ticket, deal: ticket, price, volume }
+  }
+  if (path === '/close_all') {
+    const acc = find(body.account)
+    if (!acc.tradable) throw new Error('Tài khoản này chưa bật "allow_trading" trong config.json')
+    const n = acc.positions.length
+    refreshPositions(acc)
+    balances.set(acc.id, (balances.get(acc.id) ?? acc.base) + acc.positions.reduce((s, p) => s + p.profit, 0))
+    acc.positions = []
+    return { closed: n, errors: [] }
+  }
+  if (path === '/order/cancel') { const id = String(body.account); pending[id] = (pending[id] ?? []).filter((o) => o.ticket !== Number(body.ticket)); return { order: body.ticket } }
+  if (path === '/orders/cancel_all') { const id = String(body.account); const n = (pending[id] ?? []).length; pending[id] = []; return { cancelled: n, errors: [] } }
+  if (path === '/automation/basket') {
+    const c = body.config as BasketConfig
+    if (c.enabled && !c.tp_value && !c.sl_value) throw new Error('Đặt ít nhất một mức: tổng lãi hoặc tổng lỗ')
+    baskets[String(body.account)] = c
+    return autoSnapshot()
   }
   if (path === '/close') {
     const acc = find(body.account)

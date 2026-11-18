@@ -81,6 +81,9 @@ def find_terminals():
 
 # ----------------------------------------------------------------------------- MT5
 
+# Kiểu lệnh chờ của MT5 (ORDER_TYPE_*): 2 buy limit, 3 sell limit, 4 buy stop, 5 sell stop, 6 buy stop limit, 7 sell stop limit.
+PENDING_TYPES = {2: "buy_limit", 3: "sell_limit", 4: "buy_stop", 5: "sell_stop", 6: "buy_stop_limit", 7: "sell_stop_limit"}
+
 class Mt5:
     """Mọi lời gọi tới thư viện MetaTrader5 đi qua một khoá, vì thư viện không an toàn đa luồng."""
 
@@ -147,11 +150,19 @@ class Mt5:
                     "sl": p.sl, "tp": p.tp, "profit": p.profit, "swap": p.swap, "time": p.time,
                     "comment": getattr(p, "comment", ""), "magic": getattr(p, "magic", 0),
                 })
+            orders = []
+            for o in mt5.orders_get() or ():
+                orders.append({
+                    "ticket": o.ticket, "symbol": o.symbol, "type": PENDING_TYPES.get(o.type, str(o.type)),
+                    "volume": getattr(o, "volume_current", 0) or getattr(o, "volume_initial", 0), "price": o.price_open,
+                    "stopLimit": getattr(o, "price_stoplimit", 0), "sl": o.sl, "tp": o.tp, "time": o.time_setup,
+                    "comment": getattr(o, "comment", ""),
+                })
             return {
                 "login": a.login, "server": a.server, "name": a.name, "currency": a.currency,
                 "balance": a.balance, "equity": a.equity, "profit": a.profit,
                 "margin": a.margin, "marginFree": a.margin_free, "leverage": a.leverage,
-                "positions": positions,
+                "positions": positions, "orders": orders,
             }
 
     def history(self, days):
@@ -303,6 +314,30 @@ class Mt5:
                 "deviation": 20, "magic": 20261115, "comment": "Golden Duck close",
                 "type_time": mt5.ORDER_TIME_GTC, "type_filling": self._filling(info),
             })
+
+    def cancel(self, ticket):
+        """Huỷ một lệnh chờ (limit/stop)."""
+        with self.lock:
+            self._tradable()
+            mt5 = self.mt5
+            found = mt5.orders_get(ticket=int(ticket)) or ()
+            if not found:
+                raise ValueError(f"Không thấy lệnh chờ số {ticket}")
+            o = found[0]
+            return self._send({"action": mt5.TRADE_ACTION_REMOVE, "order": o.ticket, "symbol": o.symbol})
+
+    def cancel_all(self):
+        """Huỷ mọi lệnh chờ. Không dừng giữa chừng nếu một lệnh lỗi."""
+        with self.lock:
+            self._tradable()
+            done, errors = 0, []
+            for o in self.mt5.orders_get() or ():
+                try:
+                    self.cancel(o.ticket)
+                    done += 1
+                except Exception as e:
+                    errors.append(f"{o.symbol} #{o.ticket}: {e}")
+            return {"cancelled": done, "errors": errors}
 
     def close_all(self, reason="Golden Duck guard"):
         """Đóng mọi lệnh đang mở. Trả về số lệnh đã đóng và lỗi nếu có (không dừng giữa chừng)."""
@@ -996,6 +1031,20 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot, link=No
                 self.answer(lambda: registry.remove(str(body["account"])))
             elif url.path == "/telegram/send":
                 self.answer(lambda: send_post(body))
+            elif url.path == "/close_all":
+                def close_everything():
+                    acc = pick({"account": str(body["account"])})
+                    r = acc.call("close_all", timeout=120)
+                    if body.get("cancel_pending"):
+                        r.update(acc.call("cancel_all", timeout=120))
+                    return r
+                self.answer(close_everything)
+            elif url.path == "/order/cancel":
+                self.answer(lambda: pick({"account": str(body["account"])}).call("cancel", int(body["ticket"])))
+            elif url.path == "/orders/cancel_all":
+                self.answer(lambda: pick({"account": str(body["account"])}).call("cancel_all", timeout=120))
+            elif url.path == "/automation/basket":
+                self.answer(lambda: auto.set_basket(body))
             elif url.path == "/close":
                 self.answer(lambda: pick({"account": str(body["account"])}).call("close", int(body["ticket"])))
             else:

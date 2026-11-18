@@ -30,10 +30,13 @@ export interface GuardState {
   stops?: GuardStops; day_ref?: number; ref_ok?: boolean
   day_profit?: number; profit_used?: number
 }
-export interface AutoEvent { at: number; kind: 'warn' | 'lock' | 'unlock' | 'news' | 'copy' | 'copy-error' | 'stop'; account: string; label: string; text: string }
+export interface AutoEvent { at: number; kind: 'warn' | 'lock' | 'unlock' | 'news' | 'copy' | 'copy-error' | 'stop' | 'basket'; account: string; label: string; text: string }
 export interface CopyFollower { account: string; mode: 'fixed' | 'multiplier' | 'balance'; value: number; reverse: boolean }
 export interface CopierConfig { enabled: boolean; master: string; followers: CopyFollower[]; copy_sltp: boolean }
 export interface DayRule { day: number; set_loss: boolean; set_profit: boolean; active: boolean; active_at: number; continued: boolean; protect: number | null; continued_from: number }
+/** Tự đóng tất cả lệnh của một tài khoản khi tổng lãi/lỗ đang treo chạm mức. */
+export interface BasketConfig { enabled: boolean; tp_mode: 'pct' | 'money'; tp_value: number; sl_mode: 'pct' | 'money'; sl_value: number; cancel_pending: boolean }
+export const DEFAULT_BASKET: BasketConfig = { enabled: false, tp_mode: 'money', tp_value: 0, sl_mode: 'money', sl_value: 0, cancel_pending: true }
 export interface AutomationSnapshot {
   guards: Record<string, GuardConfig>
   states: Record<string, GuardState>
@@ -44,6 +47,8 @@ export interface AutomationSnapshot {
   alerts: { news: boolean; minutes: number; notify: boolean }
   copier: CopierConfig
   copyState: { started: number; last: number; error: string }
+  baskets?: Record<string, BasketConfig>
+  basketStates?: Record<string, { floating?: number; tp?: number; sl?: number; positions?: number; currency?: string; error?: string; updated: number }>
   telegram: boolean
 }
 

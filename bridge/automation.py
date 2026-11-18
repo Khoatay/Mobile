@@ -54,6 +54,9 @@ class Automation:
         self.day_refs = data.get("day_refs", {})
         # Luật trong ngày của từng tài khoản: đã đặt giới hạn hôm nay chưa, đã có lệnh chưa (từ đó không nới được), đã "trade tiếp" sau chốt lời chưa.
         self.day_rules = data.get("day_rules", {})
+        # Đóng tất cả theo tổng lãi/lỗ đang treo của từng tài khoản.
+        self.baskets = data.get("baskets", {})
+        self.basket_states = {}
         # Cảnh báo tin kiểu Investing: tin được đánh dấu, hoặc mọi tin từ một mức độ của các đồng tiền đã chọn.
         self.news_watch = {**NEWS_WATCH_DEFAULT, **data.get("news_watch", {})}
         self.news_acks = set(data.get("news_acks", []))  # tin người dùng đã bấm "Tắt"
@@ -63,7 +66,7 @@ class Automation:
     # ------------------------------------------------------------ lưu trạng thái
     def _save(self):
         tmp = STATE_FILE.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"guards": self.guards, "locks": self.locks, "alerts": self.alerts, "copier": self.copier, "day_refs": self.day_refs, "day_rules": self.day_rules, "news_watch": self.news_watch, "news_acks": sorted(self.news_acks)[-500:]}, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.write_text(json.dumps({"guards": self.guards, "locks": self.locks, "alerts": self.alerts, "copier": self.copier, "day_refs": self.day_refs, "day_rules": self.day_rules, "baskets": self.baskets, "news_watch": self.news_watch, "news_acks": sorted(self.news_acks)[-500:]}, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, STATE_FILE)
 
     def event(self, kind, account, text, notify=True):
@@ -84,7 +87,7 @@ class Automation:
     def snapshot(self):
         with self.lock:
             return {
-                "guards": self.guards, "states": self.states, "locks": self.locks, "rules": self.day_rules, "events": list(reversed(self.events[-100:])),
+                "guards": self.guards, "states": self.states, "locks": self.locks, "rules": self.day_rules, "baskets": self.baskets, "basketStates": self.basket_states, "events": list(reversed(self.events[-100:])),
                 "alerts": self.alerts, "copier": self.copier,
                 "copyState": {"started": self.copy_state["started"], "last": self.copy_state["last"], "error": self.copy_state["error"]},
                 "telegram": self.telegram_ready(),
@@ -150,6 +153,58 @@ class Automation:
             if abs(out.get("profit_limit", 0) - old.get("profit_limit", 0)) > 0.009:
                 r["set_profit"] = True
         return out
+
+    def set_basket(self, body):
+        """Tự đóng tất cả lệnh của một tài khoản khi tổng lãi/lỗ đang treo chạm mức (theo % số dư hoặc số tiền)."""
+        account = str(body.get("account"))
+        if not self.registry.get(account):
+            raise ValueError(f"Không có tài khoản {account}")
+        cfg = body.get("config") or {}
+        mode = lambda k: "pct" if cfg.get(k) == "pct" else "money"
+        num = lambda k: max(0.0, float(cfg.get(k) or 0))
+        new = {"enabled": bool(cfg.get("enabled")), "tp_mode": mode("tp_mode"), "tp_value": num("tp_value"),
+               "sl_mode": mode("sl_mode"), "sl_value": num("sl_value"), "cancel_pending": bool(cfg.get("cancel_pending", True))}
+        if new["enabled"] and not new["tp_value"] and not new["sl_value"]:
+            raise ValueError("Đặt ít nhất một mức: tổng lãi hoặc tổng lỗ")
+        with self.lock:
+            self.baskets[account] = new
+            self._save()
+        return self.snapshot()
+
+    def _basket_tick(self):
+        for account_id, b in list(self.baskets.items()):
+            if not b.get("enabled"):
+                self.basket_states.pop(account_id, None)
+                continue
+            acc = self.registry.get(account_id)
+            if not acc:
+                continue
+            try:
+                live = acc.call("account", timeout=20)
+            except Exception as e:
+                self.basket_states[account_id] = {"error": str(e), "updated": int(now() * 1000)}
+                continue
+            bal = live["balance"]
+            floating = live["equity"] - live["balance"]  # gồm cả swap của lệnh đang mở
+            amount = lambda m, v: (bal * v / 100) if m == "pct" else v
+            tp, sl = amount(b["tp_mode"], b["tp_value"]), amount(b["sl_mode"], b["sl_value"])
+            st = self.basket_states.get(account_id, {})
+            hit = "tp" if tp > 0 and floating >= tp else "sl" if sl > 0 and floating <= -sl else ""
+            if hit and live["positions"] and now() - st.get("last", 0) > 10:
+                st["last"] = now()
+                what = f"tổng lãi đang treo +{floating:.2f} ≥ {tp:.2f}" if hit == "tp" else f"tổng lỗ đang treo {floating:.2f} ≤ −{sl:.2f}"
+                if not acc.tradable:
+                    self.event("basket", account_id, f"Chạm mức đóng tất cả ({what} {live['currency']}) nhưng tài khoản chỉ có mật khẩu view: hãy tự đóng ngay.")
+                else:
+                    r = acc.call("close_all", timeout=120)
+                    extra = ""
+                    if b.get("cancel_pending") and live.get("orders"):
+                        c = acc.call("cancel_all", timeout=120)
+                        extra = f", huỷ {c['cancelled']} lệnh chờ"
+                    errs = r["errors"]
+                    self.event("basket", account_id, f"Đóng tất cả: {what} {live['currency']}. Đã đóng {r['closed']} lệnh{extra}." + (f" Lỗi: {'; '.join(errs)}" if errs else ""))
+            self.basket_states[account_id] = {**st, "floating": round(floating, 2), "tp": round(tp, 2), "sl": round(sl, 2), "positions": len(live["positions"]),
+                                              "currency": live["currency"], "error": "", "updated": int(now() * 1000)}
 
     def continue_after_profit(self, body):
         """Đạt mục tiêu lãi rồi vẫn muốn trade tiếp: một lần mỗi ngày, chọn số tiền được phép trả lại (không quá số đã lãi).
@@ -359,7 +414,7 @@ class Automation:
 
     # ------------------------------------------------------------- vòng lặp
     def start(self):
-        for target, period in ((self._guard_tick, 3), (self._news_tick, 60), (self._news_watch_tick, 20), (self._copy_tick, 1.5)):
+        for target, period in ((self._guard_tick, 3), (self._news_tick, 60), (self._news_watch_tick, 20), (self._copy_tick, 1.5), (self._basket_tick, 2)):
             threading.Thread(target=self._loop, args=(target, period), daemon=True).start()
 
     def _loop(self, fn, period):

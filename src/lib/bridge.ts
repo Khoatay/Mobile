@@ -18,10 +18,15 @@ export interface LivePosition {
   openPrice: number; price: number; sl: number; tp: number; profit: number; swap: number; time: number
 }
 
+export type PendingType = 'buy_limit' | 'sell_limit' | 'buy_stop' | 'sell_stop' | 'buy_stop_limit' | 'sell_stop_limit'
+export interface PendingOrder { ticket: number; symbol: string; type: PendingType | string; volume: number; price: number; stopLimit: number; sl: number; tp: number; time: number; comment?: string }
+
 export interface LiveAccount extends AccountMeta {
   login: number; server: string; name: string; currency: string
   balance: number; equity: number; profit: number; margin: number; marginFree: number; leverage: number
   positions: LivePosition[]
+  /** Lệnh chờ (limit/stop). */
+  orders?: PendingOrder[]
 }
 
 /** Deal thô của MT5. type: 0 buy, 1 sell, còn lại là nạp/rút... entry: 0 vào, 1 ra, 2 đảo chiều, 3 đóng bằng lệnh đối ứng. */

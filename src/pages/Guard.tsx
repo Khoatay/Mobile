@@ -40,7 +40,7 @@ function Meter({ value, label, detail, gain }: { value: number; label: string; d
 }
 
 /** Ô nhập một mức theo % số dư hoặc theo số tiền, kèm số tiền quy ra. */
-function LimitInput({ label, tone, mode, value, balance, ccy, onChange, hint }: { label: string; tone: 'sl' | 'tp'; mode: 'pct' | 'money'; value: number; balance: number; ccy: string; onChange: (p: { mode?: 'pct' | 'money'; value?: number }) => void; hint: string }) {
+export function LimitInput({ label, tone, mode, value, balance, ccy, onChange, hint }: { label: string; tone: 'sl' | 'tp'; mode: 'pct' | 'money'; value: number; balance: number; ccy: string; onChange: (p: { mode?: 'pct' | 'money'; value?: number }) => void; hint: string }) {
   const amount = amountOf(mode, value, balance)
   return (
     <Field group label={label} tone={tone} hint={value > 0 ? `= ${money(amount, ccy)}${mode === 'money' ? ` (${((amount / Math.max(1, balance)) * 100).toFixed(1)}% số dư)` : ''}` : hint}>

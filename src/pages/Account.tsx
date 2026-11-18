@@ -5,7 +5,7 @@ import { Field, Num, Tile } from '../components/Field'
 import { badges, bridgeType, BROKERS, CATEGORIES, categoryOf, GROUP_SUGGESTIONS, groupsOf, isView, PHASES, ROLE_TEXT, type AccountInfo, type Category, type Env, type InfoMap, type Role } from '../lib/accounts'
 import RatingPanel from '../components/RatingPanel'
 import { partnerFor } from '../lib/partners'
-import { bridgeGet, bridgePost, type BridgeState, type LiveAccount, type LivePosition, type Mt5Deal, type Mt5Order } from '../lib/bridge'
+import { bridgeGet, bridgePost, type BridgeState, type LiveAccount, type LivePosition, type Mt5Deal, type Mt5Order, type PendingOrder } from '../lib/bridge'
 import { calcPosition, normalizeSymbol, PAIRS, parseSymbol, pipSize, QUOTE_KEYS } from '../lib/forex'
 import { money, signed } from '../lib/format'
 import { dealsToTrades } from '../lib/mt5deals'
@@ -19,6 +19,7 @@ import BridgeLink from '../server/BridgeLink'
 import PeriodPicker from '../components/PeriodPicker'
 import { inPeriod, periodDays, type Period } from '../lib/period'
 import { serverOptions } from '../lib/servers'
+import { BasketPanel, PendingTable } from '../components/OpenOrders'
 import type { Settings, Side, Trade } from '../lib/types'
 
 interface Props {
@@ -184,7 +185,7 @@ function InfoEditor({ info, onChange, groups }: { info: AccountInfo; onChange: (
 }
 
 /** `title`: tên nhóm (Real, Quỹ…) khi Tổng quan tách lệnh đang mở theo nhóm. */
-function PositionsTable({ rows, infos, busy, onClose, showAccount, title }: { rows: (LivePosition & { acc: LiveAccount })[]; infos: InfoMap; busy: boolean; onClose: (acc: LiveAccount, p: LivePosition) => void; showAccount: boolean; title?: string }) {
+function PositionsTable({ rows, infos, busy, onClose, onCloseAll, showAccount, title }: { rows: (LivePosition & { acc: LiveAccount })[]; infos: InfoMap; busy: boolean; onClose: (acc: LiveAccount, p: LivePosition) => void; onCloseAll?: () => void; showAccount: boolean; title?: string }) {
   const floating = rows.reduce((s, p) => s + p.profit, 0)
   const ccys = [...new Set(rows.map((p) => p.acc.currency))]
   return (
@@ -218,6 +219,9 @@ function PositionsTable({ rows, infos, busy, onClose, showAccount, title }: { ro
         </div>
       )}
       {rows.some((p) => !p.sl) && <p className="warn">⚠ Có lệnh đang mở không đặt stop loss.</p>}
+      {onCloseAll && rows.some((p) => p.acc.tradable) && (
+        <div className="close-all"><button className="danger" disabled={busy} onClick={onCloseAll}>Đóng tất cả {rows.filter((p) => p.acc.tradable).length} lệnh</button></div>
+      )}
     </section>
   )
 }
@@ -465,6 +469,45 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
     })
   }
 
+  // Đóng hết lệnh đang mở của các tài khoản (chỉ tài khoản cho phép vào lệnh), hỏi trước khi làm.
+  const closeAll = async (list: LiveAccount[]) => {
+    const accs = list.filter((x) => x.tradable && x.positions.length)
+    const n = accs.reduce((s, x) => s + x.positions.length, 0)
+    const pend = accs.reduce((s, x) => s + (x.orders?.length ?? 0), 0)
+    if (!n) return
+    const fl = accs.reduce((s, x) => s + x.equity - x.balance, 0)
+    if (!(await ask(`Đóng tất cả ${n} lệnh đang mở${accs.length > 1 ? ` trên ${accs.length} tài khoản` : ''} theo giá thị trường? Tổng đang treo ${signed(fl)}.${pend ? ` ${pend} lệnh chờ sẽ được giữ lại (huỷ riêng ở bảng lệnh chờ).` : ''}`, 'Đóng tất cả', true))) return
+    run(async () => {
+      const parts: string[] = []
+      for (const x of accs) {
+        try { const r = await bridgePost<{ closed: number; errors: string[] }>('/close_all', { account: x.id }); parts.push(`${name(x.id)}: đóng ${r.closed} lệnh${r.errors.length ? `, lỗi: ${r.errors.join('; ')}` : ''}`) }
+        catch (e) { parts.push(`${name(x.id)}: lỗi (${errText(e)})`) }
+      }
+      bridge.refresh()
+      return parts.join(' · ')
+    })
+  }
+  const cancelOrder = async (acc: LiveAccount, o: PendingOrder) => {
+    if (!(await ask(`Huỷ lệnh chờ ${normalizeSymbol(o.symbol)} ${o.volume.toFixed(2)} lot ở giá ${o.price}?`, 'Huỷ lệnh chờ', true))) return
+    run(async () => { await bridgePost('/order/cancel', { account: acc.id, ticket: o.ticket }); bridge.refresh(); return `Đã huỷ lệnh chờ ${normalizeSymbol(o.symbol)}.` })
+  }
+  const cancelAllOrders = async (list: LiveAccount[]) => {
+    const accs = list.filter((x) => x.tradable && x.orders?.length)
+    const n = accs.reduce((s, x) => s + (x.orders?.length ?? 0), 0)
+    if (!n || !(await ask(`Huỷ tất cả ${n} lệnh chờ?`, 'Huỷ tất cả', true))) return
+    run(async () => {
+      const parts: string[] = []
+      for (const x of accs) {
+        try { const r = await bridgePost<{ cancelled: number; errors: string[] }>('/orders/cancel_all', { account: x.id }); parts.push(`${name(x.id)}: huỷ ${r.cancelled} lệnh chờ${r.errors.length ? `, lỗi: ${r.errors.join('; ')}` : ''}`) }
+        catch (e) { parts.push(`${name(x.id)}: lỗi (${errText(e)})`) }
+      }
+      bridge.refresh()
+      return parts.join(' · ')
+    })
+  }
+  const pendingOf = (list: LiveAccount[]) => list.flatMap((x) => (x.orders ?? []).map((o) => ({ ...o, acc: x })))
+  const pendingTable = (list: LiveAccount[], showAcc: boolean) => <PendingTable rows={pendingOf(list)} showAccount={showAcc} labelOf={(x) => name(x.id)} busy={busy} onCancel={cancelOrder} onCancelAll={() => cancelAllOrders(list)} />
+
   const removeAccount = async (id: string) => {
     if (!(await ask(`Gỡ "${name(id)}" khỏi bridge? Bridge sẽ ngừng kết nối và xoá tài khoản này khỏi config.json. Lệnh đã có trong Nhật ký vẫn giữ nguyên.`, 'Gỡ tài khoản', true))) return
     run(async () => {
@@ -595,8 +638,9 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
             .map((c) => ({ c, rows: positionsOf(ownLive.filter((a) => categoryOf(infos[a.id]) === c.id)) }))
             .filter((x) => x.rows.length > 0)
           if (!parts.length) return <section className="card"><h3>Không có lệnh nào đang mở</h3></section>
-          return parts.map(({ c, rows }) => <PositionsTable key={c.id} title={c.label} rows={rows} infos={infos} busy={busy} onClose={closePosition} showAccount />)
+          return parts.map(({ c, rows }) => <PositionsTable key={c.id} title={c.label} rows={rows} infos={infos} busy={busy} onClose={closePosition} onCloseAll={() => closeAll(ownLive.filter((x) => categoryOf(infos[x.id]) === c.id))} showAccount />)
         })()}
+        {pendingTable(ownLive, true)}
         {tradable.length > 0 && <OrderTicket accounts={tradable} trades={trades} settings={settings} onDone={bridge.refresh} infos={infos} />}
       </>
     )
@@ -652,7 +696,8 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
             {notice}
           </section>
         )}
-        {liveList.length > 0 && <PositionsTable rows={positionsOf(liveList)} infos={infos} busy={busy} onClose={closePosition} showAccount />}
+        {liveList.length > 0 && <PositionsTable rows={positionsOf(liveList)} infos={infos} busy={busy} onClose={closePosition} onCloseAll={view ? undefined : () => closeAll(liveList)} showAccount />}
+        {liveList.length > 0 && !view && pendingTable(liveList, true)}
       </>
     )
   }
@@ -683,7 +728,9 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
         {!view && <p className="muted small">{count} lệnh của tài khoản này trong Nhật ký.</p>}
         {notice}
       </section>
-      {a && <PositionsTable rows={positionsOf([a])} infos={infos} busy={busy} onClose={closePosition} showAccount={false} />}
+      {a && <PositionsTable rows={positionsOf([a])} infos={infos} busy={busy} onClose={closePosition} onCloseAll={view ? undefined : () => closeAll([a])} showAccount={false} />}
+      {a && !view && pendingTable([a], false)}
+      {a && !view && <BasketPanel acc={a} online={bridge.online} />}
       {view && a && <Performance key={id} id={id} acc={a} serverOffset={settings.serverOffset} />}
       {view && info && <CopyGuide id={id} info={info} links={links} onCopyFrom={onCopyFrom} />}
       <section className="card">
