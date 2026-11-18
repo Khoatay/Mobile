@@ -552,3 +552,5 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 .flag-col ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
 .flag-col.bad { background: color-mix(in srgb, var(--neg) 6%, var(--surface)); } .flag-col.bad strong { color: var(--neg); }
 .flag-col.good { background: color-mix(in srgb, var(--pos) 6%, var(--surface)); } .flag-col.good strong { color: var(--pos); }
+.float-sum { font-family: var(--font-num); font-weight: 600; font-variant-numeric: tabular-nums; }
+.float-sum.pos { color: var(--pos); } .float-sum.neg { color: var(--neg); }

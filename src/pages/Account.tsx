@@ -181,10 +181,16 @@ function InfoEditor({ info, onChange, groups }: { info: AccountInfo; onChange: (
   )
 }
 
-function PositionsTable({ rows, infos, busy, onClose, showAccount }: { rows: (LivePosition & { acc: LiveAccount })[]; infos: InfoMap; busy: boolean; onClose: (acc: LiveAccount, p: LivePosition) => void; showAccount: boolean }) {
+/** `title`: tên nhóm (Real, Quỹ…) khi Tổng quan tách lệnh đang mở theo nhóm. */
+function PositionsTable({ rows, infos, busy, onClose, showAccount, title }: { rows: (LivePosition & { acc: LiveAccount })[]; infos: InfoMap; busy: boolean; onClose: (acc: LiveAccount, p: LivePosition) => void; showAccount: boolean; title?: string }) {
+  const floating = rows.reduce((s, p) => s + p.profit, 0)
+  const ccys = [...new Set(rows.map((p) => p.acc.currency))]
   return (
     <section className="card">
-      <h3>{rows.length} lệnh đang mở</h3>
+      <div className="card-head">
+        <h3>{title ? <>{title} <span className="muted">·</span> </> : ''}{rows.length} lệnh đang mở</h3>
+        {rows.length > 0 && ccys.length === 1 && <span className={floating > 0 ? 'float-sum pos' : floating < 0 ? 'float-sum neg' : 'float-sum'}>Đang treo {signed(floating)} {ccys[0]}</span>}
+      </div>
       {rows.length > 0 && (
         <div className="table-wrap">
           <table>
@@ -680,7 +686,14 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
             <button onClick={() => go('view')}>Xem</button>
           </section>
         )}
-        {ownLive.length > 0 && <PositionsTable rows={positionsOf(ownLive)} infos={infos} busy={busy} onClose={closePosition} showAccount />}
+        {ownLive.length > 0 && (() => {
+          // Tách lệnh đang mở theo nhóm: Real, Quỹ, Copy trade. Nhóm không có lệnh mở thì ẩn.
+          const parts = CATEGORIES.filter((c) => c.id !== 'view')
+            .map((c) => ({ c, rows: positionsOf(ownLive.filter((a) => categoryOf(infos[a.id]) === c.id)) }))
+            .filter((x) => x.rows.length > 0)
+          if (!parts.length) return <section className="card"><h3>Không có lệnh nào đang mở</h3></section>
+          return parts.map(({ c, rows }) => <PositionsTable key={c.id} title={c.label} rows={rows} infos={infos} busy={busy} onClose={closePosition} showAccount />)
+        })()}
         {tradable.length > 0 && <OrderTicket accounts={tradable} trades={trades} settings={settings} onDone={bridge.refresh} infos={infos} />}
       </>
     )
