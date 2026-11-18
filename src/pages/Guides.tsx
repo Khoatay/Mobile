@@ -15,7 +15,7 @@ const SECTIONS: { title: string; guides: Guide[] }[] = [
         title: 'Bắt đầu trong 5 phút',
         body: (
           <ol>
-            <li><strong>Tính lot</strong>: nhập số dư, % rủi ro và stop loss, app cho ra khối lượng lệnh. Cập nhật bảng tỷ giá trước khi dùng cho lệnh thật.</li>
+            <li><strong>Tính lot</strong>: nhập số dư, % rủi ro và stop loss, app cho ra khối lượng lệnh. Giá dùng để quy đổi được tự cập nhật từ MT5 hoặc internet khi mở app và mỗi 15 phút.</li>
             <li><strong>Nhật ký lệnh</strong>: kéo thả file báo cáo của MT5 hoặc MT4 vào, hoặc bấm “Nạp dữ liệu mẫu” để xem thử.</li>
             <li><strong>Thống kê</strong>: xem tỷ lệ thắng, profit factor, sụt giảm, và cặp tiền, phiên, ngày nào bạn trade tốt hay kém.</li>
             <li>Gắn <strong>setup</strong> cho từng lệnh trong Nhật ký để biết setup nào thực sự có lãi.</li>
@@ -72,6 +72,21 @@ const SECTIONS: { title: string; guides: Guide[] }[] = [
       {
         title: 'Lấy mật khẩu view (investor) ở đâu',
         body: <p>Trong MT5: menu Tools → Options → tab Server → Change, chọn “Change investor (read only) password”. Với tài khoản quỹ, mật khẩu này thường có sẵn trong email cấp tài khoản hoặc trang quản lý của quỹ. Mật khẩu view chỉ cho xem, không đặt hay đóng lệnh được.</p>,
+      },
+      {
+        title: 'Theo dõi tài khoản người khác (Only view): giới hạn cần biết',
+        body: (
+          <>
+            <p>Ở trang <strong>Tài khoản → Only view</strong>, bạn thêm tài khoản của người khác bằng mật khẩu view họ chia sẻ và thấy lệnh của họ gần như ngay lập tức (vài giây một lần). Trước khi dùng, hãy biết các giới hạn sau:</p>
+            <ul>
+              <li><strong>Mỗi tài khoản cần một bản MT5 riêng</strong> chạy trên máy, mỗi bản tốn khoảng 150–300 MB RAM. Máy tính thông thường nên theo dõi tối đa khoảng <strong>5–10 tài khoản</strong> cùng lúc; nhiều hơn thì máy chậm và dữ liệu có thể trễ.</li>
+              <li>App <strong>không</strong> hỗ trợ kiểu một bản MT5 lần lượt đăng nhập nhiều tài khoản. Cách đó mỗi tài khoản chỉ cập nhật 20–60 giây một lần, quá chậm để giao dịch hay copy lệnh.</li>
+              <li>Cần theo dõi nhiều tài khoản hơn: dùng thêm một máy tính hoặc máy chủ ảo (VPS) chạy bridge riêng, hoặc chỉ giữ những tài khoản bạn thực sự cần.</li>
+              <li><strong>Copy lệnh trên app</strong> từ tài khoản Only view luôn trễ vài giây so với người gốc, nên giá vào có thể khác. Máy chạy bridge phải bật suốt thời gian copy; tắt máy là ngừng chép. Nếu người đó có chiến lược trên nền tảng copy trade của sàn, copy qua sàn sẽ ổn định hơn.</li>
+              <li>Chỉ theo dõi và copy tài khoản mà chủ tài khoản đã đồng ý chia sẻ. Kết quả trong quá khứ không bảo đảm kết quả sau này; luôn thử trên tài khoản demo trước.</li>
+            </ul>
+          </>
+        ),
       },
       {
         title: 'Kết nối Telegram (đọc kênh và gửi bài)',

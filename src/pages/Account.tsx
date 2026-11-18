@@ -256,7 +256,7 @@ function AddAccount({ bridge, groups, onAdded, role }: { bridge: BridgeState; gr
         <section className="card notice-card">
           <h3>Theo dõi tài khoản của người khác</h3>
           <p className="muted small">Bạn cần số tài khoản, máy chủ và <strong>mật khẩu view (investor)</strong> do chủ tài khoản đưa. App thấy số dư, equity và lệnh đang mở của họ trực tiếp, vài giây cập nhật một lần, nhưng không đặt hay đóng lệnh được.</p>
-          <p className="muted small">Mỗi tài khoản theo dõi cần một bản MT5 riêng trên máy, mỗi bản tốn khoảng 150–300 MB RAM. Máy thường theo dõi 5–10 tài khoản cùng lúc là hợp lý.</p>
+          <p className="warn">⚠ Mỗi tài khoản theo dõi cần một bản MT5 riêng trên máy (khoảng 150–300 MB RAM mỗi bản). Máy tính thông thường nên theo dõi tối đa khoảng 5–10 tài khoản; nhiều hơn thì máy chậm và dữ liệu có thể trễ. Cần nhiều hơn thì dùng thêm máy hoặc VPS chạy bridge riêng. Xem thêm ở trang Hướng dẫn → Kết nối.</p>
         </section>
       )}
       <section className="card">
@@ -626,6 +626,7 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
             </div>
             {table(list, false, !view)}
             {view && <p className="muted small">Số liệu đọc trực tiếp từ MT5 bằng mật khẩu view, vài giây cập nhật một lần. Bấm vào một tài khoản để xem kết quả giao dịch và cách copy lệnh.</p>}
+            {view && list.length >= 10 && <p className="warn">⚠ Đang theo dõi {list.length} tài khoản. Từ khoảng 10 tài khoản trở lên, máy thường dễ chậm và dữ liệu có thể trễ; nên bớt tài khoản hoặc chạy thêm bridge trên máy khác/VPS.</p>}
             {notice}
           </section>
         )}

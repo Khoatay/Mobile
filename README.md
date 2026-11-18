@@ -82,6 +82,7 @@ python bridge.py
 ```
 
 - **MT5**: cách dễ nhất là chạy `python bridge.py` (bridge tự tạo `config.json` trống nếu chưa có), rồi thêm tài khoản ở tab "+ Thêm tài khoản" trong app; bridge tự lưu vào `config.json`. Hoặc tự khai báo từng tài khoản trong `accounts`: nhãn, loại (`real`, `prop`, `copy`, `demo`), số tài khoản, mật khẩu view (investor), tên máy chủ và `terminal_path`. Mật khẩu view chỉ cho xem, không đặt lệnh được.
+- **Tài khoản Only view** (của người khác, thêm bằng mật khẩu view họ chia sẻ): mỗi tài khoản cũng cần một bản MT5 riêng, khoảng 150–300 MB RAM mỗi bản; máy thông thường nên theo dõi tối đa khoảng 5–10 tài khoản. App cố ý không làm chế độ một bản MT5 xoay vòng nhiều tài khoản, vì mỗi tài khoản chỉ cập nhật 20–60 giây một lần, quá chậm để giao dịch hay copy lệnh. Cần nhiều hơn thì chạy thêm bridge trên máy khác hoặc VPS. Copy lệnh từ tài khoản Only view trên app luôn trễ vài giây và cần máy chạy bridge luôn bật.
 - **Mỗi tài khoản cần một bản MT5 ở thư mục riêng**, vì một bản MT5 chỉ đăng nhập được một tài khoản tại một thời điểm. Cài MT5 thêm lần nữa vào thư mục khác (bộ cài của mỗi quỹ thường đã vào thư mục riêng), hoặc sao chép cả thư mục MT5 và đặt `"portable": true`.
 - **Vào lệnh**: chỉ với tài khoản có `"allow_trading": true` và dùng mật khẩu giao dịch thay cho mật khẩu view. `max_lot` (mặc định 1.0) là trần khối lượng mỗi lệnh. Bridge từ chối lệnh không có stop loss, và luôn để MT5 kiểm tra lệnh trước khi gửi. Hãy thử trên tài khoản demo trước, và kiểm tra điều khoản của quỹ về việc đặt lệnh bằng phần mềm ngoài.
 - **Telegram**: lấy `api_id` và `api_hash` tại my.telegram.org, rồi điền tên các kênh vào `channels`. Bridge đọc bằng tài khoản Telegram của bạn, nên chỉ thấy kênh công khai hoặc kênh bạn đã tham gia.
@@ -100,7 +101,7 @@ Việc đọc lệnh từ tin nhắn dùng quy tắc cố định (cặp tiền,
 
 ## Lưu ý
 
-- Tỷ giá ban đầu là giá trị mẫu. Hãy cập nhật trước khi tính lệnh thật.
+- Giá dùng để quy đổi trong Tính lot tự cập nhật khi mở app và mỗi 15 phút: từ MT5 nếu bridge đang nối, không thì từ internet (Frankfurter cho tiền tệ, gold-api.com cho vàng, bạc). Không lấy được thì app dùng giá lần trước và báo nếu điều đó làm lệch số lot.
 - Quy ước pip: 0.0001; cặp JPY 0.01; vàng 0.1 (1 lot = 100 oz); bạc 0.01 (1 lot = 5000 oz). Một số broker dùng quy ước khác cho kim loại.
 - Phiên giao dịch tính theo giờ UTC, quy đổi từ múi giờ máy chủ đặt trong trang Nhật ký, không điều chỉnh giờ mùa hè.
 - R dùng mức stop loss ghi trong báo cáo, tức mức cuối cùng của lệnh.
