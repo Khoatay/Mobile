@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Cài Golden Duck lên máy Oracle (Ubuntu 22.04/24.04, ARM hoặc x86). Chạy: sudo bash install.sh ten-mien-cua-ban.vn
+# Cài Golden Duck lên VPS (Ubuntu 22.04/24.04, x86 hoặc ARM). Chạy: sudo bash install.sh ten-mien-cua-ban.com
 # Chạy lại nhiều lần không sao: bước nào đã xong thì bỏ qua.
 set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
 DOMAIN="${1:-}"
-[ -n "$DOMAIN" ] || { echo "Cách dùng: sudo bash install.sh ten-mien-cua-ban.vn"; exit 1; }
+[ -n "$DOMAIN" ] || { echo "Cách dùng: sudo bash install.sh ten-mien-cua-ban.com"; exit 1; }
 [ "$(id -u)" = 0 ] || { echo "Cần chạy bằng sudo"; exit 1; }
 APP=/opt/golden-duck
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -27,9 +28,9 @@ if ! command -v caddy >/dev/null; then
   apt-get update -y && apt-get install -y caddy
 fi
 
-echo "== 4/7 Mở cổng 80, 443 trong tường lửa của máy (Oracle chặn sẵn)"
+echo "== 4/7 Mở cổng 80, 443 trong tường lửa của máy (nếu có)"
 for p in 443 80; do
-  iptables -C INPUT -p tcp --dport $p -m state --state NEW -j ACCEPT 2>/dev/null || iptables -I INPUT 5 -p tcp --dport $p -m state --state NEW -j ACCEPT
+  iptables -C INPUT -p tcp --dport $p -m state --state NEW -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p tcp --dport $p -m state --state NEW -j ACCEPT
 done
 netfilter-persistent save
 

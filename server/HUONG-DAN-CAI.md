@@ -1,4 +1,4 @@
-# Cài Golden Duck lên Oracle Cloud (từng bước)
+# Cài Golden Duck lên VPS Hostinger (từng bước)
 
 Làm một lần, khoảng 30–45 phút. Không cần biết lập trình: chỉ chép từng lệnh dán vào cửa sổ dòng lệnh.
 
@@ -6,7 +6,8 @@ Làm một lần, khoảng 30–45 phút. Không cần biết lập trình: ch�
 
 | Thứ | Lấy ở đâu |
 |---|---|
-| Máy Oracle Always Free (Ubuntu, nên chọn máy ARM Ampere 2 nhân, 12 GB RAM) | cloud.oracle.com → Compute → Instances |
+| VPS Hostinger gói KVM (2 nhân, 8 GB RAM là thoải mái; gói nhỏ nhất cũng chạy được). Hệ điều hành: **Ubuntu 24.04 bản trống** (Plain OS), không chọn bản cài sẵn panel. Vị trí máy: chọn nơi gần châu Á nhất trong danh sách Hostinger cho chọn | hostinger.com → VPS |
+| Tên miền (.com rẻ, mua luôn trên Hostinger, bật bảo vệ thông tin chủ sở hữu WHOIS) | hostinger.com → Domains |
 | Tên miền của bạn | nơi bạn mua tên miền |
 | Khoá AI | console.anthropic.com → API Keys (nạp tiền trước, ví dụ 10 USD) |
 | Bot Telegram | Telegram → @BotFather → `/newbot` → đặt tên, ví dụ `GoldenDuckBot` → nhận mã bot |
@@ -15,26 +16,27 @@ Làm một lần, khoảng 30–45 phút. Không cần biết lập trình: ch�
 
 Tài khoản đọc kênh nên là số **riêng**, không dùng Telegram cá nhân của bạn: máy chủ sẽ tự vào mọi kênh khách thêm.
 
-## Bước 1: Mở cổng trên Oracle
+## Bước 1: Lấy thông tin đăng nhập máy
 
-1. Oracle → Networking → Virtual Cloud Networks → mạng của máy → Security Lists → Default Security List.
-2. Add Ingress Rules hai lần: Source CIDR `0.0.0.0/0`, IP Protocol TCP, Destination Port `80`; rồi một quy tắc nữa cho cổng `443`.
+hPanel → VPS → máy của bạn → Overview: ghi lại **IP** và đặt **mật khẩu root**.
 
-(Tường lửa bên trong máy thì kịch bản cài tự mở.)
+Nếu đã bật Firewall trong hPanel (VPS → Security → Firewall) thì thêm quy tắc cho phép cổng **22, 80, 443** (TCP). Chưa bật thì bỏ qua.
 
 ## Bước 2: Trỏ tên miền về máy
 
-Ở nơi quản lý tên miền, thêm bản ghi **A**: tên `@` (hoặc `app` nếu muốn dùng `app.ten-mien.vn`), giá trị là **Public IP** của máy Oracle. Chờ 5–30 phút.
+hPanel → Domains → tên miền → DNS / Nameservers: sửa bản ghi **A** tên `@` (hoặc thêm `app` nếu muốn dùng `app.ten-mien.com`), giá trị là **IP** của VPS. Xoá bản ghi A cũ trỏ chỗ khác nếu có. Chờ 5–30 phút.
 
 ## Bước 3: Vào máy và cài
 
 Trên Windows mở PowerShell (máy Mac mở Terminal):
 
 ```bash
-ssh -i duong-dan-toi-file-khoa.key ubuntu@IP_CUA_MAY
+ssh root@IP_CUA_MAY
 ```
 
-Trong máy Oracle:
+Nhập mật khẩu root (gõ không hiện chữ, cứ gõ rồi Enter). Hoặc dùng nút **Browser terminal** trong hPanel.
+
+Trong máy:
 
 ```bash
 git clone -b claude/wonderful-carson-w464oh https://github.com/khoatay/mobile.git
@@ -43,10 +45,10 @@ git clone -b claude/wonderful-carson-w464oh https://github.com/khoatay/mobile.gi
 Nếu kho code để riêng tư, GitHub hỏi tên đăng nhập và mật khẩu: mật khẩu là một **Personal access token** (GitHub → Settings → Developer settings → Personal access tokens), không phải mật khẩu GitHub.
 
 ```bash
-sudo bash mobile/server/deploy/install.sh ten-mien-cua-ban.vn
+sudo bash mobile/server/deploy/install.sh ten-mien-cua-ban.com
 ```
 
-Thay `ten-mien-cua-ban.vn` bằng tên miền thật. Cuối cùng thấy dòng `{"ok":true,...}` là xong phần cài.
+Thay `ten-mien-cua-ban.com` bằng tên miền thật. Cuối cùng thấy dòng `{"ok":true,...}` là xong phần cài.
 
 ## Bước 4: Điền khoá
 
@@ -72,7 +74,7 @@ Nhập số điện thoại riêng (dạng `+84…`), mã Telegram gửi về, m
 
 ## Bước 6: Thử
 
-1. Mở `https://ten-mien-cua-ban.vn` trên điện thoại, tạo tài khoản.
+1. Mở `https://ten-mien-cua-ban.com` trên điện thoại, tạo tài khoản.
 2. Tín hiệu → dán `@tên` một kênh công khai → Thêm. Tên kênh hiện ra là máy chủ đã vào kênh.
 3. Tài khoản → Nối Telegram → bấm Start trong bot.
 4. Hỏi AI → hỏi thử một câu.
@@ -93,14 +95,14 @@ Trên điện thoại, mở trang bằng trình duyệt → Chia sẻ → **Thê
 Sao lưu chạy tự động 3 giờ sáng mỗi ngày vào `/opt/golden-duck/backup` (giữ 14 ngày). Thỉnh thoảng tải một bản về máy mình:
 
 ```bash
-scp -i file-khoa.key ubuntu@IP_CUA_MAY:/opt/golden-duck/backup/golden-duck-*.db .
+scp root@IP_CUA_MAY:/opt/golden-duck/backup/golden-duck-*.db .
 ```
 
 ## Gặp lỗi
 
 | Thấy | Làm |
 |---|---|
-| Trang không mở được | Kiểm tra Bước 1 (cổng 80, 443) và Bước 2 (bản ghi A đúng IP). `sudo journalctl -u caddy -n 50` |
+| Trang không mở được | Kiểm tra Bước 1 (Firewall hPanel mở 80, 443) và Bước 2 (bản ghi A đúng IP). `sudo journalctl -u caddy -n 50` |
 | "Máy chủ chưa nối được Telegram" | Chạy lại Bước 5 |
 | Thêm kênh báo "Telegram đang giới hạn" | Telegram hạn chế vào quá nhiều kênh một lúc; đợi vài phút |
 | Kênh báo "đã đầy kênh" | Một tài khoản Telegram vào được khoảng 500 kênh; khi gần tới mức này cần thêm tài khoản đọc thứ hai |

@@ -6,7 +6,7 @@ Bản IB vẫn chạy như hiện nay: bridge trên máy của IB, khoá API c�
 
 | Việc | Chọn | Lý do |
 |---|---|---|
-| Máy chủ | Oracle Cloud Always Free, máy ARM Ampere (Ubuntu), tên miền của chủ app | Miễn phí, đủ mạnh (tới 4 nhân, 24 GB RAM) |
+| Máy chủ | VPS Hostinger (Ubuntu 24.04), tên miền mua cùng chỗ | Máy chủ ở nước ngoài, thanh toán quốc tế, tiện làm bản tiếng Anh và các thứ tiếng khác. Oracle miễn phí không dùng được |
 | Ngôn ngữ máy chủ | Node 22 + TypeScript | Dùng lại thẳng code trong `src/lib/` (đọc lệnh từ tin nhắn, chấm kênh, tính lot, luật quỹ), khỏi viết lại hai lần |
 | Cơ sở dữ liệu | SQLite có sẵn trong Node (`node:sqlite`), một file | Không cần cài thêm, sao lưu bằng cách chép một file; đủ cho vài nghìn khách |
 | HTTPS | Caddy (tự lấy chứng chỉ Let's Encrypt cho tên miền) | Cấu hình 3 dòng, tự gia hạn |
@@ -14,11 +14,11 @@ Bản IB vẫn chạy như hiện nay: bridge trên máy của IB, khoá API c�
 | Kênh nào được đọc | **Khách tự thêm** bằng @tên, link t.me hoặc link mời; chủ app không đề xuất kênh | Theo yêu cầu. Nhiều khách thêm cùng một kênh thì máy chủ chỉ tham gia và đọc một lần |
 | Cảnh báo | Một bot Telegram chung của Golden Duck; khách nối bằng một lần bấm Start | Có máy chủ thì một bot dùng chung được (không còn cảnh giành tin như khi mỗi bridge tự nghe) |
 | AI | Khoá API của chủ app nằm trên máy chủ; đếm chi phí và giới hạn lượt theo gói | Khoá không bao giờ tới máy khách nên không bị lấy cắp |
-| Vào lệnh MT5 | Qua bridge: (1) bridge trên máy tính của khách, hoặc (2) một VPS Windows của chủ app chạy MT5 cho khách chỉ có điện thoại. Bridge kết nối **ra** máy chủ, nên không cần mở cổng | Thư viện điều khiển MT5 chỉ chạy trên Windows; Oracle miễn phí là Linux ARM. Dịch vụ MT5 đám mây (MetaApi…) tính khoảng 10–12 € mỗi tài khoản mỗi tháng cộng phí gói (số của bên thứ ba), đắt hơn giá Pro dự kiến; VPS Windows 10–25 USD/tháng chạy được 15–30 tài khoản |
+| Vào lệnh MT5 | Qua bridge: (1) bridge trên máy tính của khách, hoặc (2) một VPS Windows của chủ app chạy MT5 cho khách chỉ có điện thoại. Bridge kết nối **ra** máy chủ, nên không cần mở cổng | Thư viện điều khiển MT5 chỉ chạy trên Windows; máy chủ chính là Linux. Dịch vụ MT5 đám mây (MetaApi…) tính khoảng 10–12 € mỗi tài khoản mỗi tháng cộng phí gói (số của bên thứ ba), đắt hơn giá Pro dự kiến; VPS Windows 10–25 USD/tháng chạy được 15–30 tài khoản |
 
 ## Giai đoạn
 
-**Giai đoạn 1: chạy được trên Oracle, chưa vào lệnh** (đang làm)
+**Giai đoạn 1: chạy được trên VPS, chưa vào lệnh** (đang làm)
 - Đặt web app lên tên miền, có HTTPS.
 - Đăng ký, đăng nhập bằng email và mật khẩu (băm scrypt, phiên trong cookie httpOnly).
 - Khách tự thêm, xoá kênh; máy chủ tham gia kênh, lưu tin, đọc lệnh, chấm điểm kênh như bản IB.
@@ -39,7 +39,7 @@ Bản IB vẫn chạy như hiện nay: bridge trên máy của IB, khoá API c�
 
 | Khoản | Chi phí |
 |---|---|
-| Oracle Always Free | 0 |
+| VPS Hostinger | theo gói (trả trước nhiều năm rẻ hơn, gia hạn đắt hơn) |
 | Tên miền | đã có |
 | Số điện thoại cho tài khoản đọc kênh | một SIM riêng |
 | AI | theo lượng dùng; chat bằng Haiku khoảng 10–25đ mỗi tin |
