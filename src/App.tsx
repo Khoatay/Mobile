@@ -30,6 +30,7 @@ import Chat from './pages/Chat'
 import { ProLockPage } from './components/ProGate'
 import { lockedTabs, PRO_FEATURES } from './lib/pro'
 import { useAutopost } from './lib/useAutopost'
+import { useAutoQuotes } from './lib/quotes'
 import type { SignalDraft } from './lib/share'
 import ProfilePage from './pages/Profile'
 import Personalize from './pages/Personalize'
@@ -75,6 +76,8 @@ export default function App() {
   const [draft, setDraft] = useState<(SignalDraft & { credit: string }) | null>(null)
   const lockOf = (t: string) => PRO_FEATURES.find((f) => f.tab === t && pack.proFeatures.includes(f.id))?.id ?? ''
   const bridge = useBridge()
+  // Giá quy đổi cho Tính lot: tự lấy từ MT5 hoặc internet khi mở app và mỗi 15 phút.
+  const autoQuotes = useAutoQuotes(patchSettings, bridge.online)
   const [storedUser, setUser] = usePersistent<UserProfile>('fx.user', DEFAULT_USER)
   const user = useMemo(() => ({ ...DEFAULT_USER, ...storedUser }), [storedUser])
   const autopost = useAutopost({ online: bridge.online, trades, setTrades, profile, user, serverOffset: settings.serverOffset, currency: settings.accountCcy })
@@ -151,7 +154,7 @@ export default function App() {
       <main className="main">
         {EDITION === 'trader' && packLoading && <p className="muted small">Đang tải cấu hình của cộng đồng…</p>}
         {EDITION === 'trader' && packError && <p className="notice bad">⚠ {packError} Ưu đãi, cửa hàng và nhóm cộng đồng sẽ trống cho tới khi tải được.</p>}
-        {tab === 'calc' && <Calculator settings={settings} patch={patchSettings} />}
+        {tab === 'calc' && <Calculator settings={settings} patch={patchSettings} auto={autoQuotes} />}
         {tab === 'journal' && <Journal trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} labels={labels} />}
         {tab === 'stats' && <Dashboard trades={trades} settings={settings} infos={infos} goJournal={() => setTab('journal')} />}
         {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={bridge} infos={infos} goAccounts={() => setTab('account')} links={links} />}

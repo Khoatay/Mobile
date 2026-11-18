@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { SAMPLE_QUOTES } from './forex'
 import type { Settings, Trade } from './types'
 
@@ -33,8 +33,11 @@ export function usePersistent<T>(key: string, fallback: T) {
 export function useSettings() {
   const [s, set] = usePersistent<Settings>('fx.settings', DEFAULT_SETTINGS)
   // Gộp với mặc định để bản lưu cũ không thiếu trường mới.
-  const merged: Settings = { ...DEFAULT_SETTINGS, ...s, quotes: { ...SAMPLE_QUOTES, ...s.quotes } }
-  return [merged, (patch: Partial<Settings>) => set({ ...merged, ...patch })] as const
+  const merge = (x: Settings): Settings => ({ ...DEFAULT_SETTINGS, ...x, quotes: { ...SAMPLE_QUOTES, ...x.quotes } })
+  // Ổn định qua các lần vẽ, và luôn gộp vào bản mới nhất (cập nhật giá chạy nền không ghi đè thay đổi của người dùng).
+  const patch = useCallback((p: Partial<Settings> | ((cur: Settings) => Partial<Settings>)) =>
+    set((cur) => { const m = merge(cur); return { ...m, ...(typeof p === 'function' ? p(m) : p) } }), [set])
+  return [merge(s), patch] as const
 }
 
 export function useTrades() {

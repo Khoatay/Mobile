@@ -35,6 +35,10 @@ export interface Settings {
   /** Tỷ giá theo cách yết chuẩn: EURUSD, USDJPY, XAUUSD... */
   quotes: Record<string, number>
   quotesUpdatedAt: number | null
+  /** Nguồn của từng giá: mẫu, internet, MT5 hay nhập tay. */
+  quoteFrom?: Record<string, QuoteFrom>
 }
+
+export type QuoteFrom = 'sample' | 'internet' | 'mt5' | 'manual'
 
 export const netOf = (t: Trade) => t.profit + t.commission + t.swap

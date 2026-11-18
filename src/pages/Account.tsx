@@ -1,3 +1,4 @@
+import { fromOf, neededQuotes } from '../lib/quotes'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ask } from '../lib/ask'
 import { Field, Num, Tile } from '../components/Field'
@@ -130,7 +131,7 @@ function OrderTicket({ accounts, trades, settings, onDone, infos }: { accounts: 
       {Number.isFinite(sl) && tick && !slOk && <p className="warn">⚠ Stop loss phải nằm {side === 'buy' ? 'dưới' : 'trên'} giá hiện tại.</p>}
       {tick && !tpOk && <p className="warn">⚠ Take profit phải nằm {side === 'buy' ? 'trên' : 'dưới'} giá hiện tại.</p>}
       {overRoom && <p className="warn">⛔ Khoản lỗ tối đa của lệnh này vượt khoảng còn được lỗ theo luật quỹ. Hãy giảm khối lượng.</p>}
-      {settings.quotesUpdatedAt == null && info.quote !== acc.currency && <p className="warn">⚠ {symbol} cần quy đổi về {acc.currency} nhưng bảng tỷ giá vẫn là số mẫu. Bấm "Cập nhật tỷ giá" ở trên trước khi tin vào số lot.</p>}
+      {neededQuotes(symbol, acc.currency).some((q) => q.role === 'lot' && fromOf(settings, q.key) === 'sample') && <p className="warn">⚠ {symbol} cần quy đổi về {acc.currency} nhưng giá dùng để đổi vẫn là số mẫu. Bấm "Cập nhật tỷ giá" ở trên trước khi tin vào số lot.</p>}
       {msg && <p className={msg.ok ? 'notice' : 'notice bad'}>{msg.ok ? '✓' : '⚠'} {msg.text}</p>}
       <div className="actions">
         <button className="primary" disabled={!ready || busy} onClick={submit}>{busy ? 'Đang gửi…' : `Gửi lệnh ${side === 'buy' ? 'Buy' : 'Sell'} ${lots > 0 ? lots.toFixed(2) + ' lot' : ''}`}</button>
@@ -337,7 +338,7 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
     const got = QUOTE_KEYS.filter((k) => p[k])
     if (!got.length) throw new Error('Broker không trả giá cho cặp nào.')
     for (const k of got) quotes[k] = Number(((p[k].bid + p[k].ask) / 2).toPrecision(7))
-    patch({ quotes, quotesUpdatedAt: Date.now() })
+    patch({ quotes, quoteFrom: { ...settings.quoteFrom, ...Object.fromEntries(got.map((k) => [k, 'mt5' as const])) }, quotesUpdatedAt: Date.now() })
     return `Đã cập nhật ${got.length}/${QUOTE_KEYS.length} tỷ giá từ ${name(accounts[0].id)}.`
   })
 

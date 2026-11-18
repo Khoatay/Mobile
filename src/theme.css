@@ -466,3 +466,25 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 .gold-note { display: grid; gap: 8px; }
 .gold-note p { margin: 0; font-size: 13px; line-height: 1.5; }
 .gold-note > p:first-child { padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--gold) 14%, transparent); border-left: 3px solid var(--gold); }
+
+/* Màu theo ý nghĩa ở Tính lot: rủi ro/stop loss đỏ, take profit xanh */
+.field.tone-risk .field-label::before, .field.tone-sl .field-label::before, .field.tone-tp .field-label::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--neg); }
+.field.tone-tp .field-label::before { background: var(--pos); }
+.field.tone-risk input, .field.tone-sl input { border-color: color-mix(in srgb, var(--neg) 40%, var(--border)); background: color-mix(in srgb, var(--neg) 6%, var(--surface)); }
+.field.tone-tp input { border-color: color-mix(in srgb, var(--pos) 40%, var(--border)); background: color-mix(in srgb, var(--pos) 6%, var(--surface)); }
+.field.tone-risk input:focus, .field.tone-sl input:focus { outline-color: var(--neg); }
+.field.tone-tp input:focus { outline-color: var(--pos); }
+
+/* Giá hiện tại, thu gọn mặc định */
+.quotes-box > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; cursor: pointer; list-style: none; }
+.quotes-box > summary::-webkit-details-marker { display: none; }
+.quotes-box > summary::before { content: "▸"; color: var(--muted); transition: transform 0.15s; }
+.quotes-box[open] > summary::before { transform: rotate(90deg); }
+.quotes-box[open] > summary { margin-bottom: 10px; }
+.quotes-title { font-weight: 600; font-size: 14.5px; }
+.quote-needs { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 10px; }
+.quote-needs li { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 14px; align-items: center; }
+.quote-needs p { margin: 0; color: var(--ink-2); line-height: 1.5; }
+@media (max-width: 600px) { .quote-needs li { grid-template-columns: minmax(0, 1fr); gap: 4px; } }
+.chip-role { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 99px; background: var(--raised); color: var(--muted); margin-right: 4px; }
+.chip-role.lot { background: color-mix(in srgb, var(--neg) 12%, transparent); color: var(--neg); }

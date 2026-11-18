@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 
 /** `group`: dùng khi bên trong là một nhóm nút, để nhãn không bị gắn nhầm vào nút đầu tiên. */
-export function Field({ label, hint, children, group }: { label: string; hint?: string; children: ReactNode; group?: boolean }) {
+/** `tone`: tô màu ô theo ý nghĩa (rủi ro/stop loss đỏ, take profit xanh). */
+export function Field({ label, hint, children, group, tone }: { label: string; hint?: string; children: ReactNode; group?: boolean; tone?: 'risk' | 'sl' | 'tp' }) {
   const inner = (
     <>
       <span className="field-label">{label}</span>
@@ -9,7 +10,8 @@ export function Field({ label, hint, children, group }: { label: string; hint?: 
       {hint && <span className="field-hint">{hint}</span>}
     </>
   )
-  return group ? <div className="field" role="group" aria-label={label}>{inner}</div> : <label className="field">{inner}</label>
+  const cls = tone ? `field tone-${tone}` : 'field'
+  return group ? <div className={cls} role="group" aria-label={label}>{inner}</div> : <label className={cls}>{inner}</label>
 }
 
 export function Num({ value, onChange, step, min }: { value: number; onChange: (v: number) => void; step?: number | 'any'; min?: number }) {

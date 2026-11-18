@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Num } from '../components/Field'
 import { calcPosition, CURRENCIES, PAIRS } from '../lib/forex'
 import { money } from '../lib/format'
+import { fromOf, neededQuotes } from '../lib/quotes'
 import type { Settings } from '../lib/types'
 import { POPULAR, priceMove, RISK_LEVELS, riskTone, slPresets } from './plain'
 
@@ -103,7 +104,7 @@ export default function LiteCalc({ settings, patch }: Props) {
           <p className="muted">Nhập số vốn và khoảng cắt lỗ để xem kết quả.</p>
         )}
       </section>
-      {settings.quotesUpdatedAt == null && !symbol.endsWith(ccy) && <p className="muted small">Kết quả dùng tỷ giá mẫu nên có thể lệch một chút. Cập nhật tỷ giá ở trang Tính lot của bản đầy đủ.</p>}
+      {neededQuotes(symbol, ccy).some((q) => q.role === 'lot' && fromOf(settings, q.key) === 'sample') && <p className="muted small">Chưa lấy được giá thật nên kết quả có thể lệch một chút. Kiểm tra kết nối mạng.</p>}
     </>
   )
 }
