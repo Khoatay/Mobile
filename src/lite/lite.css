@@ -177,3 +177,14 @@
 .lite-site > span:first-child { font-size: 28px; }
 .lite-site > span:nth-child(2) { display: flex; flex-direction: column; flex: 1; }
 .lite-site small { color: var(--muted); }
+
+/* Trang chủ: số dư tách theo nhóm, một thẻ, mỗi nhóm một dòng */
+.lite-balances .bal-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--hair); }
+.lite-balances .bal-row:first-of-type { border-top: none; }
+.bal-name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.bal-name .bal-note { flex-basis: 100%; color: var(--muted); font-size: 11.5px; padding-left: 15px; }
+.bal-num { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+.bal-num strong { font-family: var(--font-num); font-size: 19px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bal-num small { font-size: 12.5px; white-space: nowrap; }
+.grp-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.grp-dot.grp-real { background: var(--accent); } .grp-dot.grp-prop { background: var(--gold); } .grp-dot.grp-copy { background: #6250d6; }

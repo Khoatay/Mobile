@@ -3,6 +3,7 @@ import Icon, { type IconName } from '../components/Icon'
 import { money, signed } from '../lib/format'
 import { DUCK_AVATAR } from '../lib/persona'
 import { siteName, siteUrl } from '../lib/brand'
+import { CATEGORIES, categoryOf } from '../lib/accounts'
 import type { LiteProps, LiteTab } from './LiteApp'
 import { periodStarts, pnlSince } from './plain'
 
@@ -23,7 +24,7 @@ const ACTIONS: [LiteTab, IconName, string, string][] = [
   ['offers', 'gift', 'Ưu đãi', 'Mã giảm giá sàn, quỹ'],
 ]
 
-export default function LiteHome({ user, bridge, trades, settings, profile, go }: LiteProps & { go: (t: LiteTab) => void }) {
+export default function LiteHome({ user, bridge, trades, settings, profile, infos, go }: LiteProps & { go: (t: LiteTab) => void }) {
   const name = user.displayName.trim().split(/\s+/).pop()
   const hour = new Date().getHours()
   const hello = hour < 11 ? 'Chào buổi sáng' : hour < 18 ? 'Chào buổi chiều' : 'Chào buổi tối'
@@ -36,23 +37,36 @@ export default function LiteHome({ user, bridge, trades, settings, profile, go }
   }, [trades, settings.serverOffset])
 
   const live = bridge.accounts
-  const liveCcy = [...new Set(live.map((a) => a.currency))]
-  const balance = live.reduce((s, a) => s + a.balance, 0)
-  const floating = live.reduce((s, a) => s + a.equity - a.balance, 0)
-  const open = live.reduce((s, a) => s + a.positions.length, 0)
+  // Tách số dư theo nhóm: tiền của bạn (Real), vốn quỹ cấp, tài khoản copy. Nhóm không có tài khoản thì ẩn.
+  const groups = CATEGORIES.filter((c) => c.id !== 'view').map((c) => {
+    const list = live.filter((a) => categoryOf(infos[a.id]) === c.id)
+    const ccys = [...new Set(list.map((a) => a.currency))]
+    return {
+      c, list, ccy: ccys.length === 1 ? ccys[0] : '', mixed: ccys.length > 1,
+      balance: list.reduce((s, a) => s + a.balance, 0),
+      floating: list.reduce((s, a) => s + a.equity - a.balance, 0),
+      open: list.reduce((s, a) => s + a.positions.length, 0),
+    }
+  }).filter((g) => g.list.length > 0)
+  const GROUP_NOTE: Record<string, string> = { real: 'Tiền của bạn', prop: 'Vốn quỹ cấp, không phải tiền của bạn', copy: 'Tài khoản chép lệnh' }
 
   return (
     <>
       <h1 className="lite-hello">{hello}{name ? `, ${name}` : ''} 👋</h1>
 
       {live.length > 0 ? (
-        <section className="lite-card lite-balance">
-          <div className="lite-label">Tổng số dư {live.length > 1 ? `(${live.length} tài khoản)` : ''}</div>
-          <div className="lite-big">{money(balance, liveCcy.length === 1 ? liveCcy[0] : '')}</div>
-          <div className={floating > 0 ? 'lite-sub pos' : floating < 0 ? 'lite-sub neg' : 'lite-sub'}>
-            {open ? `${open} lệnh đang mở · đang ${floating >= 0 ? 'lãi' : 'lỗ'} ${money(Math.abs(floating))}` : 'Không có lệnh nào đang mở'}
-          </div>
-          {liveCcy.length > 1 && <p className="muted small">Các tài khoản dùng nhiều loại tiền ({liveCcy.join(', ')}), số trên đang cộng thẳng.</p>}
+        <section className="lite-card lite-balances">
+          <div className="lite-label">Số dư</div>
+          {groups.map((g) => (
+            <div key={g.c.id} className={`bal-row grp-${g.c.id}`}>
+              <div className="bal-name"><span className={`grp-dot grp-${g.c.id}`} aria-hidden="true" /><strong>{g.c.label}</strong>{g.list.length > 1 && <small> · {g.list.length} tk</small>}<small className="bal-note">{GROUP_NOTE[g.c.id]}</small></div>
+              <div className="bal-num">
+                <strong>{money(g.balance, g.ccy)}</strong>
+                <small className={g.floating > 0 ? 'pos' : g.floating < 0 ? 'neg' : 'muted'}>{g.open ? `${g.open} lệnh · ${g.floating >= 0 ? '+' : '−'}${money(Math.abs(g.floating))}` : 'Không có lệnh mở'}</small>
+              </div>
+            </div>
+          ))}
+          {groups.some((g) => g.mixed) && <p className="muted small">Có nhóm dùng nhiều loại tiền, số đang cộng thẳng.</p>}
         </section>
       ) : (
         <section className="lite-card lite-balance">
