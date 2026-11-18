@@ -561,9 +561,9 @@ class Registry:
             if not template:
                 raise ValueError("Chưa thấy MT5 nào trên máy. Cài MT5 (bộ cài của sàn, ví dụ Exness) một lần rồi thử lại")
             if not matched:
-                raise ValueError(f"Máy chạy bridge chưa cài MT5 của {broker}, nên bản sao sẽ không biết máy chủ {server}. "
-                                 f"Tải MT5 ở trang của {broker}, cài một lần (để thư mục mặc định), rồi thêm lại tài khoản này. "
-                                 f"Hoặc chọn tay một bản MT5 mẫu nếu bạn chắc nó có máy chủ này")
+                raise ValueError(f"MT5 trên máy chạy bridge chưa biết máy chủ của {broker} ({server}). Chỉ cần làm một lần: mở MT5 đang có → "
+                                 f"File → Open an Account → gõ {broker} → chọn {broker} → Connect with an existing trade account → đăng nhập tài khoản này. "
+                                 f"Xong thì thêm lại tài khoản ở đây. (Hoặc cài MT5 của {broker}.)")
             if any(a.id == str(login) for a in self.items):
                 raise ValueError(f"Tài khoản {login} đã có trong danh sách")
             print(f"[mt5] Tạo bản MT5 riêng cho {login} từ {template}…")

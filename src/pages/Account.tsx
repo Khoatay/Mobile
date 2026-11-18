@@ -304,7 +304,7 @@ function AddAccount({ bridge, groups, onAdded, role }: { bridge: BridgeState; gr
         <label className="inline wrap" style={{ marginTop: 8 }}>
           <input type="checkbox" className="check" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> Tự tạo bản MT5 riêng cho tài khoản này (khuyên dùng: chỉ cần cài MT5 một lần, không phải cài thêm)
         </label>
-        {auto && <p className="muted small">Bridge tự mở bản MT5 riêng đó và đăng nhập (khoảng 200 MB ổ cứng, 300–500 MB RAM mỗi tài khoản). Cứ để cửa sổ MT5 đó chạy, đừng đổi tài khoản trong đó. Bạn vẫn dùng MT5 của mình hoặc trên điện thoại như bình thường. Đăng nhập báo sai máy chủ thì cài bộ MT5 của đúng sàn/quỹ đó một lần rồi chọn làm bản mẫu.</p>}
+        {auto && <p className="muted small">Bridge tự mở bản MT5 riêng đó và đăng nhập (khoảng 200 MB ổ cứng, 300–500 MB RAM mỗi tài khoản). Cứ để cửa sổ MT5 đó chạy, đừng đổi tài khoản trong đó. Bạn vẫn dùng MT5 của mình hoặc trên điện thoại như bình thường. Chỉ cần MỘT bản MT5 cho mọi sàn và quỹ: với sàn mới, mở MT5 đó → File → Open an Account → gõ tên sàn/quỹ → đăng nhập một lần, để MT5 biết máy chủ của họ. Bridge chép lại được cả danh sách máy chủ đó.</p>}
         {terminals && terminals.length === 0 && auto && (
           <div className="warn">⚠ Chưa thấy MT5 nào trên máy. Cài MT5 một lần (bộ cài của sàn, ví dụ Exness), rồi bấm <button className="ghost" onClick={loadTerminals}>Tìm lại</button></div>
         )}

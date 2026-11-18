@@ -13,3 +13,11 @@ Chương trình chạy ngầm (biểu tượng con vịt ở góc phải Taskbar
 ## Nếu vẫn bị chặn
 
 - **Smart App Control** (Windows 11) hoặc Windows Security báo virus rồi xoá file: bản Windows đó chặn hẳn ứng dụng chưa ký số. Không khuyên khách tắt diệt virus; tạm dùng bản Python, và cần ký số file .exe (Microsoft Trusted Signing khoảng 10 USD/tháng, hoặc chứng chỉ thường 100–300 USD/năm) để hết hẳn cảnh báo.
+
+## Chỉ cần một bản MT5 cho mọi sàn và quỹ
+
+Bridge tự tạo bản MT5 riêng cho mỗi tài khoản bằng cách chép một MT5 đã cài (kể cả danh sách máy chủ). MT5 nào cũng nối được mọi sàn, miễn là nó biết máy chủ của sàn đó. Với mỗi sàn/quỹ mới, làm một lần trên MT5 đang có:
+
+**File → Open an Account → gõ tên sàn/quỹ (ví dụ FTMO) → chọn → Next → Connect with an existing trade account → nhập tài khoản, mật khẩu, máy chủ → Finish.**
+
+Đăng nhập được một lần là MT5 nhớ máy chủ của sàn đó; sau đó thêm tài khoản trên web như bình thường. Nếu chưa làm bước này, bridge sẽ báo rõ cần làm gì thay vì tạo bản MT5 không đăng nhập được.
