@@ -14,26 +14,61 @@ export interface PropConfig {
   /** static: sàn cố định từ vốn ban đầu. trailing: sàn đi theo đỉnh số dư cuối ngày. */
   maxLossType: 'static' | 'trailing'
   minDays: number
+  /** Luật nhất quán: lãi của ngày tốt nhất không vượt quá X% tổng lãi. 0 = không áp dụng. */
+  consistencyPct: number
+  /** Cấm mở/đóng lệnh trong X phút trước và sau tin mạnh của đồng tiền liên quan. 0 = không áp dụng. */
+  newsWindowMin: number
+  /** Cấm giữ lệnh qua cuối tuần. */
+  noWeekend: boolean
+  /** Tài khoản đã cấp vốn: % lợi nhuận bạn nhận, chu kỳ rút (ngày), trần mỗi lần rút (% vốn, 0 = không trần). */
+  profitSplitPct: number
+  payoutDays: number
+  payoutCapPct: number
+  /** Ngày rút gần nhất (yyyy-mm-dd). Rỗng = chưa rút lần nào, tính từ ngày bắt đầu. */
+  lastPayout: string
 }
 
-type Rules = Omit<PropConfig, 'preset' | 'accountSize' | 'startDate'>
+type Rules = Omit<PropConfig, 'preset' | 'accountSize' | 'startDate' | 'lastPayout'>
+
+/** Giá trị mặc định cho các luật thêm sau; cấu hình đã lưu từ bản cũ được gộp với cái này. */
+export const EXTRA_DEFAULTS = { consistencyPct: 0, newsWindowMin: 0, noWeekend: false, profitSplitPct: 0, payoutDays: 0, payoutCapPct: 0, lastPayout: '' }
+export const withDefaults = (c: Partial<PropConfig> & Pick<PropConfig, 'preset' | 'accountSize'>): PropConfig => ({ ...DEFAULT_PROP, ...EXTRA_DEFAULTS, ...c })
 
 /**
  * Thông số tổng hợp từ các trang đánh giá bên thứ ba (11/2026), KHÔNG phải từ trang chính thức.
  * Các quỹ đổi luật thường xuyên; người dùng phải đối chiếu và sửa lại cho đúng tài khoản của mình.
  */
+const R = (r: Partial<Rules> & Pick<Rules, 'targetPct' | 'dailyLossPct' | 'dailyBase' | 'maxLossPct' | 'maxLossType' | 'minDays'>): Rules => ({ ...EXTRA_DEFAULTS, ...r })
+
+/**
+ * Luật nhất quán, cấm tin, cấm giữ cuối tuần và chia lợi nhuận chỉ điền khi có nguồn; để 0/tắt nghĩa là chưa rõ, người dùng tự bật theo điều khoản.
+ * TenTrade: 10% mục tiêu cho Challenge, Instant không có mục tiêu; giới hạn lỗ theo cỡ tài khoản (lỗ ngày 6% ở tài khoản nhỏ, 3% ở tài khoản lớn;
+ * lỗ tổng 9% xuống 5–7%); chia 70%, rút mỗi 15 ngày; TenExpress giới hạn 25% lãi mỗi ngày/lệnh và trần 10% mỗi lần rút. FundedNext: Stellar 2-Step 8%/5%, 5% ngày, 10% tổng;
+ * Stellar 1-Step 10%, 3% ngày, 6% tổng; không có luật nhất quán.
+ */
 export const PRESETS: { id: string; name: string; rules: Rules }[] = [
-  { id: 'ftmo-2s-1', name: 'FTMO 2-Step · Challenge', rules: { targetPct: 10, dailyLossPct: 5, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'static', minDays: 4 } },
-  { id: 'ftmo-2s-2', name: 'FTMO 2-Step · Verification', rules: { targetPct: 5, dailyLossPct: 5, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'static', minDays: 4 } },
-  { id: 'ftmo-1s', name: 'FTMO 1-Step', rules: { targetPct: 10, dailyLossPct: 3, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'trailing', minDays: 0 } },
-  { id: '5ers-hs-1', name: 'The5ers High Stakes · Bước 1', rules: { targetPct: 8, dailyLossPct: 5, dailyBase: 'dayStart', maxLossPct: 10, maxLossType: 'static', minDays: 3 } },
-  { id: '5ers-hs-2', name: 'The5ers High Stakes · Bước 2', rules: { targetPct: 5, dailyLossPct: 5, dailyBase: 'dayStart', maxLossPct: 10, maxLossType: 'static', minDays: 3 } },
-  { id: '5ers-hg', name: 'The5ers Hyper Growth', rules: { targetPct: 10, dailyLossPct: 3, dailyBase: 'dayStart', maxLossPct: 6, maxLossType: 'static', minDays: 0 } },
-  { id: '5ers-bc', name: 'The5ers Bootcamp (mỗi bước)', rules: { targetPct: 6, dailyLossPct: 0, dailyBase: 'dayStart', maxLossPct: 5, maxLossType: 'static', minDays: 0 } },
-  { id: 'ten-express', name: 'TenTrade TenExpress', rules: { targetPct: 10, dailyLossPct: 6, dailyBase: 'initial', maxLossPct: 9, maxLossType: 'static', minDays: 5 } },
+  { id: 'ftmo-2s-1', name: 'FTMO 2-Step · Challenge', rules: R({ targetPct: 10, dailyLossPct: 5, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'static', minDays: 4 }) },
+  { id: 'ftmo-2s-2', name: 'FTMO 2-Step · Verification', rules: R({ targetPct: 5, dailyLossPct: 5, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'static', minDays: 4 }) },
+  { id: 'ftmo-1s', name: 'FTMO 1-Step', rules: R({ targetPct: 10, dailyLossPct: 3, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'trailing', minDays: 0 }) },
+  { id: 'ftmo-funded', name: 'FTMO Account (đã cấp vốn)', rules: R({ targetPct: 0, dailyLossPct: 5, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'static', minDays: 0, profitSplitPct: 80, payoutDays: 14 }) },
+  { id: '5ers-hs-1', name: 'The5ers High Stakes · Bước 1', rules: R({ targetPct: 8, dailyLossPct: 5, dailyBase: 'dayStart', maxLossPct: 10, maxLossType: 'static', minDays: 3 }) },
+  { id: '5ers-hs-2', name: 'The5ers High Stakes · Bước 2', rules: R({ targetPct: 5, dailyLossPct: 5, dailyBase: 'dayStart', maxLossPct: 10, maxLossType: 'static', minDays: 3 }) },
+  { id: '5ers-hg', name: 'The5ers Hyper Growth', rules: R({ targetPct: 10, dailyLossPct: 3, dailyBase: 'dayStart', maxLossPct: 6, maxLossType: 'static', minDays: 0 }) },
+  { id: '5ers-bc', name: 'The5ers Bootcamp (mỗi bước)', rules: R({ targetPct: 6, dailyLossPct: 0, dailyBase: 'dayStart', maxLossPct: 5, maxLossType: 'static', minDays: 0 }) },
+  { id: 'ten-express', name: 'TenTrade TenExpress Challenge (tài khoản nhỏ)', rules: R({ targetPct: 10, dailyLossPct: 6, dailyBase: 'initial', maxLossPct: 9, maxLossType: 'static', minDays: 5, consistencyPct: 25, profitSplitPct: 70, payoutDays: 15, payoutCapPct: 10 }) },
+  { id: 'ten-express-l', name: 'TenTrade TenExpress Challenge (tài khoản lớn)', rules: R({ targetPct: 10, dailyLossPct: 3, dailyBase: 'initial', maxLossPct: 5, maxLossType: 'static', minDays: 5, consistencyPct: 25, profitSplitPct: 70, payoutDays: 15, payoutCapPct: 10 }) },
+  { id: 'ten-express-i', name: 'TenTrade TenExpress Instant', rules: R({ targetPct: 0, dailyLossPct: 6, dailyBase: 'initial', maxLossPct: 9, maxLossType: 'static', minDays: 0, consistencyPct: 25, profitSplitPct: 70, payoutDays: 15, payoutCapPct: 10 }) },
+  { id: 'ten-edge', name: 'TenTrade TenEdge Challenge', rules: R({ targetPct: 10, dailyLossPct: 6, dailyBase: 'initial', maxLossPct: 9, maxLossType: 'static', minDays: 5, profitSplitPct: 70, payoutDays: 15 }) },
+  { id: 'ten-edge-i', name: 'TenTrade TenEdge Instant', rules: R({ targetPct: 0, dailyLossPct: 6, dailyBase: 'initial', maxLossPct: 9, maxLossType: 'static', minDays: 0, profitSplitPct: 70, payoutDays: 15 }) },
+  { id: 'fn-2s-1', name: 'FundedNext Stellar 2-Step · Bước 1', rules: R({ targetPct: 8, dailyLossPct: 5, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'static', minDays: 5 }) },
+  { id: 'fn-2s-2', name: 'FundedNext Stellar 2-Step · Bước 2', rules: R({ targetPct: 5, dailyLossPct: 5, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'static', minDays: 5 }) },
+  { id: 'fn-1s', name: 'FundedNext Stellar 1-Step', rules: R({ targetPct: 10, dailyLossPct: 3, dailyBase: 'initial', maxLossPct: 6, maxLossType: 'static', minDays: 2 }) },
 ]
 
-export const DEFAULT_PROP: PropConfig = { preset: PRESETS[0].id, accountSize: 100000, startDate: '', ...PRESETS[0].rules }
+/** Ngày cập nhật bộ luật mẫu, hiện cạnh lời nhắc đối chiếu điều khoản. */
+export const PRESETS_UPDATED = '11/2026'
+
+export const DEFAULT_PROP: PropConfig = { preset: PRESETS[0].id, accountSize: 100000, startDate: '', lastPayout: '', ...PRESETS[0].rules }
 
 const SIZES = [5000, 10000, 15000, 25000, 50000, 100000, 200000, 400000]
 
@@ -46,12 +81,13 @@ export function suggestProp(broker: string, phase: string, balance?: number): Pr
   const second = /2|verification|xác minh/i.test(phase)
   const id = b.includes('ftmo') ? (second ? 'ftmo-2s-2' : 'ftmo-2s-1')
     : b.includes('5ers') ? (second ? '5ers-hs-2' : '5ers-hs-1')
-    : b.includes('tentrade') ? 'ten-express'
+    : b.includes('tentrade') ? (/instant/i.test(phase) ? 'ten-express-i' : 'ten-express')
+    : b.includes('fundednext') ? (second ? 'fn-2s-2' : 'fn-2s-1')
     : PRESETS[0].id
   const preset = PRESETS.find((p) => p.id === id)!
   const near = balance ? SIZES.reduce((a, c) => (Math.abs(c - balance) < Math.abs(a - balance) ? c : a)) : 0
   const accountSize = near && Math.abs(near - balance!) / near <= 0.15 ? near : DEFAULT_PROP.accountSize
-  return { preset: preset.id, accountSize, startDate: '', ...preset.rules }
+  return { preset: preset.id, accountSize, startDate: '', lastPayout: '', ...preset.rules }
 }
 
 export interface PropDay {

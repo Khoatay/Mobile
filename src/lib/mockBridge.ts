@@ -528,6 +528,13 @@ export function seed() {
   ]
   // Các lần nạp/rút của tài khoản riêng, cùng id với nút "Lấy nạp/rút từ MT5" nên bấm lại không bị trùng.
   for (const a of accounts.filter((x) => x.type !== 'prop' && x.type !== 'view')) ledger.push(...balanceDealsToEntries(historyOf(a).deals, a.id, a.label))
+  // Lịch sử thi quỹ mẫu, ghi rõ là ví dụ.
+  put('fx.challenges', [
+    { id: 'c1', firm: 'FTMO', program: 'FTMO 2-Step', size: 100000, fee: 540, date: day(120), status: 'failed', payouts: [], note: '(ví dụ) rớt vì lỗ ngày' },
+    { id: 'c2', firm: 'FTMO', program: 'FTMO 2-Step', size: 100000, fee: 540, date: day(75), status: 'funded', account: '520011', payouts: [{ date: day(20), amount: 1850 }], note: '(ví dụ)' },
+    { id: 'c3', firm: 'The5ers', program: 'High Stakes', size: 100000, fee: 495, date: day(40), status: 'active', account: '730045', payouts: [], note: '(ví dụ)' },
+    { id: 'c4', firm: 'TenTrade', program: 'TenExpress Instant', size: 10000, fee: 99, date: day(30), status: 'funded', payouts: [{ date: day(10), amount: 140 }], note: '(ví dụ)' },
+  ])
   put('fx.ledger', ledger)
   const day0 = (d: number) => new Date(T0 + d * 86_400_000).toISOString().slice(0, 10)
   // Ảnh mẫu vẽ bằng SVG (khung xem trước chặn ảnh từ trang khác).

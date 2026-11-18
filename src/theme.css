@@ -554,3 +554,22 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 .flag-col.good { background: color-mix(in srgb, var(--pos) 6%, var(--surface)); } .flag-col.good strong { color: var(--pos); }
 .float-sum { font-family: var(--font-num); font-weight: 600; font-variant-numeric: tabular-nums; }
 .float-sum.pos { color: var(--pos); } .float-sum.neg { color: var(--neg); }
+
+/* Quỹ: luật thêm, lot tối đa, mô phỏng, lịch sử thi quỹ */
+.form-sub { margin: 18px 0 8px; font-size: 13.5px; }
+.lot-rows { display: grid; gap: 6px; margin-top: 10px; max-width: 560px; }
+.lot-rows > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; border-radius: 8px; background: var(--page); border: 1px solid var(--border); }
+.lot-rows strong { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.lot-rows .lot-max { background: color-mix(in srgb, var(--neg) 8%, var(--surface)); border-color: color-mix(in srgb, var(--neg) 35%, transparent); }
+.lot-rows .lot-max strong { color: var(--neg); font-size: 17px; }
+.rule-block { padding: 10px 0; border-top: 1px solid var(--hair); }
+.rule-block:first-of-type { border-top: none; }
+.rule-block p { margin: 6px 0 0; }
+.news-list { margin: 6px 0 0; padding-left: 4px; list-style: none; font-size: 13.5px; display: grid; gap: 4px; }
+.sim-table tr.current td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.sim-table .chip { margin-left: 6px; font-size: 11px; }
+.challenge-form { border: 1px dashed var(--axis); border-radius: 12px; padding: 12px 14px; margin: 10px 0; }
+.inline-pay { display: inline-flex; gap: 6px; align-items: center; }
+.inline-pay input { width: 120px; }
+.meter { position: relative; }
+.meter-limit { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: 0.6; border-radius: 1px; }
