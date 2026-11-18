@@ -1,0 +1,38 @@
+/* Bản máy chủ: dùng lại giao diện bản đơn giản, chỉ thêm phần riêng. */
+.srv-nav { grid-template-columns: repeat(5, 1fr); }
+.srv-login { max-width: 440px; margin: 0 auto; padding: 32px 16px; text-align: center; }
+.srv-login-logo { width: 88px; height: 88px; }
+.srv-login h1 { margin: 8px 0 4px; }
+.srv-form { text-align: left; display: flex; flex-direction: column; gap: 12px; }
+.srv-form h2 { margin: 0; font-size: 19px; }
+.srv-form label { display: flex; flex-direction: column; gap: 4px; font-weight: 500; font-size: 14px; }
+.srv-form input:not([type=checkbox]) { font-size: 16px; padding: 11px 12px; border-radius: 10px; }
+.srv-form .srv-agree { flex-direction: row; align-items: flex-start; gap: 8px; font-weight: 400; font-size: 13px; color: var(--muted); }
+.srv-form .srv-agree input { margin-top: 3px; }
+.srv-form .lite-link { text-align: center; }
+.srv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.srv-channel { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+.srv-channel > div { display: flex; flex-direction: column; min-width: 0; }
+.srv-channel strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srv-bell { background: none; border: 1px solid var(--border); border-radius: 999px; width: 40px; height: 40px; font-size: 18px; opacity: 0.55; flex: none; }
+.srv-bell.on { opacity: 1; border-color: var(--accent); }
+.srv-add { display: flex; gap: 8px; margin: 10px 0 4px; }
+.srv-add input { flex: 1; min-width: 0; font-size: 16px; padding: 11px 12px; border-radius: 10px; }
+.srv-add button { padding: 0 18px; border-radius: 10px; }
+.lite-link.danger { color: var(--neg, #d64545); }
+.srv-signal { border-left: 4px solid var(--border); padding: 14px 16px; }
+.srv-signal.buy { border-left-color: var(--pos, #1f9d63); }
+.srv-signal.sell { border-left-color: var(--neg, #d64545); }
+.srv-side { font-size: 17px; }
+.srv-levels { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 8px; margin: 10px 0; }
+.srv-levels div { background: var(--bg, rgba(0,0,0,.03)); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.srv-levels dt { font-size: 12px; color: var(--muted); }
+.srv-levels dd { margin: 2px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.srv-levels .sl dd { color: var(--neg, #d64545); }
+.srv-levels .tp dd { color: var(--pos, #1f9d63); }
+.srv-msg p { white-space: pre-wrap; margin: 6px 0 0; overflow-wrap: anywhere; }
+.srv-plan { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; }
+.srv-badge { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--border); }
+.srv-badge.pro { background: #f5c542; color: #3a2a00; }
+.srv-limits { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
+.srv-logout { background: var(--surface); border: 1px solid var(--border); color: var(--neg, #d64545); }

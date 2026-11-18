@@ -19,7 +19,7 @@ const TERMS: [string, string][] = [
   ['Quỹ (prop firm)', 'Công ty cấp vốn cho bạn trade nếu bạn vượt qua bài thi, rồi chia lợi nhuận. Bài thi có luật lỗ tối đa mỗi ngày và tổng; vi phạm là mất tài khoản.'],
 ]
 
-export default function LiteLearn({ goFull }: { goFull: (tab?: string) => void }) {
+export default function LiteLearn({ goFull }: { goFull?: (tab?: string) => void }) {
   return (
     <>
       <h1>Học cơ bản</h1>
@@ -44,7 +44,7 @@ export default function LiteLearn({ goFull }: { goFull: (tab?: string) => void }
 
       <section className="lite-card">
         <p>Muốn tìm hiểu sâu hơn về sàn, quỹ và cách dùng từng chức năng?</p>
-        <button className="lite-link" onClick={() => goFull('guides')}>Mở bài hướng dẫn đầy đủ →</button>
+        {goFull && <button className="lite-link" onClick={() => goFull('guides')}>Mở bài hướng dẫn đầy đủ →</button>}
       </section>
       <p className="muted small">Giao dịch forex và vàng có rủi ro mất vốn. Nội dung ở đây để học, không phải lời khuyên đầu tư.</p>
     </>

@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "build:trader": "tsc --noEmit && vite build --mode trader --outDir dist-trader"
+    "build:trader": "tsc --noEmit && vite build --mode trader --outDir dist-trader",
+    "build:server": "tsc --noEmit && vite build --mode server --outDir dist-server"
   },
   "dependencies": {
     "react": "^19.3.1",
