@@ -36,9 +36,11 @@ export function routes(d: AppDeps): Record<string, Handler> {
     return u
   }
   const isAdmin = (u: User) => u.id === 1 || (d.adminEmails ?? []).includes(u.email)
+  /** Tính năng nâng cao (khoá AI riêng, nhân vật tự tạo): khách Pro và chủ app. */
+  const adv = (u: User) => isAdmin(u) || auth.planOf(u) === 'pro'
   const admin = (r: Req) => { const u = me(r); if (!isAdmin(u)) throw new HttpError(403, 'Chỉ chủ app làm được việc này'); return u }
   const view = (u: User) => ({
-    id: u.id, email: u.email, name: u.name, plan: auth.planOf(u), planUntil: u.plan_until, admin: isAdmin(u),
+    id: u.id, email: u.email, name: u.name, plan: auth.planOf(u), planUntil: u.plan_until, admin: isAdmin(u), advanced: adv(u),
     telegram: { linked: !!u.tg_chat, name: u.tg_name, link: d.bot.username ? `https://t.me/${d.bot.username}?start=${u.link_code}` : '' },
     limits: { channels: d.channelsMax[auth.planOf(u)] ?? 0, chatPerDay: ai.limitFor(u, d.ai.perDay) },
     chatToday: ai.usageToday(d.db, u.id).calls,
@@ -71,15 +73,28 @@ export function routes(d: AppDeps): Record<string, Handler> {
     'GET /api/messages': (r) => ch.feed(d.db, me(r).id, Number(r.query.get('after')) || 0),
 
     'GET /api/personas': (r) => ai.store(d.db, me(r).id),
-    'POST /api/personas/save': (r) => ai.savePersona(d.db, me(r).id, r.body),
+    'POST /api/personas/save': (r) => { const u = me(r); return ai.savePersona(d.db, u.id, r.body, adv(u)) },
     'POST /api/personas/delete': (r) => ai.deletePersona(d.db, me(r).id, String(r.body.id ?? '')),
     'GET /api/ai/me': (r) => ai.myAi(d.db, d.ai, me(r)),
-    'POST /api/ai/me': (r) => ai.saveMyAi(d.db, d.ai, me(r), r.body),
+    'POST /api/ai/me': (r) => { const u = me(r); return ai.saveMyAi(d.db, d.ai, u, r.body, adv(u)) },
     'POST /api/ai/models': (r) => { const u = me(r); return ai.models(d.db, d.ai, u, r.body, isAdmin(u)) },
-    'POST /api/ai/test': (r) => { const u = me(r); return ai.testAi(d.db, d.ai, u, r.body.scope === 'system' && isAdmin(u) ? 'system' : 'me') },
+    'POST /api/ai/test': (r) => {
+      const u = me(r)
+      const scope = isAdmin(u) && (r.body.scope === 'cheap' || r.body.scope === 'strong') ? r.body.scope : 'me'
+      return ai.testAi(d.db, d.ai, u, scope, adv(u))
+    },
     'GET /api/admin/ai': (r) => { admin(r); return ai.adminView(d.db, d.ai) },
     'POST /api/admin/ai': (r) => { admin(r); return ai.adminSave(d.db, d.ai, r.body) },
-    'POST /api/chat': (r) => ai.chat(d.db, me(r), d.ai, r.body),
+    /** Nâng khách lên Pro bằng tay (trước khi có thanh toán). days = 0 thì về Free. */
+    'POST /api/admin/plan': (r) => {
+      admin(r)
+      const email = auth.normEmail(r.body.email)
+      const days = Math.max(0, Math.min(3650, Number(r.body.days) || 0))
+      const res = d.db.prepare('update users set plan = ?, plan_until = ? where email = ?').run(days ? 'pro' : 'free', days ? Date.now() + days * 86_400_000 : null, email)
+      if (!res.changes) throw new HttpError(404, 'Không có tài khoản với email này')
+      return { ok: true, email, plan: days ? 'pro' : 'free', until: days ? Date.now() + days * 86_400_000 : null }
+    },
+    'POST /api/chat': (r) => { const u = me(r); return ai.chat(d.db, u, d.ai, r.body, adv(u)) },
     'POST /api/chat/clear': (r) => {
       const u = me(r)
       d.db.prepare('delete from chats where user_id = ? and persona = ?').run(u.id, String(r.body.persona ?? ''))

@@ -151,11 +151,11 @@ describe('API', () => {
     const p = (await call('a', 'GET', '/api/personas')).body.items
     const duck = p.find((x: { name: string }) => x.name === 'Golden Duck')
     expect(duck).toBeTruthy()
-    const r1 = await call('a', 'POST', '/api/chat', { persona: duck.id, message: 'Pip là gì?' })
+    const r1 = await call('a', 'POST', '/api/chat', { persona: duck.id, message: 'Hôm nay mình nên học gì?' })
     expect(r1.body.reply).toBe('Chào bạn')
     expect(r1.body.chats[duck.id]).toHaveLength(2)
     expect(r1.body.remaining).toBe(1)
-    await call('a', 'POST', '/api/chat', { persona: duck.id, message: 'Lot là gì?' })
+    await call('a', 'POST', '/api/chat', { persona: duck.id, message: 'Còn gì nữa không?' })
     expect((await call('a', 'POST', '/api/chat', { persona: duck.id, message: 'nữa' })).status).toBe(429)
     const cost = db.prepare('select cost from ai_usage').get() as { cost: number }
     expect(cost.cost).toBeCloseTo(2 * (1000 * 0.1 + 100 * 0.5) / 1e6)
@@ -187,7 +187,7 @@ describe('API', () => {
     expect(r.body.items.find((p: { id: string }) => p.id === r.body.saved)).toMatchObject({ name: 'Thầy Scalp', knowledge: 'Chỉ vào lệnh phiên Âu, SL 30 pip.' })
     // Người khác không thấy.
     expect((await call('b', 'GET', '/api/personas')).body.items.some((p: { name: string }) => p.name === 'Thầy Scalp')).toBe(false)
-    expect((await call('b', 'POST', '/api/personas/save', { id: r.body.saved, name: 'Cướp' })).status).toBe(404)
+    expect((await call('b', 'POST', '/api/personas/save', { id: r.body.saved, name: 'Cướp' })).status).toBe(403) // khách Free không tạo nhân vật
     const del = await call('a', 'POST', '/api/personas/delete', { id: r.body.saved })
     expect(del.body.items.some((p: { name: string }) => p.name === 'Thầy Scalp')).toBe(false)
   })
@@ -195,14 +195,39 @@ describe('API', () => {
   it('trang quản trị chỉ cho chủ app (tài khoản đầu tiên)', async () => {
     expect((await call('a', 'GET', '/api/me')).body.admin).toBe(true)
     expect((await call('b', 'GET', '/api/admin/ai')).status).toBe(403)
-    const r = await call('a', 'POST', '/api/admin/ai', { provider: 'openai', model: 'gpt-x', key: 'sk-dung', priceIn: 1, priceOut: 4 })
-    expect(r.body).toMatchObject({ provider: 'openai', model: 'gpt-x', ready: true })
+    const r = await call('a', 'POST', '/api/admin/ai', { slot: 'cheap', provider: 'openai', model: 'gpt-x', key: 'sk-dung', priceIn: 1, priceOut: 4 })
+    expect(r.body).toMatchObject({ cheap: { provider: 'openai', model: 'gpt-x' }, ready: { cheap: true } })
     expect(r.body.keys.openai).toBe('…dung')
     const c = await call('b', 'POST', '/api/chat', { persona: 'duck', message: 'Hi' })
     expect(c.body.reply).toBe('Trả lời từ GPT')
     const cost = db.prepare('select cost from ai_usage where user_id = 2').get() as { cost: number }
     expect(cost.cost).toBeCloseTo((50 * 1 + 5 * 4) / 1e6)
-    await call('a', 'POST', '/api/admin/ai', { provider: 'anthropic', model: 'claude-haiku-5-5' })
+    await call('a', 'POST', '/api/admin/ai', { slot: 'cheap', provider: 'anthropic', model: 'claude-haiku-5-5' })
+  })
+
+  it('khách Free: không dùng khoá riêng; câu hỏi cơ bản trả lời soạn sẵn, không tính lượt', async () => {
+    expect((await call('b', 'POST', '/api/ai/me', { mode: 'own', provider: 'openai', model: 'gpt-x', key: 'sk-dung' })).status).toBe(403)
+    const before = (await call('b', 'GET', '/api/me')).body.chatToday
+    const r = await call('b', 'POST', '/api/chat', { persona: 'duck', message: 'Pip là gì?' })
+    expect(r.body.canned).toBe(true)
+    expect(r.body.reply).toMatch(/10 pip = 1 giá/)
+    expect((await call('b', 'GET', '/api/me')).body.chatToday).toBe(before)
+    expect((await call('a', 'GET', '/api/admin/ai')).body.today.canned).toBe(1)
+  })
+
+  it('chủ app nâng khách lên Pro: mở khoá tính năng nâng cao; Pro dùng model mạnh nếu bật', async () => {
+    expect((await call('b', 'POST', '/api/admin/plan', { email: 'binh@mail.com', days: 30 })).status).toBe(403)
+    expect((await call('a', 'POST', '/api/admin/plan', { email: 'khongco@mail.com', days: 30 })).status).toBe(404)
+    await call('a', 'POST', '/api/admin/plan', { email: 'binh@mail.com', days: 30 })
+    const b = (await call('b', 'GET', '/api/me')).body
+    expect(b).toMatchObject({ plan: 'pro', advanced: true, admin: false })
+    expect((await call('b', 'POST', '/api/personas/save', { name: 'Của Bình' })).status).toBe(200)
+    await call('a', 'POST', '/api/admin/ai', { slot: 'strong', provider: 'openai', model: 'gpt-x', key: 'sk-dung', proStrong: true })
+    expect((await call('b', 'POST', '/api/chat', { persona: 'duck', message: 'Phân tích giúp tâm lý sau chuỗi thua' })).body.reply).toBe('Trả lời từ GPT')
+    await call('a', 'POST', '/api/admin/ai', { proStrong: false })
+    expect((await call('b', 'POST', '/api/chat', { persona: 'duck', message: 'Phân tích tiếp' })).body.reply).toBe('Chào bạn')
+    await call('a', 'POST', '/api/admin/plan', { email: 'binh@mail.com', days: 0 })
+    expect((await call('b', 'GET', '/api/me')).body.advanced).toBe(false)
   })
 
   it('đăng xuất', async () => {

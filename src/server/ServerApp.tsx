@@ -6,13 +6,14 @@ import { BRAND_LOGO, BRAND_NAME } from '../lib/brand'
 import { useAutoQuotes } from '../lib/quotes'
 import { useMe } from '../lib/server'
 import { useSettings } from '../lib/store'
+import { AdminPage } from './AiPicker'
 import Login from './Login'
 import ServerChat from './ServerChat'
 import ServerMe from './ServerMe'
 import ServerSignals from './ServerSignals'
 import './server.css'
 
-type Tab = 'signals' | 'calc' | 'chat' | 'learn' | 'me'
+type Tab = 'signals' | 'calc' | 'chat' | 'learn' | 'me' | 'admin'
 const TABS: [Tab, string, IconName][] = [
   ['signals', 'Tín hiệu', 'send'],
   ['calc', 'Tính lệnh', 'calc'],
@@ -42,12 +43,13 @@ export default function ServerApp() {
       <main className="lite-main">
         {tab === 'signals' && <ServerSignals me={me} goCalc={() => go('calc')} goMe={() => go('me')} />}
         {tab === 'calc' && <LiteCalc settings={settings} patch={patch} />}
-        {tab === 'chat' && <ServerChat me={me} onUsed={(left) => setMe({ ...me, chatToday: me.limits.chatPerDay - left })} goMe={() => go('me')} />}
+        {tab === 'chat' && <ServerChat me={me} onUsed={(left) => setMe({ ...me, chatToday: me.limits.chatPerDay - left })} />}
         {tab === 'learn' && <LiteLearn />}
         {tab === 'me' && <ServerMe me={me} setMe={setMe} />}
+        {tab === 'admin' && me.admin && <AdminPage />}
       </main>
-      <nav className="lite-nav srv-nav" aria-label="Mục chính">
-        {TABS.map(([id, label, icon]) => (
+      <nav className={`lite-nav srv-nav${me.admin ? ' six' : ''}`} aria-label="Mục chính">
+        {[...TABS, ...(me.admin ? [['admin', 'Quản trị', 'crown'] as [Tab, string, IconName]] : [])].map(([id, label, icon]) => (
           <button key={id} className={tab === id ? 'active' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => go(id)}>
             <Icon name={icon} size={22} />
             <span>{label}</span>

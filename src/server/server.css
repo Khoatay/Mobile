@@ -62,3 +62,14 @@
 .srv-persona textarea { font-size: 15px; padding: 10px 12px; border-radius: 10px; font-family: inherit; resize: vertical; }
 .srv-persona input { font-size: 16px; padding: 10px 12px; border-radius: 10px; }
 .srv-persona h1 { margin: 8px 0 0; }
+.srv-nav.six { grid-template-columns: repeat(6, 1fr); }
+.srv-adv > summary { cursor: pointer; list-style: none; padding: 2px 0; }
+.srv-adv > summary::-webkit-details-marker { display: none; }
+.srv-adv > summary::before { content: '›'; display: inline-block; width: 16px; transition: transform .15s; }
+.srv-adv[open] > summary::before { transform: rotate(90deg); }
+.srv-adv-body { margin-top: 12px; }
+.srv-toggle { display: flex; gap: 10px; align-items: flex-start; }
+.srv-toggle input { margin-top: 4px; width: 18px; height: 18px; }
+.srv-toggle span { display: flex; flex-direction: column; }
+.bubble strong { font-weight: 700; }
+.bubble em { opacity: .75; font-size: .92em; }

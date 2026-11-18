@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { ADMIN_EXTRA, api, type AdminAi, type MyAi, type ProviderOpt } from '../lib/server'
+import { ADMIN_EXTRA, api, type AdminAi, type MyAi, type ProviderOpt, type SlotCfg } from '../lib/server'
 
 const err = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
 
 /** Ô chọn nhà cung cấp, dán khoá, lấy danh sách model. Dùng chung cho khách (khoá riêng) và chủ app (AI của Golden Duck). */
 function ProviderForm({ providers, provider, model, savedKey, base, scope, onSave, saveLabel }: {
-  providers: ProviderOpt[]; provider: string; model: string; savedKey: string; base?: string; scope: 'me' | 'system'
+  providers: ProviderOpt[]; provider: string; model: string; savedKey: string; base?: string; scope: 'me' | 'cheap' | 'strong'
   onSave: (v: { provider: string; model: string; key: string; base: string }) => Promise<void>; saveLabel: string
 }) {
   const [p, setP] = useState(provider)
@@ -72,20 +72,20 @@ export function MyAiCard() {
   const [ai, setAi] = useState<MyAi | null>(null)
   const [e, setE] = useState('')
   useEffect(() => { api<MyAi>('/ai/me').then(setAi).catch((x) => setE(err(x))) }, [])
-  if (!ai) return <section className="lite-card"><div className="lite-label">AI</div>{e ? <p className="notice bad">⚠ {e}</p> : <p className="muted">Đang tải…</p>}</section>
+  if (!ai) return <section className="lite-card srv-adv-body"><div className="lite-label">AI</div>{e ? <p className="notice bad">⚠ {e}</p> : <p className="muted">Đang tải…</p>}</section>
   const setMode = async (mode: 'system' | 'own') => {
     if (mode === 'own' && !ai.key) { setAi({ ...ai, mode }); return }
     try { setAi(await api<MyAi>('/ai/me', { mode })) } catch (x) { setE(err(x)) }
   }
   return (
-    <section className="lite-card">
+    <section className="srv-adv-body">
       <div className="lite-label">AI dùng để trả lời</div>
       <div className="srv-seg" role="radiogroup">
         <button role="radio" aria-checked={ai.mode === 'system'} className={ai.mode === 'system' ? 'active' : ''} onClick={() => setMode('system')}>AI của Golden Duck</button>
         <button role="radio" aria-checked={ai.mode === 'own'} className={ai.mode === 'own' ? 'active' : ''} onClick={() => setMode('own')}>Khoá AI của tôi</button>
       </div>
       {ai.mode === 'system' ? (
-        <p className="muted small">{ai.system.ready ? `Đang dùng ${ai.system.label}, model ${ai.system.model}. Có giới hạn số tin mỗi ngày.` : 'AI của Golden Duck chưa bật. Bạn có thể dùng khoá AI của mình.'}</p>
+        <p className="muted small">{ai.system.ready ? 'Mặc định, không cần cài gì. Có giới hạn số tin mỗi ngày.' : 'AI của Golden Duck chưa bật. Bạn có thể dùng khoá AI của mình.'}</p>
       ) : (
         <>
           <p className="muted small">Dùng tài khoản AI của bạn: chọn hãng và model tuỳ thích, không giới hạn số tin, tiền AI tính vào tài khoản của bạn. Khoá được mã hoá khi lưu và không hiện lại.</p>
@@ -100,38 +100,80 @@ export function MyAiCard() {
 
 const usd = (v: number) => `$${v.toFixed(v < 1 ? 4 : 2)}`
 
-/** Trang quản trị của chủ app: chọn AI mặc định cho mọi khách, dán khoá, nhập giá để tính chi phí, xem chi phí. */
-export function AdminAiCard() {
-  const [a, setA] = useState<AdminAi | null>(null)
-  const [providers, setProviders] = useState<ProviderOpt[]>([])
-  const [price, setPrice] = useState({ in: '', out: '' })
+const SLOTS: ['cheap' | 'strong', string, string][] = [
+  ['cheap', 'Model rẻ', 'Dùng cho chat và giải thích, chiếm phần lớn lượt dùng. Chọn loại nhanh, rẻ.'],
+  ['strong', 'Model mạnh', 'Dùng cho phân tích sâu, và cho khách Pro chat nếu bật bên dưới. Chọn loại thông minh.'],
+]
+
+function SlotCard({ slot, title, note, a, providers, setA }: { slot: 'cheap' | 'strong'; title: string; note: string; a: AdminAi; providers: ProviderOpt[]; setA: (a: AdminAi) => void }) {
+  const c: SlotCfg = a[slot]
+  const [price, setPrice] = useState({ in: String(c.priceIn || ''), out: String(c.priceOut || '') })
   const [e, setE] = useState('')
-  useEffect(() => {
-    api<AdminAi>('/admin/ai').then((x) => { setA(x); setPrice({ in: String(x.priceIn || ''), out: String(x.priceOut || '') }) }).catch((x) => setE(err(x)))
-    api<MyAi>('/ai/me').then((x) => setProviders([...x.providers, ADMIN_EXTRA])).catch(() => {})
-  }, [])
-  if (!a || !providers.length) return <section className="lite-card srv-admin"><div className="lite-label">Quản trị · AI</div>{e ? <p className="notice bad">⚠ {e}</p> : <p className="muted">Đang tải…</p>}</section>
-  const claude = a.provider === 'anthropic' && a.model.startsWith('claude-')
+  const claude = c.provider === 'anthropic' && c.model.startsWith('claude-')
   return (
     <section className="lite-card srv-admin">
-      <div className="lite-label">Quản trị · AI của Golden Duck <span className={`srv-badge ${a.ready ? 'pro' : ''}`}>{a.ready ? 'Đang bật' : 'Chưa bật'}</span></div>
-      <p className="muted small">Khách chọn "AI của Golden Duck" sẽ dùng cấu hình này, tiền tính vào khoá của bạn. Đổi lúc nào cũng được.</p>
-      <ProviderForm key={a.provider + a.model} providers={providers} provider={a.provider} model={a.model} savedKey={a.keys[a.provider] ?? ''} base={a.base} scope="system" saveLabel="Lưu cho mọi khách"
-        onSave={async (v) => setA(await api<AdminAi>('/admin/ai', { provider: v.provider, model: v.model, key: v.key, base: v.base }))} />
-      {!claude && (
+      <div className="lite-label">{title} <span className={`srv-badge ${a.ready[slot] ? 'pro' : ''}`}>{a.ready[slot] ? 'Đang bật' : 'Chưa bật'}</span></div>
+      <p className="muted small">{note}</p>
+      <ProviderForm key={c.provider + c.model} providers={providers} provider={c.provider} model={c.model} savedKey={a.keys[c.provider] ?? ''} base={c.base} scope={slot} saveLabel="Lưu"
+        onSave={async (v) => setA(await api<AdminAi>('/admin/ai', { slot, provider: v.provider, model: v.model, key: v.key, base: v.base }))} />
+      {!claude && c.model && (
         <div className="srv-price">
-          <div className="lite-label">Giá model (USD / 1 triệu token) để tính chi phí</div>
+          <div className="lite-label">Giá model này (USD / 1 triệu token), để app tính chi phí</div>
           <label>Vào<input inputMode="decimal" value={price.in} onChange={(x) => setPrice({ ...price, in: x.target.value })} /></label>
           <label>Ra<input inputMode="decimal" value={price.out} onChange={(x) => setPrice({ ...price, out: x.target.value })} /></label>
-          <button onClick={async () => { try { setA(await api<AdminAi>('/admin/ai', { priceIn: Number(price.in) || 0, priceOut: Number(price.out) || 0 })) } catch (x) { setE(err(x)) } }}>Lưu giá</button>
+          <button onClick={async () => { try { setA(await api<AdminAi>('/admin/ai', { slot, priceIn: Number(price.in) || 0, priceOut: Number(price.out) || 0 })) } catch (x) { setE(err(x)) } }}>Lưu giá</button>
         </div>
       )}
-      <div className="srv-usage">
-        <div><span>Hôm nay</span><strong>{a.today.calls} tin</strong><small>{usd(a.today.cost)}</small></div>
-        <div><span>Tháng này</span><strong>{a.month.calls} tin</strong><small>{usd(a.month.cost)}</small></div>
-        <div><span>Khách dùng khoá riêng</span><strong>{a.today.own} tin</strong><small>hôm nay</small></div>
-      </div>
       {e && <p className="notice bad">⚠ {e}</p>}
     </section>
+  )
+}
+
+/** Trang Quản trị của chủ app: 2 ô model cho mọi khách, chi phí, nâng khách lên Pro. */
+export function AdminPage() {
+  const [a, setA] = useState<AdminAi | null>(null)
+  const [providers, setProviders] = useState<ProviderOpt[]>([])
+  const [e, setE] = useState('')
+  const [plan, setPlan] = useState({ email: '', days: '30' })
+  const [planMsg, setPlanMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  useEffect(() => {
+    api<AdminAi>('/admin/ai').then(setA).catch((x) => setE(err(x)))
+    api<MyAi>('/ai/me').then((x) => setProviders([...x.providers, ADMIN_EXTRA])).catch(() => {})
+  }, [])
+  async function upgrade(ev: React.FormEvent) {
+    ev.preventDefault(); setPlanMsg(null)
+    try {
+      const r = await api<{ email: string; plan: string; until: number | null }>('/admin/plan', { email: plan.email, days: Number(plan.days) || 0 })
+      setPlanMsg({ ok: true, text: r.plan === 'pro' ? `${r.email} đã lên Pro đến ${new Date(r.until!).toLocaleDateString('vi-VN')}.` : `${r.email} đã về gói Miễn phí.` })
+    } catch (x) { setPlanMsg({ ok: false, text: err(x) }) }
+  }
+  if (!a || !providers.length) return <><h1>Quản trị</h1>{e ? <p className="notice bad">⚠ {e}</p> : <p className="muted">Đang tải…</p>}</>
+  return (
+    <>
+      <h1>Quản trị</h1>
+      <p className="muted">Chỉ bạn thấy trang này. Khách dùng AI của Golden Duck theo 2 ô dưới đây, tiền tính vào khoá của bạn.</p>
+      <section className="lite-card">
+        <div className="lite-label">Chi phí AI</div>
+        <div className="srv-usage">
+          <div><span>Hôm nay</span><strong>{a.today.calls} tin</strong><small>{usd(a.today.cost)}</small></div>
+          <div><span>Tháng này</span><strong>{a.month.calls} tin</strong><small>{usd(a.month.cost)}</small></div>
+          <div><span>Trả lời soạn sẵn</span><strong>{a.today.canned} tin</strong><small>hôm nay, $0</small></div>
+        </div>
+        <p className="muted small">Khách Pro dùng khoá riêng hôm nay: {a.today.own} tin (không tính vào tiền của bạn).</p>
+      </section>
+      {SLOTS.map(([slot, title, note]) => <SlotCard key={slot} slot={slot} title={title} note={note} a={a} providers={providers} setA={setA} />)}
+      <section className="lite-card">
+        <label className="srv-toggle"><input type="checkbox" checked={a.proStrong} onChange={async (x) => { try { setA(await api<AdminAi>('/admin/ai', { proStrong: x.target.checked })) } catch (y) { setE(err(y)) } }} />
+          <span><strong>Khách Pro chat bằng model mạnh</strong><small className="muted">Tắt thì mọi khách chat bằng model rẻ.</small></span></label>
+      </section>
+      <form className="lite-card srv-form" onSubmit={upgrade}>
+        <div className="lite-label">Nâng khách lên Pro (tạm thời, trước khi có thanh toán)</div>
+        <label>Email khách<input type="email" required value={plan.email} onChange={(x) => setPlan({ ...plan, email: x.target.value })} /></label>
+        <label>Số ngày (0 = về Miễn phí)<input inputMode="numeric" value={plan.days} onChange={(x) => setPlan({ ...plan, days: x.target.value })} /></label>
+        <button className="primary">Cập nhật gói</button>
+        {planMsg && <p className={`notice ${planMsg.ok ? 'good' : 'bad'}`}>{planMsg.ok ? '✓' : '⚠'} {planMsg.text}</p>}
+      </form>
+      {e && <p className="notice bad">⚠ {e}</p>}
+    </>
   )
 }

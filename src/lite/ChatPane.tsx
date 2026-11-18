@@ -17,6 +17,14 @@ export function Face({ p, size }: { p: { avatar: string; name: string }; size: n
   return <Avatar src={p.avatar || (isDuck(p.name) ? DUCK_AVATAR : '')} name={p.name} size={size} />
 }
 
+/** Hiện **đậm** và _nghiêng_ trong câu trả lời (AI hay viết kiểu này). Không dùng innerHTML nên an toàn. */
+export function rich(text: string) {
+  return text.split(/(\*\*[^*\n]+\*\*|(?<![\w])_[^_\n]+_(?![\w]))/g).map((part, i) =>
+    part.startsWith('**') && part.endsWith('**') && part.length > 4 ? <strong key={i}>{part.slice(2, -2)}</strong>
+      : part.startsWith('_') && part.endsWith('_') && part.length > 2 ? <em key={i}>{part.slice(1, -1)}</em>
+        : part)
+}
+
 export const errText = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
 
 interface Props {
@@ -78,7 +86,7 @@ export default function ChatPane({ store, setStore, persona, setPicked, ask, cle
         {persona.greeting && <div className="msg-row bot"><Face p={persona} size={30} /><div className="bubble assistant">{persona.greeting}</div></div>}
         {chat.map((t, i) => t.role === 'user'
           ? <div key={i} className="msg-row me"><div className="bubble user">{t.text}</div></div>
-          : <div key={i} className="msg-row bot"><Face p={persona} size={30} /><div className="bubble assistant">{t.text}</div></div>)}
+          : <div key={i} className="msg-row bot"><Face p={persona} size={30} /><div className="bubble assistant">{rich(t.text)}</div></div>)}
         {busy && <div className="msg-row bot"><Face p={persona} size={30} /><div className="bubble assistant typing" aria-label="Đang trả lời"><span /><span /><span /></div></div>}
         {chat.length === 0 && !busy && (
           <div className="lite-suggest">

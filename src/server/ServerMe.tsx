@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { BRAND_NAME } from '../lib/brand'
 import { PREVIEW } from '../lib/bridge'
 import { api, type Me } from '../lib/server'
-import { AdminAiCard, MyAiCard } from './AiPicker'
+import { MyAiCard } from './AiPicker'
 
 /** Tài khoản: gói, lượt AI hôm nay, nối Telegram một chạm, đăng xuất. */
 export default function ServerMe({ me, setMe }: { me: Me; setMe: (m: Me | null) => void }) {
@@ -57,8 +57,12 @@ export default function ServerMe({ me, setMe }: { me: Me; setMe: (m: Me | null) 
         )}
       </section>
 
-      <MyAiCard />
-      {me.admin && <AdminAiCard />}
+      {me.advanced && (
+        <details className="lite-card srv-adv">
+          <summary><strong>Nâng cao</strong><small className="muted"> · khoá AI riêng, chọn hãng và model</small></summary>
+          <MyAiCard />
+        </details>
+      )}
 
       <section className="lite-card">
         <div className="lite-label">Lưu ý</div>

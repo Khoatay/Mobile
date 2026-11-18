@@ -7,6 +7,7 @@
  */
 import type Anthropic from '@anthropic-ai/sdk'
 import { randomUUID } from 'node:crypto'
+import { cannedAnswer } from '../../src/lib/faq'
 import { BLANK_PERSONA, PERSONA_TEMPLATES, type Persona } from '../../src/lib/persona'
 import { planOf, type User } from './auth'
 import type { DB } from './db'
@@ -18,9 +19,10 @@ const CHAT_RULES = `Quy tắc chung, luôn áp dụng bất kể nhân cách:
 - Bạn là một trợ lý AI. Nếu người dùng hỏi thẳng bạn có phải người thật không, hãy nói thật.
 - Không hứa hẹn lợi nhuận, không khẳng định chắc chắn giá sẽ đi đâu. Phân tích là tham khảo; người dùng tự quyết định và chịu trách nhiệm.
 - Không khuyến khích tăng rủi ro để gỡ lỗ, không cổ vũ trade trả thù hay dùng tiền không được phép mất.
-- Trả lời bằng ngôn ngữ người dùng đang dùng. Ngắn gọn, đi thẳng vào ý, trừ khi được yêu cầu giải thích dài.`
+- Trả lời bằng ngôn ngữ người dùng đang dùng. Ngắn gọn (thường dưới 200 từ), đi thẳng vào ý, trừ khi được yêu cầu giải thích dài.`
 
-const MAX_TURNS = 30
+/** Chỉ gửi 10 lượt gần nhất: đủ nhớ mạch chuyện, đỡ tốn tiền. */
+const MAX_TURNS = 10
 const MAX_KNOWLEDGE = 30_000
 const OWN_PER_DAY = 1000
 const day = () => new Date().toISOString().slice(0, 10)
@@ -43,42 +45,58 @@ export function systemPrompt(p: SrvPersona): string {
 
 // ---------- Cấu hình AI của Golden Duck (chủ app) ----------
 
-export interface SystemAi { provider: ProviderId; model: string; base: string; priceIn: number; priceOut: number }
+/** Hai ô: model rẻ (chat, giải thích: phần lớn lượt dùng) và model mạnh (phân tích sâu; khách Pro chat nếu bật). */
+export type Slot = 'cheap' | 'strong'
+export interface SlotCfg { provider: ProviderId; model: string; base: string; priceIn: number; priceOut: number }
+export interface SystemAi { cheap: SlotCfg; strong: SlotCfg; proStrong: boolean }
 const getSetting = <T>(db: DB, k: string, d: T): T => { const r = db.prepare('select value from settings where key = ?').get(k) as { value: string } | undefined; return r ? (JSON.parse(r.value) as T) : d }
 const setSetting = (db: DB, k: string, v: unknown) => db.prepare('insert into settings (key, value) values (?, ?) on conflict(key) do update set value = excluded.value').run(k, JSON.stringify(v))
 
 export interface AiDeps { envKey: string; envModel: string; perDay: Record<string, number>; fetch?: typeof fetch; anthropic?: Pick<Anthropic, 'messages'> }
 
 export function systemAi(db: DB, d: AiDeps): SystemAi {
-  return { provider: 'anthropic', model: d.envModel, base: '', priceIn: 0, priceOut: 0, ...getSetting<Partial<SystemAi>>(db, 'ai.system', {}) }
+  const blank = (model: string): SlotCfg => ({ provider: 'anthropic', model, base: '', priceIn: 0, priceOut: 0 })
+  const raw = getSetting<Record<string, unknown>>(db, 'ai.system', {})
+  // Bản cũ lưu một cấu hình duy nhất: coi là model rẻ.
+  if (raw.provider) return { cheap: { ...blank(d.envModel), ...(raw as Partial<SlotCfg>) }, strong: blank('claude-sonnet-5-5'), proStrong: false }
+  return { cheap: { ...blank(d.envModel), ...(raw.cheap as object) }, strong: { ...blank('claude-sonnet-5-5'), ...(raw.strong as object) }, proStrong: !!raw.proStrong }
 }
-/** Khoá của chủ app cho từng nhà cung cấp: dán ở trang quản trị; khoá Claude trong .env dùng khi chưa dán. */
+/** Khoá của chủ app cho từng nhà cung cấp (dùng chung cho cả hai ô); khoá Claude trong .env dùng khi chưa dán. */
 export function systemKey(db: DB, d: AiDeps, provider: string): string {
   const k = open(getSetting(db, `ai.key.${provider}`, ''))
   return k || (provider === 'anthropic' ? d.envKey : '')
 }
-export function systemReady(db: DB, d: AiDeps) {
-  const s = systemAi(db, d)
-  return !!(s.model && (systemKey(db, d, s.provider) || (s.provider === 'anthropic' && d.anthropic)))
-}
+const slotReady = (db: DB, d: AiDeps, c: SlotCfg) => !!(c.model && (systemKey(db, d, c.provider) || (c.provider === 'anthropic' && d.anthropic)))
+export const systemReady = (db: DB, d: AiDeps) => slotReady(db, d, systemAi(db, d).cheap)
 
 export function adminView(db: DB, d: AiDeps) {
   const s = systemAi(db, d)
   const usage = db.prepare('select coalesce(sum(calls),0) as calls, coalesce(sum(cost),0) as cost, coalesce(sum(tokens_in),0) as tin, coalesce(sum(tokens_out),0) as tout, coalesce(sum(own_calls),0) as own from ai_usage where day = ?').get(day())
   const month = db.prepare('select coalesce(sum(calls),0) as calls, coalesce(sum(cost),0) as cost from ai_usage where day >= ?').get(day().slice(0, 8) + '01')
-  return { ...s, keys: Object.fromEntries(PROVIDERS.map((p) => [p.id, maskKey(systemKey(db, d, p.id))])), ready: systemReady(db, d), today: usage, month }
+  const canned = getSetting<{ day: string; n: number }>(db, 'ai.canned', { day: '', n: 0 })
+  return {
+    ...s, ready: { cheap: slotReady(db, d, s.cheap), strong: slotReady(db, d, s.strong) },
+    keys: Object.fromEntries(PROVIDERS.map((p) => [p.id, maskKey(systemKey(db, d, p.id))])),
+    today: { ...(usage as object), canned: canned.day === day() ? canned.n : 0 }, month,
+  }
 }
 
 export function adminSave(db: DB, d: AiDeps, b: Record<string, unknown>) {
-  const cur = systemAi(db, d)
-  const provider = String(b.provider ?? cur.provider) as ProviderId
-  if (!providerOf(provider)) throw new HttpError(400, 'Không có nhà cung cấp này')
-  const base = provider === 'custom' ? String(b.base ?? cur.base).trim() : ''
-  if (provider === 'custom' && !/^https:\/\//.test(base)) throw new HttpError(400, 'Địa chỉ API phải bắt đầu bằng https://')
-  const num = (v: unknown, f: number) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : f }
-  setSetting(db, 'ai.system', { provider, model: String(b.model ?? cur.model).trim(), base, priceIn: num(b.priceIn, cur.priceIn), priceOut: num(b.priceOut, cur.priceOut) })
-  if (typeof b.key === 'string' && b.key.trim()) setSetting(db, `ai.key.${provider}`, seal(b.key.trim()))
-  if (b.clearKey) setSetting(db, `ai.key.${provider}`, '')
+  const all = systemAi(db, d)
+  if (typeof b.proStrong === 'boolean') all.proStrong = b.proStrong
+  if (b.slot === 'cheap' || b.slot === 'strong') {
+    const cur = all[b.slot]
+    const provider = String(b.provider ?? cur.provider) as ProviderId
+    if (!providerOf(provider)) throw new HttpError(400, 'Không có nhà cung cấp này')
+    const base = provider === 'custom' ? String(b.base ?? cur.base).trim() : ''
+    if (provider === 'custom' && !/^https:\/\//.test(base)) throw new HttpError(400, 'Địa chỉ API phải bắt đầu bằng https://')
+    const num = (v: unknown, f: number) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : f }
+    const changed = provider !== cur.provider || String(b.model ?? cur.model) !== cur.model
+    all[b.slot] = { provider, model: String(b.model ?? cur.model).trim(), base, priceIn: num(b.priceIn, changed ? 0 : cur.priceIn), priceOut: num(b.priceOut, changed ? 0 : cur.priceOut) }
+    if (typeof b.key === 'string' && b.key.trim()) setSetting(db, `ai.key.${provider}`, seal(b.key.trim()))
+    if (b.clearKey) setSetting(db, `ai.key.${provider}`, '')
+  }
+  setSetting(db, 'ai.system', all)
   return adminView(db, d)
 }
 
@@ -89,7 +107,7 @@ const userAiRow = (db: DB, uid: number): UserAiRow => (db.prepare('select mode, 
 
 export function myAi(db: DB, d: AiDeps, u: User) {
   const r = userAiRow(db, u.id)
-  const s = systemAi(db, d)
+  const s = systemAi(db, d).cheap
   return {
     mode: r.mode, provider: r.provider || 'anthropic', model: r.model, key: maskKey(open(r.key_enc)),
     system: { provider: s.provider, label: providerOf(s.provider)?.label ?? s.provider, model: s.model, ready: systemReady(db, d) },
@@ -97,9 +115,10 @@ export function myAi(db: DB, d: AiDeps, u: User) {
   }
 }
 
-export function saveMyAi(db: DB, d: AiDeps, u: User, b: Record<string, unknown>) {
+export function saveMyAi(db: DB, d: AiDeps, u: User, b: Record<string, unknown>, advanced: boolean) {
   const cur = userAiRow(db, u.id)
   const mode = b.mode === 'own' ? 'own' : 'system'
+  if (mode === 'own' && !advanced) throw new HttpError(403, 'Dùng khoá AI riêng có ở gói Pro')
   const provider = String(b.provider ?? cur.provider)
   const p = providerOf(provider)
   if (!p || p.adminOnly) throw new HttpError(400, 'Không có nhà cung cấp này')
@@ -115,15 +134,16 @@ export function saveMyAi(db: DB, d: AiDeps, u: User, b: Record<string, unknown>)
   return myAi(db, d, u)
 }
 
-/** Khoá và model dùng cho lần chat này. */
-function cfgFor(db: DB, d: AiDeps, u: User): LlmCfg & { own: boolean; priceIn: number; priceOut: number } {
+/** Khoá và model dùng cho lần chat này. Khoá riêng chỉ có hiệu lực khi còn quyền nâng cao (Pro hết hạn thì về AI của Golden Duck). */
+function cfgFor(db: DB, d: AiDeps, u: User, advanced: boolean): LlmCfg & { own: boolean; priceIn: number; priceOut: number } {
   const r = userAiRow(db, u.id)
-  if (r.mode === 'own') return { provider: r.provider as ProviderId, model: r.model, key: open(r.key_enc), own: true, priceIn: 0, priceOut: 0 }
-  return systemCfg(db, d)
-}
-function systemCfg(db: DB, d: AiDeps) {
+  if (r.mode === 'own' && advanced) return { provider: r.provider as ProviderId, model: r.model, key: open(r.key_enc), own: true, priceIn: 0, priceOut: 0 }
   const s = systemAi(db, d)
-  return { provider: s.provider, model: s.model, key: systemKey(db, d, s.provider), base: s.base, own: false, priceIn: s.priceIn, priceOut: s.priceOut }
+  return slotCfg(db, d, planOf(u) === 'pro' && s.proStrong && slotReady(db, d, s.strong) ? 'strong' : 'cheap')
+}
+function slotCfg(db: DB, d: AiDeps, slot: Slot) {
+  const c = systemAi(db, d)[slot]
+  return { provider: c.provider, model: c.model, key: systemKey(db, d, c.provider), base: c.base, own: false, priceIn: c.priceIn, priceOut: c.priceOut }
 }
 
 /** Danh sách model: khoá vừa dán (chưa lưu), hoặc khoá đã lưu của khách / của hệ thống. */
@@ -132,8 +152,8 @@ export async function models(db: DB, d: AiDeps, u: User, b: Record<string, unkno
   const p = providerOf(provider)
   if (!p || (p.adminOnly && !admin)) throw new HttpError(400, 'Không có nhà cung cấp này')
   let key = typeof b.key === 'string' ? b.key.trim() : ''
-  if (!key) key = b.scope === 'system' && admin ? systemKey(db, d, provider) : (() => { const r = userAiRow(db, u.id); return r.provider === provider ? open(r.key_enc) : '' })()
-  const base = provider === 'custom' ? String(b.base ?? systemAi(db, d).base) : undefined
+  if (!key) key = (b.scope === 'system' || b.scope === 'cheap' || b.scope === 'strong') && admin ? systemKey(db, d, provider) : (() => { const r = userAiRow(db, u.id); return r.provider === provider ? open(r.key_enc) : '' })()
+  const base = provider === 'custom' ? String(b.base ?? systemAi(db, d)[b.slot === 'strong' ? 'strong' : 'cheap'].base) : undefined
   try { return { models: await listModels({ provider, key, base }, d.fetch) } }
   catch (e) { if (e instanceof LlmError) throw new HttpError(400, e.message); throw e }
 }
@@ -144,7 +164,8 @@ export function personas(db: DB, uid: number): SrvPersona[] {
   const mine = (db.prepare('select data from personas where user_id = ? order by updated').all(uid) as { data: string }[]).map((r) => JSON.parse(r.data) as SrvPersona)
   return [...PRESETS, ...mine]
 }
-export function savePersona(db: DB, uid: number, b: Record<string, unknown>) {
+export function savePersona(db: DB, uid: number, b: Record<string, unknown>, advanced: boolean) {
+  if (!advanced) throw new HttpError(403, 'Tạo nhân vật riêng có ở gói Pro')
   const mine = db.prepare('select count(*) as n from personas where user_id = ?').get(uid) as { n: number }
   const id = typeof b.id === 'string' && b.id && !PRESETS.some((p) => p.id === b.id) ? b.id : ''
   if (id && !db.prepare('select 1 from personas where id = ? and user_id = ?').get(id, uid)) throw new HttpError(404, 'Không có nhân vật này')
@@ -180,12 +201,25 @@ export function store(db: DB, userId: number) {
   return { items: personas(db, userId), chats }
 }
 
-export async function chat(db: DB, u: User, d: AiDeps, body: { persona?: unknown; message?: unknown }) {
+export async function chat(db: DB, u: User, d: AiDeps, body: { persona?: unknown; message?: unknown }, advanced: boolean) {
   const p = personas(db, u.id).find((x) => x.id === String(body.persona))
   if (!p) throw new HttpError(400, 'Không có nhân vật này')
   const message = String(body.message ?? '').trim().slice(0, 4000)
   if (!message) throw new HttpError(400, 'Tin nhắn đang trống')
-  const cfg = cfgFor(db, d, u)
+  const now = Date.now()
+  const saveTurns = (reply: string) => db.prepare('insert into chats (user_id, persona, role, text, at) values (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)').run(u.id, p.id, 'user', message, now, u.id, p.id, 'assistant', reply, now + 1)
+
+  // Câu hỏi cơ bản của người mới: trả lời soạn sẵn, không gọi AI, không tính lượt. Nhân vật tự tạo thì luôn để AI trả lời theo giọng riêng.
+  const canned = p.preset ? cannedAnswer(message) : null
+  if (canned) {
+    saveTurns(canned)
+    const c = getSetting<{ day: string; n: number }>(db, 'ai.canned', { day: '', n: 0 })
+    setSetting(db, 'ai.canned', { day: day(), n: c.day === day() ? c.n + 1 : 1 })
+    const own = userAiRow(db, u.id).mode === 'own' && advanced
+    return { reply: canned, ...store(db, u.id), remaining: own ? null : Math.max(0, limitFor(u, d.perDay) - usageToday(db, u.id).calls), own, canned: true }
+  }
+
+  const cfg = cfgFor(db, d, u, advanced)
   const used = usageToday(db, u.id)
   const limit = cfg.own ? OWN_PER_DAY : limitFor(u, d.perDay)
   if (!cfg.own && !systemReady(db, d)) throw new HttpError(503, 'AI của Golden Duck chưa được bật. Bạn có thể dùng khoá AI riêng ở mục Tài khoản')
@@ -204,7 +238,7 @@ export async function chat(db: DB, u: User, d: AiDeps, body: { persona?: unknown
   else turns.push({ role: 'user', content: message })
 
   let res
-  try { res = await complete(cfg, systemPrompt(p), turns, 4000, d.fetch, cfg.own ? undefined : d.anthropic) }
+  try { res = await complete(cfg, systemPrompt(p), turns, 2000, d.fetch, cfg.own ? undefined : d.anthropic) }
   catch (e) {
     if (e instanceof LlmError) {
       if (!cfg.own) console.error('[ai]', e.kind, e.message)
@@ -216,8 +250,7 @@ export async function chat(db: DB, u: User, d: AiDeps, body: { persona?: unknown
   const reply = res.refused ? 'Mình không thể trả lời câu này.' : res.text || '…'
   const pr = KNOWN_PRICES[res.model] ?? KNOWN_PRICES[cfg.model] ?? [cfg.priceIn, cfg.priceOut, cfg.priceIn / 10, cfg.priceIn * 1.25]
   const cost = cfg.own ? 0 : (res.usage.in * pr[0] + res.usage.out * pr[1] + res.usage.cacheRead * pr[2] + res.usage.cacheWrite * pr[3]) / 1e6
-  const now = Date.now()
-  db.prepare('insert into chats (user_id, persona, role, text, at) values (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)').run(u.id, p.id, 'user', message, now, u.id, p.id, 'assistant', reply, now + 1)
+  saveTurns(reply)
   db.prepare(`insert into ai_usage (user_id, day, calls, cost, tokens_in, tokens_out, own_calls) values (?, ?, ?, ?, ?, ?, ?)
     on conflict(user_id, day) do update set calls = calls + excluded.calls, cost = cost + excluded.cost, tokens_in = tokens_in + excluded.tokens_in, tokens_out = tokens_out + excluded.tokens_out, own_calls = own_calls + excluded.own_calls`)
     .run(u.id, day(), cfg.own ? 0 : 1, cost, cfg.own ? 0 : res.usage.in + res.usage.cacheRead + res.usage.cacheWrite, cfg.own ? 0 : res.usage.out, cfg.own ? 1 : 0)
@@ -225,8 +258,8 @@ export async function chat(db: DB, u: User, d: AiDeps, body: { persona?: unknown
 }
 
 /** Thử khoá: một câu rất ngắn. */
-export async function testAi(db: DB, d: AiDeps, u: User, scope: 'me' | 'system') {
-  const cfg = scope === 'system' ? systemCfg(db, d) : cfgFor(db, d, u)
+export async function testAi(db: DB, d: AiDeps, u: User, scope: 'me' | Slot, advanced: boolean) {
+  const cfg = scope === 'me' ? cfgFor(db, d, u, advanced) : slotCfg(db, d, scope)
   try {
     const r = await complete(cfg, 'Trả lời đúng một từ.', [{ role: 'user', content: 'Nói "OK".' }], 20, d.fetch, cfg.own ? undefined : d.anthropic)
     return { ok: true, reply: r.text.slice(0, 50), model: r.model, provider: cfg.provider }

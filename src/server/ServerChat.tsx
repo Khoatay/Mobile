@@ -11,7 +11,7 @@ type Store = { items: SrvPersona[]; chats: PersonaStore['chats'] }
 const EMPTY = { name: '', tagline: '', personality: '', style: '', values: '', boundaries: '', greeting: '', knowledge: '' }
 
 /** Hỏi AI qua máy chủ. Có sẵn vài nhân vật; khách tự tạo nhân vật riêng và dạy kiến thức (chiến lược, quy tắc của mình). */
-export default function ServerChat({ me, onUsed, goMe }: { me: Me; onUsed: (remaining: number) => void; goMe: () => void }) {
+export default function ServerChat({ me, onUsed }: { me: Me; onUsed: (remaining: number) => void }) {
   const [store, setStore] = useState<Store | null>(null)
   const [ai, setAi] = useState<MyAi | null>(null)
   const [picked, setPicked] = usePersistent('fx.srv.persona', '')
@@ -32,14 +32,14 @@ export default function ServerChat({ me, onUsed, goMe }: { me: Me; onUsed: (rema
   return (
     <>
       <div className="srv-chat-tools">
-        <button className="lite-link mini" onClick={() => setEdit({ ...EMPTY })}>+ Tạo nhân vật của tôi</button>
-        {!persona.preset && <button className="lite-link mini" onClick={() => setEdit({ ...EMPTY, ...persona, knowledge: persona.knowledge ?? '' })}>Sửa {persona.name}</button>}
-        <button className="lite-link mini srv-ai-chip" onClick={goMe}>{own ? `🔑 ${ai?.model}` : `AI Golden Duck · còn ${left}`}</button>
+        {me.advanced && <button className="lite-link mini" onClick={() => setEdit({ ...EMPTY })}>+ Tạo nhân vật của tôi</button>}
+        {me.advanced && !persona.preset && <button className="lite-link mini" onClick={() => setEdit({ ...EMPTY, ...persona, knowledge: persona.knowledge ?? '' })}>Sửa {persona.name}</button>}
+        <span className="srv-ai-chip muted small">{own ? `🔑 ${ai?.model}` : `Còn ${left}/${me.limits.chatPerDay} tin hôm nay`}</span>
       </div>
       <ChatPane store={store} setStore={(f) => setStore((s) => f(s) as Store | null)} persona={persona} setPicked={setPicked} suggestions={SUGGESTIONS}
         ask={async (p, message) => { const r = await api<ChatReply>('/chat', { persona: p.id, message }); if (r.remaining != null) onUsed(r.remaining); return r }}
         clear={(p) => api<PersonaStore>('/chat/clear', { persona: p.id })}
-        note={own ? 'Đang dùng khoá AI của bạn.' : `Còn ${left}/${me.limits.chatPerDay} tin hôm nay. Dùng khoá AI riêng ở mục Tài khoản để không giới hạn.`} />
+        note={own ? 'Đang dùng khoá AI của bạn.' : 'Câu hỏi cơ bản (pip, lot, cắt lỗ…) được trả lời ngay và không tính lượt.'} />
     </>
   )
 }

@@ -1,6 +1,7 @@
 /** Máy chủ giả lập cho bản xem trước: đủ để bấm thử đăng nhập, thêm kênh, nối bot, chat. Không gửi gì ra ngoài. */
 import { DUCK_NAME, PERSONA_TEMPLATES, type Persona, type PersonaStore } from './persona'
 import { demoMessages } from './signals'
+import { cannedAnswer } from './faq'
 import { ApiError, type ChannelRow, type Me } from './server'
 
 let items: (Persona & { knowledge?: string; preset?: boolean })[] = PERSONA_TEMPLATES.map((t) => ({ id: t.id, ...t.p, playbooks: [], preset: true })).sort((a) => (a.name === DUCK_NAME ? -1 : 0))
@@ -10,7 +11,8 @@ const st = {
   chats: {} as PersonaStore['chats'],
   next: 1,
   ai: { mode: 'system' as 'system' | 'own', provider: 'anthropic', model: '', key: '' },
-  sys: { provider: 'anthropic', model: 'claude-haiku-5-5', base: '', priceIn: 0, priceOut: 0, keys: { anthropic: '…demo' } as Record<string, string> },
+  sys: { cheap: { provider: 'anthropic', model: 'claude-haiku-5-5', base: '', priceIn: 0, priceOut: 0 }, strong: { provider: 'anthropic', model: 'claude-sonnet-5-5', base: '', priceIn: 0, priceOut: 0 }, proStrong: false, keys: { anthropic: '…demo' } as Record<string, string> },
+  canned: 0,
 }
 const PROVIDERS = [
   { id: 'anthropic', label: 'Claude (Anthropic)', keyUrl: 'console.anthropic.com', hint: 'Khoá bắt đầu bằng sk-ant-' },
@@ -25,13 +27,13 @@ const PROVIDERS = [
 const DEMO_MODELS: Record<string, string[]> = {
   anthropic: ['claude-haiku-5-5', 'claude-opus-5-5', 'claude-sonnet-5-5'], openai: ['mô-hình-mẫu-1', 'mô-hình-mẫu-2'], gemini: ['mô-hình-mẫu-flash', 'mô-hình-mẫu-pro'],
 }
-const myAi = () => ({ ...st.ai, key: st.ai.key ? '…' + st.ai.key.slice(-4) : '', system: { provider: st.sys.provider, label: PROVIDERS.find((p) => p.id === st.sys.provider)?.label ?? st.sys.provider, model: st.sys.model, ready: true }, providers: PROVIDERS })
-const adminAi = () => ({ ...st.sys, ready: true, today: { calls: 12, cost: 0.0042, tin: 9000, tout: 2100, own: 3 }, month: { calls: 340, cost: 0.12 } })
+const myAi = () => ({ ...st.ai, key: st.ai.key ? '…' + st.ai.key.slice(-4) : '', system: { provider: st.sys.cheap.provider, label: PROVIDERS.find((p) => p.id === st.sys.cheap.provider)?.label ?? '', model: st.sys.cheap.model, ready: true }, providers: PROVIDERS })
+const adminAi = () => ({ ...st.sys, ready: { cheap: true, strong: true }, today: { calls: 12, cost: 0.0042, tin: 9000, tout: 2100, own: 3, canned: st.canned }, month: { calls: 340, cost: 0.12 } })
 const DEMO_CHANNELS = ['Vàng Signal VIP', 'Gold Sniper', 'FX Daily']
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function user(email: string): Me {
-  return { id: 1, admin: true, email, name: '', plan: 'free', planUntil: null, telegram: { linked: false, name: '', link: 'https://t.me/goldenduck_bot?start=demo' }, limits: { channels: 3, chatPerDay: 15 }, chatToday: 0 }
+  return { id: 1, admin: true, advanced: true, email, name: '', plan: 'free', planUntil: null, telegram: { linked: false, name: '', link: 'https://t.me/goldenduck_bot?start=demo' }, limits: { channels: 3, chatPerDay: 15 }, chatToday: 0 }
 }
 const need = () => { if (!st.me) throw new ApiError(401, 'Bạn cần đăng nhập'); return st.me }
 
@@ -82,6 +84,12 @@ export async function mockApi(path: string, body?: unknown): Promise<unknown> {
       await wait(600)
       const id = String(b.persona)
       const now = Date.now()
+      const canned = items.find((x) => x.id === id)?.preset ? cannedAnswer(String(b.message)) : null
+      if (canned) {
+        st.canned++
+        st.chats = { ...st.chats, [id]: [...(st.chats[id] ?? []), { role: 'user', text: String(b.message), at: now }, { role: 'assistant', text: canned, at: now + 1 }] }
+        return { items, chats: st.chats, reply: canned, remaining: me.limits.chatPerDay - me.chatToday, canned: true }
+      }
       const reply = 'Đây là bản xem thử nên mình chưa trả lời thật. Khi chạy trên máy chủ, câu trả lời đến từ AI của Golden Duck.'
       st.chats = { ...st.chats, [id]: [...(st.chats[id] ?? []), { role: 'user', text: String(b.message), at: now }, { role: 'assistant', text: reply, at: now + 1 }] }
       if (st.ai.mode !== 'own') me.chatToday++
@@ -106,14 +114,20 @@ export async function mockApi(path: string, body?: unknown): Promise<unknown> {
       }
       return myAi()
     case '/ai/models': await wait(500); return { models: DEMO_MODELS[String(b.provider)] ?? ['mô-hình-mẫu'] }
-    case '/ai/test': await wait(500); return { ok: true, reply: 'OK', model: b.scope === 'system' ? st.sys.model : st.ai.model }
+    case '/ai/test': await wait(500); return { ok: true, reply: 'OK', model: b.scope === 'strong' ? st.sys.strong.model : b.scope === 'cheap' ? st.sys.cheap.model : st.ai.model }
     case '/admin/ai':
       need()
       if (body !== undefined) {
-        st.sys = { ...st.sys, ...(b.provider ? { provider: String(b.provider) } : {}), ...(b.model ? { model: String(b.model) } : {}), ...(b.priceIn != null ? { priceIn: Number(b.priceIn), priceOut: Number(b.priceOut) } : {}) }
-        if (b.key) st.sys.keys = { ...st.sys.keys, [st.sys.provider]: '…' + String(b.key).slice(-4) }
+        if (typeof b.proStrong === 'boolean') st.sys.proStrong = b.proStrong
+        const slot = b.slot === 'strong' ? 'strong' : b.slot === 'cheap' ? 'cheap' : null
+        if (slot) {
+          const c = st.sys[slot]
+          st.sys[slot] = { ...c, ...(b.provider ? { provider: String(b.provider) } : {}), ...(b.model ? { model: String(b.model) } : {}), ...(b.priceIn != null ? { priceIn: Number(b.priceIn), priceOut: Number(b.priceOut) } : {}) }
+          if (b.key) st.sys.keys = { ...st.sys.keys, [st.sys[slot].provider]: '…' + String(b.key).slice(-4) }
+        }
       }
       return adminAi()
+    case '/admin/plan': need(); return { ok: true, email: String(b.email), plan: Number(b.days) ? 'pro' : 'free', until: Number(b.days) ? Date.now() + Number(b.days) * 86_400_000 : null }
     case '/chat/clear': st.chats = { ...st.chats, [String(b.persona)]: [] }; return { items, chats: st.chats }
   }
   throw new ApiError(404, 'Không có đường dẫn này')
