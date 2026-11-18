@@ -6,6 +6,7 @@ import { badges, bridgeType, BROKERS, CATEGORIES, categoryOf, GROUP_SUGGESTIONS,
 import EquityChart from '../components/EquityChart'
 import { computeStats } from '../lib/stats'
 import { assess, type Score } from '../lib/traderScore'
+import { gradeOf, loadRating, ratePayload, saveRating, signature, type AiRating, type AiScore, type StoredRating } from '../lib/aiRate'
 import { netOf } from '../lib/types'
 import { partnerFor } from '../lib/partners'
 import { bridgeGet, bridgePost, type BridgeState, type LiveAccount, type LivePosition, type Mt5Deal, type Mt5Order } from '../lib/bridge'
@@ -342,6 +343,42 @@ function Performance({ id, acc, serverOffset }: { id: string; acc: LiveAccount; 
     // Số dư và lệnh mở đổi liên tục; chỉ chấm lại khi tải lịch sử mới để điểm không nhảy theo từng tick.
     [data])
   const s = useMemo(() => (data ? computeStats(data.trades, serverOffset) : null), [data, serverOffset])
+
+  // ---- Chấm điểm bằng AI. Kết quả lưu theo tài khoản + khoảng thời gian; chỉ gọi lại khi có lệnh mới hoặc người dùng bấm.
+  const [ai, setAi] = useState<{ configured: boolean; model: string } | null>(null)
+  const [rated, setRated] = useState<StoredRating | null>(null)
+  const [rating, setRating] = useState(false)
+  const [aiErr, setAiErr] = useState('')
+  useEffect(() => { bridgeGet<{ configured: boolean; model: string }>('/ai/status').then(setAi).catch(() => setAi({ configured: false, model: '' })) }, [])
+  const sig = data ? signature(data.trades, days) : ''
+  const current = useRef('')
+  current.current = `${id}:${sig}`
+  const rate = async () => {
+    if (!data || !a) return
+    setRating(true); setAiErr('')
+    try {
+      const r = await bridgePost<{ rating: AiRating; model: string }>('/ai/rate', ratePayload(data.trades, acc, a.metrics, days))
+      const stored = { rating: r.rating, signature: sig, at: Date.now(), model: r.model }
+      saveRating(id, days, stored)
+      // Người dùng đã đổi tài khoản hoặc khoảng thời gian trong lúc chờ: chỉ lưu, không hiện nhầm.
+      if (current.current === `${id}:${sig}`) setRated(stored)
+    } catch (e) { setAiErr(errText(e)) }
+    finally { setRating(false) }
+  }
+  useEffect(() => {
+    if (!data || !a || !ai) return
+    const saved = loadRating(id, days)
+    if (saved && saved.signature === sig) { setRated(saved); return }
+    setRated(null)
+    // Đủ lệnh và có khoá AI thì tự chấm; dưới 10 lệnh thì không gọi AI cho tốn phí.
+    if (ai.configured && a.metrics.n >= 10) rate()
+  }, [sig, ai?.configured])
+
+  const toScore = (x: AiScore): Score => ({ score: x.score, grade: gradeOf(x.score), label: x.label, reasons: x.reasons })
+  const r = rated?.rating
+  const shown = r
+    ? { safety: toScore(r.safety), growth: toScore(r.growth), discipline: toScore(r.discipline), fomo: toScore(r.fomo), verdict: r.verdict, confidence: r.confidence }
+    : a
   const recent = useMemo(() => (data ? [...data.trades].sort((x, y) => y.closeTime - x.closeTime).slice(0, 8) : []), [data])
   const m = a?.metrics
   const pc = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v * 100).toFixed(1)}%`
@@ -355,24 +392,37 @@ function Performance({ id, acc, serverOffset }: { id: string; acc: LiveAccount; 
       </div>
       {err && <p className="notice bad">⚠ {err}</p>}
       {!a && !err && <p className="muted">Đang đọc lịch sử…</p>}
-      {a && m && (
+      {a && m && shown && (
         <>
-          <div className={`verdict ${a.verdict.level}`}>
+          <div className="ai-source">
+            {rating ? <span><span className="spinner" aria-hidden="true" /> AI đang đọc {m.n} lệnh và chấm điểm…</span>
+              : r ? <span>✦ Chấm bởi AI ({rated!.model}) lúc {new Date(rated!.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span>
+              : <span className="muted">{!ai ? 'Đang kiểm tra AI…' : !ai.configured ? 'Chưa có khoá AI trong bridge: đang hiện điểm chấm theo quy tắc.' : m.n < 10 ? 'Dưới 10 lệnh: chưa gọi AI, đang hiện điểm chấm theo quy tắc.' : 'Đang hiện điểm chấm theo quy tắc.'}</span>}
+            {ai?.configured && m.n >= 10 && !rating && <button className="ghost mini" onClick={rate}>{r ? 'Chấm lại' : 'Chấm bằng AI'}</button>}
+          </div>
+          {aiErr && <p className="notice bad">⚠ AI chưa chấm được: {aiErr} Đang hiện điểm chấm theo quy tắc.</p>}
+          <div className={`verdict ${shown.verdict.level}${rating ? ' dim' : ''}`}>
             <div>
               <span className="muted small">Có đáng theo không?</span>
-              <strong>{a.verdict.title}</strong>
-              <p>{a.verdict.detail}</p>
+              <strong>{shown.verdict.title}</strong>
+              <p>{shown.verdict.detail}</p>
             </div>
-            <span className="chip">Độ tin cậy {CONF_TEXT[a.confidence]} · {m.n} lệnh / {Math.max(1, Math.round(m.spanDays))} ngày</span>
+            <span className="chip">Độ tin cậy {CONF_TEXT[shown.confidence]} · {m.n} lệnh / {Math.max(1, Math.round(m.spanDays))} ngày</span>
           </div>
+          {r && (r.strengths.length > 0 || r.red_flags.length > 0) && (
+            <div className="flags">
+              {r.red_flags.length > 0 && <div className="flag-col bad"><strong>Cảnh báo</strong><ul>{r.red_flags.map((x) => <li key={x}>{x}</li>)}</ul></div>}
+              {r.strengths.length > 0 && <div className="flag-col good"><strong>Điểm mạnh</strong><ul>{r.strengths.map((x) => <li key={x}>{x}</li>)}</ul></div>}
+            </div>
+          )}
 
           {m.n > 0 && (
             <>
-              <div className="score-grid">
-                <ScoreCard title="An toàn" hint="Sụt giảm, lệnh thua lớn nhất, stop loss, gấp thếp." s={a.safety} />
-                <ScoreCard title="Tăng trưởng" hint="Lãi theo % vốn, profit factor, số tuần có lãi." s={a.growth} />
-                <ScoreCard title="Kỷ luật" hint="Đặt SL, cắt lỗ đúng kế hoạch, lot đều tay." s={a.discipline} />
-                <ScoreCard title="Kiểm soát FOMO" hint="Điểm cao là ít FOMO: ít lệnh gỡ, không vào dồn dập." s={a.fomo} />
+              <div className={rating ? 'score-grid dim' : 'score-grid'}>
+                <ScoreCard title="An toàn" hint="Sụt giảm, lệnh thua lớn nhất, stop loss, gấp thếp." s={shown.safety} />
+                <ScoreCard title="Tăng trưởng" hint="Lãi theo % vốn, profit factor, số tuần có lãi." s={shown.growth} />
+                <ScoreCard title="Kỷ luật" hint="Đặt SL, cắt lỗ đúng kế hoạch, lot đều tay." s={shown.discipline} />
+                <ScoreCard title="Kiểm soát FOMO" hint="Điểm cao là ít FOMO: ít lệnh gỡ, không vào dồn dập." s={shown.fomo} />
               </div>
 
               <div className="metric-grid">
@@ -395,7 +445,7 @@ function Performance({ id, acc, serverOffset }: { id: string; acc: LiveAccount; 
               </div>
             </>
           )}
-          <p className="muted small">Đánh giá tự động theo quy tắc cố định, dựa trên lịch sử {days >= 365 ? '1 năm' : `${days} ngày`} gần nhất đọc trực tiếp từ MT5; không lưu vào Nhật ký hay Thống kê của bạn. Vốn đầu kỳ ước tính từ số dư hiện tại trừ lãi/lỗ và nạp/rút trong kỳ. Kết quả quá khứ không bảo đảm kết quả sau này; đây không phải lời khuyên đầu tư.</p>
+          <p className="muted small">{r ? 'Điểm và kết luận do AI chấm từ các con số trên và danh sách lệnh; các con số do app tự tính nên luôn chính xác. AI có thể nhận định sai: đọc kỹ lý do trước khi quyết định.' : 'Đánh giá tự động theo quy tắc cố định.'} Dựa trên lịch sử {days >= 365 ? '1 năm' : `${days} ngày`} gần nhất đọc trực tiếp từ MT5; không lưu vào Nhật ký hay Thống kê của bạn. Vốn đầu kỳ ước tính từ số dư hiện tại trừ lãi/lỗ và nạp/rút trong kỳ. Kết quả quá khứ không bảo đảm kết quả sau này; đây không phải lời khuyên đầu tư.</p>
         </>
       )}
     </section>
@@ -714,7 +764,7 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
         {notice}
       </section>
       {a && <PositionsTable rows={positionsOf([a])} infos={infos} busy={busy} onClose={closePosition} showAccount={false} />}
-      {view && a && <Performance id={id} acc={a} serverOffset={settings.serverOffset} />}
+      {view && a && <Performance key={id} id={id} acc={a} serverOffset={settings.serverOffset} />}
       {view && info && <CopyGuide id={id} info={info} links={links} onCopyFrom={onCopyFrom} />}
       <section className="card">
         <h3>Nhãn tài khoản</h3>

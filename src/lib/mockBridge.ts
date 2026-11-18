@@ -464,6 +464,35 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
     pb.updatedAt = Date.now()
     return { playbook: JSON.parse(JSON.stringify(pb)), reply }
   }
+  if (path === '/ai/rate') {
+    // Bản xem trước: không gọi AI thật; dựng câu trả lời mẫu từ các chỉ số app gửi lên.
+    await wait(1500)
+    const m = body.metrics as Record<string, number>
+    const sc = (score: number, label: string, reasons: string[]) => ({ score: Math.max(0, Math.min(100, Math.round(score))), label, reasons })
+    const safety = sc(100 - m.maxDrawdownPct * 2.5 - m.worstLossPct * 6 - (1 - m.slShare) * 40, m.maxDrawdownPct > 15 ? 'Rủi ro cao' : 'Khá an toàn',
+      [`Sụt giảm lớn nhất ${m.maxDrawdownPct}% từ đỉnh.`, `Lệnh thua lớn nhất mất ${m.worstLossPct}% vốn.`, `${Math.round(m.slShare * 100)}% số lệnh có stop loss.`])
+    const growth = sc(55 + m.growthPct * 3 + (Number(m.profitFactor) > 1.5 ? 10 : 0), m.growthPct > 0 ? 'Tăng trưởng khá' : 'Đang lỗ',
+      [`Lãi/lỗ ${m.growthPct}% so với vốn đầu kỳ.`, `Profit factor ${m.profitFactor}.`, `${Math.round(m.greenWeekShare * 100)}% số tuần có lãi.`])
+    const discipline = sc(90 - (1 - m.slShare) * 50 - (m.avgHoldLossMin > m.avgHoldWinMin * 1.5 ? 20 : 0), 'Khá kỷ luật',
+      [`Giữ lệnh thắng trung bình ${m.avgHoldWinMin} phút, lệnh thua ${m.avgHoldLossMin} phút.`, 'Lot tương đối đều tay.'])
+    const fomo = sc(95 - m.revengeShare * 120 - m.martingaleShare * 80, m.revengeShare > 0.2 ? 'Hay FOMO' : 'Ít FOMO',
+      [`${Math.round(m.revengeShare * 100)}% lệnh mở ngay sau một lệnh thua.`, `Trung bình ${Number(m.tradesPerDay).toFixed(1)} lệnh mỗi ngày giao dịch.`])
+    const few = m.n < 30
+    const ok = [safety, growth, discipline, fomo].every((x) => x.score >= 65)
+    return {
+      model: 'bản xem trước (câu trả lời mẫu, không gọi AI)',
+      rating: {
+        safety, growth, discipline, fomo,
+        verdict: few ? { level: 'watch', title: 'Theo dõi thêm', detail: `Mới có ${m.n} lệnh. Kết quả có vẻ ổn nhưng cần thêm ít nhất 30 lệnh và một tháng để chắc chắn. Nếu muốn thử, dùng tài khoản demo trước.` }
+          : ok ? { level: 'consider', title: 'Đáng cân nhắc theo', detail: 'Rủi ro được kiểm soát và có lãi đều. Nếu theo, bắt đầu bằng vốn nhỏ và đặt mức dừng lỗ cho cả việc copy.' }
+          : { level: 'watch', title: 'Theo dõi thêm', detail: 'Có mặt chưa ổn; chờ thêm vài tuần xem có cải thiện không.' },
+        strengths: [`Profit factor ${m.profitFactor}: tổng lãi lớn hơn tổng lỗ.`],
+        red_flags: m.slShare < 0.9 ? [`${Math.round((1 - m.slShare) * 100)}% số lệnh không có stop loss.`] : few ? [`Mẫu nhỏ: chỉ ${m.n} lệnh.`] : [],
+        confidence: few ? 'low' : m.n >= 60 ? 'high' : 'medium',
+      },
+      usage: { input: 0, output: 0 },
+    }
+  }
   if (path === '/ai/analyze') {
     await wait(700)
     const pb = findPb(body.playbook)

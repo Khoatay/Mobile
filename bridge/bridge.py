@@ -915,6 +915,8 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas):
                 self.answer(lambda: brain.learn(body))
             elif url.path == "/ai/analyze":
                 self.answer(lambda: brain.analyze(body))
+            elif url.path == "/ai/rate":
+                self.answer(lambda: brain.rate(body))
             elif url.path == "/accounts/add":
                 self.answer(lambda: registry.add(body))
             elif url.path == "/accounts/remove":

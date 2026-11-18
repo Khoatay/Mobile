@@ -188,6 +188,62 @@ Cách làm:
 4. Lệnh đề xuất phải có SL đúng phía và TP theo quy tắc; tính R:R từ giá vào, SL, TP1.
 5. Viết tiếng Việt, ngắn gọn. Không hứa hẹn lợi nhuận. Đây là phân tích tham khảo, người dùng tự quyết định."""
 
+RATE_SYSTEM = """Bạn là chuyên viên quản trị rủi ro, đánh giá tài khoản giao dịch forex/vàng của một trader để người dùng quyết định có nên theo dõi hoặc copy lệnh của trader đó không. Người dùng thường là người mới, nên viết tiếng Việt dễ hiểu, câu ngắn.
+
+Dữ liệu gồm: các chỉ số đã tính sẵn (chính xác, dùng nguyên văn), danh sách lệnh đã đóng trong khoảng thời gian (mỗi lệnh: giờ mở, giờ đóng, cặp, chiều, lot, lãi/lỗ ròng, có đặt SL không, R nếu tính được, số phút giữ lệnh), các lệnh đang mở, số dư và equity hiện tại.
+
+Chấm bốn điểm từ 0 đến 100, điểm càng cao càng tốt:
+- safety (An toàn): sụt giảm từ đỉnh, lệnh thua lớn nhất so với vốn, có đặt SL, gấp thếp (tăng lot sau khi thua), lưới lệnh, gồng lỗ, rủi ro của các lệnh đang mở.
+- growth (Tăng trưởng): lãi theo % vốn và tốc độ, profit factor, độ đều của kết quả theo thời gian. Lãi rất nhanh kèm rủi ro cao không phải tăng trưởng tốt.
+- discipline (Kỷ luật): SL nhất quán, cắt lỗ đúng kế hoạch hay dời SL/gồng lỗ, lot đều tay, giữ một phong cách nhất quán.
+- fomo (Kiểm soát FOMO, cao là ít FOMO): vào lệnh gỡ ngay sau lệnh thua, vào lệnh dồn dập, đuổi giá, tăng lot cảm tính.
+Mỗi điểm có label ngắn (ví dụ "An toàn", "Rủi ro cao") và 2-4 lý do, mỗi lý do dẫn con số cụ thể lấy từ dữ liệu.
+
+Kết luận verdict:
+- "consider": đáng cân nhắc theo. Chỉ khi cả bốn mặt đều tốt và dữ liệu đủ (khoảng 30 lệnh và 1 tháng trở lên).
+- "watch": theo dõi thêm.
+- "avoid": không nên theo. Bắt buộc khi có dấu hiệu gấp thếp, lưới lệnh không SL, một lệnh thua mất phần lớn tài khoản, hoặc đang lỗ rõ rệt.
+- "unknown": dưới 10 lệnh, chưa đủ để nói gì.
+title là một cụm ngắn; detail 1-3 câu giải thích và nói người dùng nên làm gì (ví dụ bắt đầu bằng vốn nhỏ hoặc demo).
+
+Nguyên tắc:
+- Chỉ dựa trên dữ liệu được đưa. Không bịa con số, không đoán chiến lược ngoài những gì thấy trong lệnh.
+- Mẫu nhỏ thì nói rõ và hạ confidence; không kết luận mạnh từ ít lệnh.
+- Kết quả quá khứ không bảo đảm tương lai. Không hứa lợi nhuận, không cổ vũ đặt nhiều tiền.
+- strengths và red_flags: mỗi mục một câu, có con số; để trống nếu không có."""
+
+RATE_SCORE = {
+    "type": "object",
+    "properties": {"score": {"type": "integer"}, "label": {"type": "string"}, "reasons": {"type": "array", "items": {"type": "string"}}},
+    "required": ["score", "label", "reasons"],
+    "additionalProperties": False,
+}
+
+RATE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "safety": RATE_SCORE,
+        "growth": RATE_SCORE,
+        "discipline": RATE_SCORE,
+        "fomo": RATE_SCORE,
+        "verdict": {
+            "type": "object",
+            "properties": {
+                "level": {"type": "string", "enum": ["consider", "watch", "avoid", "unknown"]},
+                "title": {"type": "string"},
+                "detail": {"type": "string"},
+            },
+            "required": ["level", "title", "detail"],
+            "additionalProperties": False,
+        },
+        "strengths": {"type": "array", "items": {"type": "string"}},
+        "red_flags": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+    },
+    "required": ["safety", "growth", "discipline", "fomo", "verdict", "strengths", "red_flags", "confidence"],
+    "additionalProperties": False,
+}
+
 NUM_OR_NULL = {"anyOf": [{"type": "number"}, {"type": "null"}]}
 
 LEARN_SCHEMA = {
@@ -339,6 +395,19 @@ class Brain:
         self.kb.append_chat(pid, "assistant", reply)
         pb = self.kb.set_rules(pid, out["rules"].strip())
         return {"playbook": pb, "reply": reply, "usage": usage}
+
+    def rate(self, body):
+        """Chấm điểm một tài khoản theo dõi (Only view). App gửi chỉ số đã tính sẵn và danh sách lệnh rút gọn."""
+        trades = body.get("trades")
+        if not isinstance(trades, list):
+            raise ValueError("Thiếu danh sách lệnh")
+        data = {k: body.get(k) for k in ("account", "currency", "days", "balance", "equity", "metrics", "open_positions", "trades_total")}
+        data["trades"] = trades[-400:]  # lệnh gần nhất; trades_total cho biết tổng số lệnh thật
+        content = [{"type": "text", "text": "Dữ liệu tài khoản (JSON):\n" + json.dumps(data, ensure_ascii=False)}]
+        out, usage = self._ask(RATE_SYSTEM, [{"role": "user", "content": content}], RATE_SCHEMA, "high")
+        for k in ("safety", "growth", "discipline", "fomo"):
+            out[k]["score"] = max(0, min(100, int(out[k]["score"])))
+        return {"rating": out, "usage": usage, "model": self.model}
 
     def analyze(self, body):
         pid = str(body.get("playbook"))
