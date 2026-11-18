@@ -9,7 +9,7 @@ import { BIAS_TEXT, CONFIDENCE_TEXT, ORDER_TEXT, type Analysis, type AnalysisRes
 import { usePersistent } from '../lib/store'
 import type { Settings } from '../lib/types'
 import type { SignalDraft } from '../lib/share'
-import { AiSetup } from './Learn'
+import { AiSetup, type AiStatus } from './Learn'
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
 
@@ -60,7 +60,7 @@ function TradeBox({ a, symbol, settings, onShare, shareLocked }: { a: Analysis; 
 
 export default function Analyze({ bridge, settings, onShare, shareLocked }: { bridge: BridgeState; settings: Settings; onShare?: (d: SignalDraft & { credit: string }) => void; shareLocked?: boolean }) {
   const [books, setBooks] = useState<Playbook[]>([])
-  const [ai, setAi] = useState<{ configured: boolean; model: string } | null>(null)
+  const [ai, setAi] = useState<AiStatus | null>(null)
   const [bookId, setBookId] = usePersistent('fx.ai.playbook', '')
   const [watch, setWatch] = usePersistent<string[]>('fx.watchlist', ['XAUUSD', 'EURUSD', 'GBPUSD'])
   const [results, setResults] = usePersistent<Record<string, AnalysisResult>>('fx.analyses', {})
@@ -73,7 +73,7 @@ export default function Analyze({ bridge, settings, onShare, shareLocked }: { br
   useEffect(() => {
     if (!bridge.online) return
     bridgeGet<Playbook[]>('/kb').then(setBooks).catch(() => setBooks([]))
-    bridgeGet<{ configured: boolean; model: string }>('/ai/status').then(setAi).catch(() => setAi(null))
+    bridgeGet<AiStatus>('/ai/status').then(setAi).catch(() => setAi(null))
   }, [bridge.online])
   const book = books.find((b) => b.id === bookId) ?? books.find((b) => b.rules.trim())
 
@@ -100,7 +100,7 @@ export default function Analyze({ bridge, settings, onShare, shareLocked }: { br
   return (
     <>
       <h1>AI phân tích</h1>
-      {ai && !ai.configured && <AiSetup online />}
+      {ai && !ai.configured && <AiSetup online problem={ai.problem} />}
       {!mt5 && <p className="warn">⚠ Cần ít nhất một tài khoản MT5 đã nối để lấy nến. Thêm ở trang Tài khoản.</p>}
       {books.length > 0 && !books.some((b) => b.rules.trim()) && <p className="warn">⚠ Các bộ kiến thức chưa có quy tắc. Hãy dạy agent ở trang AI học trade trước.</p>}
       {books.length === 0 && <p className="warn">⚠ Chưa có bộ kiến thức nào. Tạo ở trang AI học trade.</p>}

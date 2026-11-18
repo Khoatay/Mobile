@@ -938,7 +938,8 @@ def main():
     calendar = Calendar()
     auto = Automation(registry, tg, calendar)
     auto.start()
-    print(f"[ai] {'Đã có khoá API' if brain.status()['configured'] else 'Chưa có khoá API: thêm anthropic_api_key vào config.json để dùng phần Học và phân tích'} · model {brain.model}")
+    ai = brain.status()
+    print(f"[ai] {ai['providerName']} · model {ai['model'] or '(chưa chọn)'}" + ("" if ai["configured"] else f" — {ai['problem']}"))
     for a in registry.list():
         print(f"[mt5] {a.label} ({a.type}){' — CHO PHÉP VÀO LỆNH' if a.tradable else ''}: đang kết nối…")
     tg.start()

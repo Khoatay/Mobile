@@ -7,7 +7,8 @@ Kho kiến thức và agent phân tích cho FX Desk.
 - "Phân tích": gửi bộ quy tắc và các đặc điểm giá đã tính sẵn (xu hướng, đỉnh đáy, FVG, order block, thanh khoản)
   cho Claude; Claude chỉ áp dụng đúng bộ quy tắc đó và trả về nhận định có cấu trúc.
 
-Khoá API đọc từ "anthropic_api_key" trong config.json, nếu không có thì SDK tự tìm (biến môi trường ANTHROPIC_API_KEY).
+Nhà cung cấp AI chọn bằng "ai_provider" trong config.json (Claude, OpenAI, DeepSeek, Gemini, OpenRouter, Ollama...),
+xem llm.py. PDF được lấy chữ ra ngay trên máy (pypdf) và gửi dạng chữ, rẻ hơn nhiều so với gửi nguyên file.
 """
 import base64
 import json
@@ -18,12 +19,14 @@ import time
 import uuid
 from pathlib import Path
 
+from llm import LLM
+
 HERE = Path(__file__).resolve().parent
 KB_DIR = HERE / "knowledge"
 INDEX = KB_DIR / "index.json"
-DEFAULT_MODEL = "claude-opus-5-5"
 MAX_SOURCE_BYTES = 25_000_000  # tổng tài liệu gửi đi một lần; giới hạn của API là 32 MB mỗi yêu cầu
-MAX_CHAT = 40  # số lượt trò chuyện gần nhất gửi lại cho Claude
+MAX_CHAT = 40  # số lượt trò chuyện gần nhất gửi lại cho model
+MIN_CHARS_PER_PAGE = 80  # ít hơn mức này thì coi PDF là ảnh scan, không lấy được chữ
 
 
 # ------------------------------------------------------------------- kho kiến thức
@@ -75,12 +78,36 @@ class Knowledge:
             pb = self._get(pid)
             for s in pb["sources"]:
                 self._file(pid, s).unlink(missing_ok=True)
+                self._text_file(pid, s).unlink(missing_ok=True)
             self.items.remove(pb)
             self._save()
             return {"deleted": pid}
 
     def _file(self, pid, src):
         return KB_DIR / pid / f"{src['id']}.{'pdf' if src['kind'] == 'pdf' else 'txt'}"
+
+    def _text_file(self, pid, src):
+        return KB_DIR / pid / f"{src['id']}.pdf.txt"
+
+    def pdf_text(self, pid, src):
+        """Chữ trong PDF, lấy một lần rồi lưu lại. None nếu là PDF ảnh scan hoặc chưa cài pypdf."""
+        cache = self._text_file(pid, src)
+        if cache.exists():
+            t = cache.read_text(encoding="utf-8")
+            return t or None
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            return None
+        try:
+            reader = PdfReader(str(self._file(pid, src)))
+            pages = [(p.extract_text() or "").strip() for p in reader.pages]
+        except Exception:
+            pages = []
+        chars = sum(len(p) for p in pages)
+        text = "\n\n".join(f"--- Trang {i + 1} ---\n{p}" for i, p in enumerate(pages) if p) if pages and chars >= MIN_CHARS_PER_PAGE * len(pages) else ""
+        cache.write_text(text, encoding="utf-8")
+        return text or None
 
     def add_source(self, body):
         with self.lock:
@@ -106,6 +133,12 @@ class Knowledge:
             path = self._file(pb["id"], src)
             path.parent.mkdir(exist_ok=True)
             path.write_bytes(data)
+            if kind == "pdf":
+                text = self.pdf_text(pb["id"], src)
+                src["textOnly"] = bool(text)
+                src["tokens"] = estimate_tokens(text) if text else None
+            else:
+                src["tokens"] = estimate_tokens(data.decode("utf-8", "replace"))
             pb["sources"].append(src)
             pb["updatedAt"] = src["addedAt"]
             self._save()
@@ -118,18 +151,30 @@ class Knowledge:
             if src is None:
                 raise ValueError("Không có tài liệu này")
             self._file(pid, src).unlink(missing_ok=True)
+            self._text_file(pid, src).unlink(missing_ok=True)
             pb["sources"].remove(src)
             self._save()
             return pb
 
-    def source_blocks(self, pb):
-        """Tài liệu nguồn thành các khối nội dung gửi cho Claude: PDF là document, còn lại là văn bản."""
+    def source_blocks(self, pb, pdf_native=False, pdf_full=False):
+        """Tài liệu nguồn thành các khối nội dung gửi cho model.
+        PDF gửi dạng chữ đã lấy sẵn (rẻ). Chỉ gửi nguyên file PDF (cả ảnh từng trang, đắt gấp mấy lần) khi model đọc
+        được PDF và hoặc người dùng bật pdf_mode "full", hoặc PDF là ảnh scan không có chữ."""
         blocks = []
         for s in pb["sources"]:
-            raw = self._file(pb["id"], s).read_bytes()
             if s["kind"] == "pdf":
-                blocks.append({"type": "document", "title": s["name"], "source": {"type": "base64", "media_type": "application/pdf", "data": base64.b64encode(raw).decode()}})
+                text = None if (pdf_native and pdf_full) else self.pdf_text(pb["id"], s)
+                if text:
+                    blocks.append({"type": "text", "text": f"<Tài_liệu_PDF tên=\"{s['name']}\">\n{text}\n</Tài_liệu_PDF>"})
+                elif pdf_native:
+                    raw = self._file(pb["id"], s).read_bytes()
+                    blocks.append({"type": "document", "title": s["name"], "source": {"type": "base64", "media_type": "application/pdf", "data": base64.b64encode(raw).decode()}})
+                else:
+                    raise ValueError(f"Không lấy được chữ từ PDF \"{s['name']}\" (có thể là PDF ảnh scan, hoặc chưa cài pypdf). "
+                                     "Model đang dùng không đọc được ảnh trong PDF: chạy pip install -r requirements.txt, "
+                                     "hoặc chuyển PDF sang chữ (OCR) rồi nạp file .txt, hoặc dùng Claude")
             else:
+                raw = self._file(pb["id"], s).read_bytes()
                 label = "Phụ đề video" if s["kind"] == "transcript" else "Tài liệu"
                 blocks.append({"type": "text", "text": f"<{label} tên=\"{s['name']}\">\n{raw.decode('utf-8', 'replace')}\n</{label}>"})
         return blocks
@@ -150,7 +195,7 @@ class Knowledge:
             return pb
 
 
-# ------------------------------------------------------------------------- Claude
+# --------------------------------------------------------------------------- AI
 
 LEARN_SYSTEM = """Bạn là trợ lý học phương pháp giao dịch forex của một trader. Người dùng dạy bạn một phương pháp cụ thể (ví dụ ICT, SMC, price action, hoặc kết hợp nhiều trường phái) qua tài liệu, phụ đề video và trò chuyện.
 
@@ -265,55 +310,12 @@ class Brain:
     def __init__(self, cfg, kb):
         self.cfg = cfg or {}
         self.kb = kb
-        self.model = str(self.cfg.get("ai_model") or DEFAULT_MODEL)
-        self._client = None
-
-    def client(self):
-        if self._client is None:
-            try:
-                import anthropic
-            except ImportError:
-                raise RuntimeError("Chưa cài thư viện anthropic: pip install -r requirements.txt")
-            key = self.cfg.get("anthropic_api_key")
-            self._client = anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
-        return self._client
+        self.llm = LLM(self.cfg)
+        self.model = self.llm.model
+        self.pdf_full = str(self.cfg.get("pdf_mode") or "text").lower() == "full"
 
     def status(self):
-        has_key = bool(self.cfg.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY"))
-        return {"configured": has_key, "model": self.model}
-
-    def _ask(self, system, content, schema, effort):
-        """Một lệnh gọi Claude trả về JSON theo schema. Bật dự phòng phía máy chủ khi bị từ chối."""
-        import anthropic
-        try:
-            res = self.client().beta.messages.create(
-                model=self.model,
-                max_tokens=16000,
-                system=system,
-                messages=content,
-                output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
-            )
-        except anthropic.AuthenticationError:
-            raise RuntimeError("Khoá API không hợp lệ. Kiểm tra anthropic_api_key trong config.json")
-        except anthropic.PermissionDeniedError as e:
-            raise RuntimeError(f"Khoá API không có quyền dùng model {self.model}: {e.message}")
-        except anthropic.RateLimitError:
-            raise RuntimeError("Đang bị giới hạn số lần gọi API. Thử lại sau ít phút")
-        except anthropic.BadRequestError as e:
-            raise RuntimeError(f"Yêu cầu không hợp lệ: {e.message}")
-        except anthropic.APIStatusError as e:
-            raise RuntimeError(f"Lỗi API {e.status_code}: {e.message}")
-        except anthropic.APIConnectionError:
-            raise RuntimeError("Không kết nối được tới máy chủ Anthropic. Kiểm tra internet")
-        if res.stop_reason == "refusal":
-            raise RuntimeError("Claude từ chối yêu cầu này")
-        if res.stop_reason == "max_tokens":
-            raise RuntimeError("Câu trả lời bị cắt vì quá dài. Thử tách tài liệu hoặc hỏi ngắn hơn")
-        text = next((b.text for b in res.content if b.type == "text"), "")
-        usage = {"input": res.usage.input_tokens, "output": res.usage.output_tokens}
-        return json.loads(text), usage
+        return self.llm.status()
 
     def learn(self, body):
         pid, message = str(body.get("playbook")), str(body.get("message") or "").strip()
@@ -325,7 +327,7 @@ class Brain:
             raise ValueError("Không có bộ kiến thức này")
         # Tài liệu nguồn đứng đầu và được đánh dấu cache: chúng ít thay đổi, nên các lượt sau đọc lại rẻ hơn.
         # Bộ quy tắc đổi sau mỗi lượt nên đặt sau điểm cache.
-        intro = self.kb.source_blocks(pb)
+        intro = self.kb.source_blocks(pb, pdf_native=self.llm.is_anthropic, pdf_full=self.pdf_full)
         if intro:
             intro[-1]["cache_control"] = {"type": "ephemeral"}
         intro.append({"type": "text", "text": f"Tên bộ kiến thức: {pb['name']}\n\nBộ quy tắc hiện tại:\n{pb['rules'] or '(chưa có)'}"})
@@ -333,7 +335,7 @@ class Brain:
         for turn in pb["chat"][-MAX_CHAT:]:
             messages.append({"role": "user" if turn["role"] == "user" else "assistant", "content": turn["text"]})
         messages.append({"role": "user", "content": message})
-        out, usage = self._ask(LEARN_SYSTEM, messages, LEARN_SCHEMA, "medium")
+        out, usage = self.llm.ask_json(LEARN_SYSTEM, messages, LEARN_SCHEMA, "medium")
         reply = out["reply"] + ("\n\nCâu hỏi cần bạn xác nhận:\n" + "\n".join(f"- {q}" for q in out["open_questions"]) if out["open_questions"] else "")
         self.kb.append_chat(pid, "user", message)
         self.kb.append_chat(pid, "assistant", reply)
@@ -357,8 +359,13 @@ class Brain:
         note = str(body.get("note") or "").strip()
         if note:
             content.append({"type": "text", "text": f"Ghi chú thêm của người dùng: {note}"})
-        out, usage = self._ask(ANALYZE_SYSTEM, [{"role": "user", "content": content}], ANALYZE_SCHEMA, "high")
+        out, usage = self.llm.ask_json(ANALYZE_SYSTEM, [{"role": "user", "content": content}], ANALYZE_SCHEMA, "high")
         return {"analysis": out, "usage": usage, "model": self.model}
+
+
+def estimate_tokens(text):
+    """Ước lượng thô số token: khoảng 3 ký tự một token với tiếng Việt có dấu."""
+    return max(1, len(text or "") // 3)
 
 
 def strip_subtitles(text):
@@ -378,7 +385,7 @@ def strip_subtitles(text):
 
 PERSONAS = KB_DIR / "personas.json"
 PERSONA_FIELDS = ("name", "avatar", "tagline", "personality", "values", "style", "boundaries", "greeting", "examples", "playbooks", "use_account")
-MAX_CHAT_TURNS = 30  # số lượt gần nhất gửi lại cho Claude
+MAX_CHAT_TURNS = 30  # số lượt gần nhất gửi lại cho model
 
 CHAT_RULES = """Quy tắc chung, luôn áp dụng bất kể nhân cách:
 - Bạn là một trợ lý AI. Nếu người dùng hỏi thẳng bạn có phải người thật không, hãy nói thật.
@@ -473,7 +480,6 @@ class Personas:
 
 def chat(brain, personas, body):
     """Một lượt trò chuyện: nhân cách + bộ quy tắc trong system (có cache), lịch sử gần nhất, bối cảnh tài khoản nếu bật."""
-    import anthropic
     pid, message = str(body.get("persona")), str(body.get("message") or "").strip()
     if not message:
         raise ValueError("Tin nhắn đang trống")
@@ -494,25 +500,9 @@ def chat(brain, personas, body):
         messages[-1]["content"] += "\n\n" + user_text
     else:
         messages.append({"role": "user", "content": user_text})
-    try:
-        res = brain.client().beta.messages.create(
-            model=brain.model, max_tokens=8000,
-            system=[{"type": "text", "text": personas.system_prompt(p), "cache_control": {"type": "ephemeral"}}],
-            messages=messages, output_config={"effort": "medium"},
-            betas=["server-side-fallback-2026-07-01"], fallbacks="default",
-        )
-    except anthropic.AuthenticationError:
-        raise RuntimeError("Khoá API không hợp lệ. Kiểm tra anthropic_api_key trong config.json")
-    except anthropic.RateLimitError:
-        raise RuntimeError("Đang bị giới hạn số lần gọi API. Thử lại sau ít phút")
-    except anthropic.APIStatusError as e:
-        raise RuntimeError(f"Lỗi API {e.status_code}: {e.message}")
-    except anthropic.APIConnectionError:
-        raise RuntimeError("Không kết nối được tới máy chủ Anthropic. Kiểm tra internet")
-    if res.stop_reason == "refusal":
-        reply = "Mình không thể trả lời câu này."
-    else:
-        reply = "".join(b.text for b in res.content if b.type == "text").strip() or "…"
+    system = [{"type": "text", "text": personas.system_prompt(p), "cache_control": {"type": "ephemeral"}}]
+    reply, _ = brain.llm.ask_text(system, messages, "medium", 8000)
+    reply = reply or "Mình không thể trả lời câu này."
     personas.append(pid, "user", message)
     personas.append(pid, "assistant", reply)
     return {"reply": reply, **personas.list()}

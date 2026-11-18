@@ -1,6 +1,7 @@
 {
   "port": 8787,
-  "anthropic_api_key": "sk-ant-...",
+  "ai_provider": "anthropic",
+  "ai_api_key": "sk-ant-...",
   "ai_model": "claude-opus-5-5",
   "accounts": [
     {

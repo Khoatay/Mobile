@@ -37,14 +37,19 @@ function readFile(f: File, as: 'text' | 'dataurl'): Promise<string> {
   })
 }
 
-export function AiSetup({ online }: { online: boolean }) {
+export type AiStatus = { configured: boolean; model: string; problem?: string; provider?: string; providerName?: string }
+
+export function AiSetup({ online, problem }: { online: boolean; problem?: string }) {
   return (
     <section className="card">
-      <h3>{online ? 'Chưa có khoá API cho phần AI' : 'Cần chạy chương trình nền (bridge)'}</h3>
-      <p className="muted">Phần học và phân tích dùng mô hình AI Claude qua bridge, để khoá API nằm trên máy bạn chứ không ở trình duyệt.</p>
+      <h3>{online ? 'Chưa cấu hình AI' : 'Cần chạy chương trình nền (bridge)'}</h3>
+      <p className="muted">Phần AI chạy qua bridge, để khoá API nằm trên máy bạn chứ không ở trình duyệt. Dùng được Claude, ChatGPT (OpenAI), DeepSeek, Gemini, OpenRouter, hoặc model chạy ngay trên máy bằng Ollama (miễn phí).</p>
+      {problem && <p className="warn">⚠ {problem}</p>}
       <ol className="steps">
-        <li>Tạo khoá API tại console.anthropic.com (mục API Keys). Mỗi lần học hay phân tích tốn một khoản phí nhỏ theo lượng chữ gửi đi.</li>
-        <li>Mở <code>bridge/config.json</code>, thêm dòng <code>"anthropic_api_key": "sk-ant-…",</code> ngay sau dấu <code>{'{'}</code> đầu tiên.</li>
+        <li>Tạo khoá API ở nhà cung cấp bạn chọn: console.anthropic.com, platform.openai.com, platform.deepseek.com, aistudio.google.com hoặc openrouter.ai. Với Ollama thì cài ollama.com và tải một model, không cần khoá. Mỗi lần học hay phân tích tốn phí theo lượng chữ gửi đi.</li>
+        <li>Mở <code>bridge/config.json</code>, thêm ngay sau dấu <code>{'{'}</code> đầu tiên, ví dụ với DeepSeek:<br />
+          <code>"ai_provider": "deepseek", "ai_api_key": "sk-…", "ai_model": "deepseek-chat",</code><br />
+          <code>ai_provider</code> là một trong: <code>anthropic</code>, <code>openai</code>, <code>deepseek</code>, <code>gemini</code>, <code>openrouter</code>, <code>ollama</code>, <code>custom</code>.</li>
         <li>Trong thư mục <code>bridge</code> chạy <code>pip install -r requirements.txt</code>, rồi chạy lại <code>python bridge.py</code>.</li>
       </ol>
     </section>
@@ -54,7 +59,7 @@ export function AiSetup({ online }: { online: boolean }) {
 export default function Learn({ bridge }: { bridge: BridgeState }) {
   const [books, setBooks] = useState<Playbook[] | null>(null)
   const [pick, setPick] = useState<string | null>(null)
-  const [ai, setAi] = useState<{ configured: boolean; model: string } | null>(null)
+  const [ai, setAi] = useState<AiStatus | null>(null)
   const [busy, setBusy] = useState('')
   const [err, setErr] = useState('')
   const [msg, setMsg] = useState('')
@@ -71,7 +76,7 @@ export default function Learn({ bridge }: { bridge: BridgeState }) {
   useEffect(() => {
     if (!bridge.online) return
     load()
-    bridgeGet<{ configured: boolean; model: string }>('/ai/status').then(setAi).catch(() => setAi(null))
+    bridgeGet<AiStatus>('/ai/status').then(setAi).catch(() => setAi(null))
   }, [bridge.online])
 
   const book = books?.find((b) => b.id === pick) ?? books?.[0]
@@ -132,7 +137,7 @@ export default function Learn({ bridge }: { bridge: BridgeState }) {
     <>
       <h1>AI học trade</h1>
       <p className="muted">Dạy agent phương pháp của bạn (ICT, SMC, hoặc kết hợp nhiều trường phái) bằng tài liệu PDF, phụ đề video và trò chuyện. Agent tóm thành một bộ quy tắc rõ ràng; trang AI phân tích chỉ áp dụng đúng bộ quy tắc đó.</p>
-      {ai && !ai.configured && <AiSetup online />}
+      {ai && !ai.configured && <AiSetup online problem={ai.problem} />}
       {err && <p className="notice bad">⚠ {err}</p>}
 
       <div className="tabs" role="tablist" aria-label="Bộ kiến thức">

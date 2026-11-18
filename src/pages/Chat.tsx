@@ -9,7 +9,7 @@ import { accountContext, BLANK_PERSONA, PERSONA_TEMPLATES, type Persona, type Pe
 import { usePersistent } from '../lib/store'
 import type { Trade } from '../lib/types'
 import { squareAvatar } from '../lib/user'
-import { AiSetup } from './Learn'
+import { AiSetup, type AiStatus } from './Learn'
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
 
@@ -66,7 +66,7 @@ function Editor({ value, books, onSave, onCancel, onDelete }: { value: Partial<P
 export default function Chat({ bridge, trades, infos }: { bridge: BridgeState; trades: Trade[]; infos: InfoMap }) {
   const [store, setStore] = useState<PersonaStore>({ items: [], chats: {} })
   const [books, setBooks] = useState<Playbook[]>([])
-  const [ai, setAi] = useState<{ configured: boolean } | null>(null)
+  const [ai, setAi] = useState<AiStatus | null>(null)
   const [picked, setPicked] = usePersistent('fx.chat.persona', '')
   const [editing, setEditing] = useState<Partial<Persona> | null>(null)
   const [text, setText] = useState('')
@@ -78,7 +78,7 @@ export default function Chat({ bridge, trades, infos }: { bridge: BridgeState; t
     if (!bridge.online) return
     bridgeGet<PersonaStore>('/personas').then((s) => { setStore(s); if (!s.items.length) setEditing({ ...PERSONA_TEMPLATES[0].p }) }).catch((e) => setErr(errText(e)))
     bridgeGet<Playbook[]>('/kb').then(setBooks).catch(() => {})
-    bridgeGet<{ configured: boolean }>('/ai/status').then(setAi).catch(() => {})
+    bridgeGet<AiStatus>('/ai/status').then(setAi).catch(() => {})
   }, [bridge.online])
 
   const persona = store.items.find((x) => x.id === picked) ?? store.items[0]
@@ -111,7 +111,7 @@ export default function Chat({ bridge, trades, infos }: { bridge: BridgeState; t
     <>
       <h1>Golden Duck Talk</h1>
       <p className="muted">Trò chuyện với nhân vật AI do chính bạn tạo: tính cách, phẩm giá, cách nói chuyện và kiến thức trade đều do bạn dạy.</p>
-      {ai && !ai.configured && <AiSetup online />}
+      {ai && !ai.configured && <AiSetup online problem={ai.problem} />}
       {err && <p className="notice bad">⚠ {err}</p>}
       <div className="chat-layout">
         <aside className="persona-list">
