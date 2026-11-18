@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "skipLibCheck": true,
+    "types": ["node", "vite/client"],
+    "allowImportingTsExtensions": false
+  },
+  "include": ["src", "../src/lib/signals.ts", "../src/lib/persona.ts"]
+}

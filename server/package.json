@@ -1,0 +1,27 @@
+{
+  "name": "golden-duck-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Máy chủ Golden Duck: đăng nhập, kênh Telegram khách tự thêm, bot cảnh báo chung, AI qua khoá của chủ app.",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning --import tsx src/index.ts",
+    "dev": "node --disable-warning=ExperimentalWarning --watch --import tsx src/index.ts",
+    "tg-login": "node --disable-warning=ExperimentalWarning --import tsx src/tgLogin.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.10.0",
+    "teleproto": "1.232.0",
+    "tsx": "4.20.6"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.6",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}
