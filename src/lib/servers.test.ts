@@ -8,5 +8,7 @@ describe('gợi ý máy chủ MT5', () => {
     expect(o[2].name).toBe('ICMarketsSC-MT5')
     expect(o.filter((x) => x.name === 'Exness-MT5Real8')).toHaveLength(1)
     expect(o.some((x) => x.name === 'Exness-MT5Trial15')).toBe(true)
+    expect(serverOptions([], 'the5ers')[0].name).toBe('FivePercentOnline-Real')
+    expect(serverOptions([], 'FTMO').slice(0, 2).map((x) => x.name)).toEqual(['FTMO-Server', 'FTMO-Server2'])
   })
 })

@@ -2,7 +2,7 @@
  * Gợi ý tên máy chủ MT5 khi thêm tài khoản, để khỏi gõ tay.
  * Nguồn: (1) máy chủ bridge thấy trên máy khách (đã từng đăng nhập, chắc chắn đúng); (2) tên thường gặp của vài sàn.
  * Tên thường gặp tổng hợp từ hướng dẫn bên thứ ba (11/2026), sàn có thể đổi: tên đúng luôn nằm trong email mở tài khoản
- * hoặc trang quản lý tài khoản của sàn. Quỹ (FTMO, The5ers…) chưa có nguồn đáng tin nên không liệt kê sẵn.
+ * hoặc trang quản lý tài khoản của sàn.
  */
 const range = (prefix: string, from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => `${prefix}${from + i}`)
 
@@ -10,6 +10,9 @@ export const COMMON_SERVERS: { broker: string; servers: string[] }[] = [
   // Exness đánh số máy chủ theo từng tài khoản: Real/Trial + số.
   { broker: 'Exness', servers: ['Exness-MT5Real', ...range('Exness-MT5Real', 2, 40), 'Exness-MT5Trial', ...range('Exness-MT5Trial', 2, 20)] },
   { broker: 'IC Markets', servers: ['ICMarketsSC-MT5', 'ICMarketsSC-MT5-2', 'ICMarketsSC-MT5-3', 'ICMarketsSC-MT5-4', 'ICMarketsSC-MT5-6', 'ICMarketsSC-Demo', 'ICMarketsEU-MT5-5', 'ICMarketsEU-Demo', 'ICMarketsAU-Live'] },
+  // Hai quỹ dưới: lấy từ danh sách máy chủ trong app MT5 của chủ app (11/2026).
+  { broker: 'FTMO', servers: ['FTMO-Server', 'FTMO-Server2', 'FTMO-Server3', 'FTMO-Server4', 'FTMO-Server5', 'FTMO-Demo'] },
+  { broker: 'The5ers', servers: ['FivePercentOnline-Real', 'FivePercentOnline-Experience'] },
   { broker: 'MetaQuotes', servers: ['MetaQuotes-Demo'] },
 ]
 
