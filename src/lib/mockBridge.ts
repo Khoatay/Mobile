@@ -256,6 +256,13 @@ function autoSnapshot(): AutomationSnapshot {
     const used = g.daily_limit > 0 ? dayLoss / g.daily_limit : 0
     const floorUsed = g.floor > 0 && g.max_loss > 0 ? Math.max(0, (g.max_loss - (l.equity - g.floor)) / g.max_loss) : 0
     const level = Math.max(used, floorUsed)
+    const dayProfit = Math.max(0, (closedToday[a.id] ?? 0) + l.profit)
+    if (g.enabled && g.profit_limit && dayProfit >= g.profit_limit && !auto.locks[a.id]) {
+      const until = Math.floor(T0 / 1000) + 12 * 3600
+      auto.locks[a.id] = { until, reason: `Đạt mục tiêu lãi ngày (+${dayProfit.toFixed(2)} ${a.currency})`, at: Date.now() / 1000, kind: 'limit', unlock_at: g.hard_lock ? until : 0 }
+      auto.events.unshift({ at: Date.now(), kind: 'lock', account: a.id, label: a.label, text: `${auto.locks[a.id].reason}. Khoá vào lệnh tới hết ngày máy chủ. Đã đóng ${a.positions.length} lệnh.` })
+      a.positions = []
+    }
     if (g.enabled && level >= g.act_at && !auto.locks[a.id]) {
       const until = Math.floor(T0 / 1000) + 12 * 3600
       auto.locks[a.id] = { until, reason: `Chạm ${Math.round(level * 100)}% giới hạn lỗ trong ngày`, at: Date.now() / 1000, kind: 'limit', unlock_at: g.hard_lock ? until : 0 }
@@ -273,7 +280,7 @@ function autoSnapshot(): AutomationSnapshot {
       }
       stops = { on: true, protected: a.positions.length, over: [], budget: Number(budget.toFixed(2)), at: Date.now() }
     }
-    states[a.id] = { stops, ref_ok: true, day_loss: Number(dayLoss.toFixed(2)), used, floor_used: floorUsed, level, equity: l.equity, currency: a.currency, consec_losses: a.id === '520011' ? 2 : 0, trades: a.id === '520011' ? 3 : 1, positions: a.positions.length, tradable: a.tradable, error: '', updated: Date.now() }
+    states[a.id] = { stops, ref_ok: true, day_profit: Number(dayProfit.toFixed(2)), profit_used: g.profit_limit ? dayProfit / g.profit_limit : 0, day_loss: Number(dayLoss.toFixed(2)), used, floor_used: floorUsed, level, equity: l.equity, currency: a.currency, consec_losses: a.id === '520011' ? 2 : 0, trades: a.id === '520011' ? 3 : 1, positions: a.positions.length, tradable: a.tradable, error: '', updated: Date.now() }
   }
   return { guards: auto.guards, states, locks: auto.locks, events: auto.events.slice(0, 100), alerts: auto.alerts, copier: auto.copier, copyState: { started: 0, last: Date.now(), error: '' }, telegram: true }
 }

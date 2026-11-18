@@ -573,3 +573,14 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 .inline-pay input { width: 120px; }
 .meter { position: relative; }
 .meter-limit { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: 0.6; border-radius: 1px; }
+
+/* Bảo vệ: nhóm Real/Quỹ, ô % hoặc tiền */
+.guard-group { margin-bottom: 18px; }
+.guard-group > .muted { margin: -4px 0 10px; }
+.limit-input { display: flex; gap: 6px; align-items: stretch; }
+.limit-input input { flex: 1; min-width: 0; }
+.limit-input .seg { flex: none; }
+.guard-simple { display: grid; gap: 10px; margin-top: 10px; justify-items: start; }
+.guard-simple .prop-form { width: 100%; }
+.guard-toggles { display: grid; gap: 6px; margin-top: 10px; }
+.meter.gain > div { background: var(--pos); }

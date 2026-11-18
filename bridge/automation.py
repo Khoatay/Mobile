@@ -102,6 +102,8 @@ class Automation:
                 self.guards[account] = {
                     "enabled": bool(cfg.get("enabled", True)),
                     "daily_limit": num("daily_limit"), "floor": num("floor"), "max_loss": num("max_loss"),
+                    # Chốt lãi trong ngày: lãi (đã chốt + đang treo) chạm mức này thì đóng hết lệnh và khoá tới hết ngày. 0 = tắt.
+                    "profit_limit": num("profit_limit"),
                     "warn_at": sorted({min(0.99, max(0.1, float(x))) for x in (cfg.get("warn_at") or [0.7, 0.9])}),
                     "act_at": min(1.0, max(0.5, float(cfg.get("act_at") or 0.95))),
                     "max_consec_losses": int(cfg.get("max_consec_losses") or 0), "max_trades": int(cfg.get("max_trades") or 0),
@@ -233,6 +235,9 @@ class Automation:
         today = self._today(acc, g["server_offset"], sig)
         ref, bal0, ref_ok = self._day_ref(acc, g, live, today)
         day_loss = max(0.0, ref - live["equity"])
+        day_profit = max(0.0, live["equity"] - ref)
+        profit_limit = g.get("profit_limit", 0)
+        hit_profit = profit_limit > 0 and day_profit >= profit_limit
         used = day_loss / g["daily_limit"] if g["daily_limit"] > 0 else 0.0
         floor_used = 0.0
         if g["floor"] > 0 and g["max_loss"] > 0:
@@ -250,7 +255,9 @@ class Automation:
             self.event("warn", acc.id, f"Đã dùng {level * 100:.0f}% giới hạn {what}. Lỗ hôm nay {day_loss:.2f} {live['currency']}, equity {live['equity']:.2f}.")
 
         reason = ""
-        if level >= g["act_at"]:
+        if hit_profit:
+            reason = f"Đạt mục tiêu lãi ngày (+{day_profit:.2f} {live['currency']})"
+        elif level >= g["act_at"]:
             reason = f"Chạm {level * 100:.0f}% giới hạn {'lỗ trong ngày' if used >= floor_used else 'lỗ tổng'}"
         elif g["max_consec_losses"] and today["consec_losses"] >= g["max_consec_losses"]:
             reason = f"Thua liên tiếp {today['consec_losses']} lệnh"
@@ -259,14 +266,14 @@ class Automation:
 
         lock = self.locked(acc.id)
         if reason and not lock:
-            hit_limit = level >= g["act_at"]
+            hit_limit = level >= g["act_at"] or hit_profit
             unlock_at = (next_day if hit_limit else now() + 1800) if g.get("hard_lock", True) else 0
             with self.lock:
                 self.locks[acc.id] = {"until": next_day, "reason": reason, "at": now(), "unlock_at": unlock_at, "kind": "limit" if hit_limit else "behavior"}
                 self._save()
             lock = self.locks[acc.id]
             closed = ""
-            if level >= g["act_at"] and g["close_on_breach"] and live["positions"]:
+            if (level >= g["act_at"] or hit_profit) and g["close_on_breach"] and live["positions"]:
                 if acc.tradable:
                     r = acc.call("close_all", timeout=60)
                     closed = f" Đã đóng {r['closed']} lệnh." + (f" Lỗi: {'; '.join(r['errors'])}" if r["errors"] else "")
@@ -285,6 +292,7 @@ class Automation:
         self.states[acc.id] = {
             "stops": stops, "day_ref": round(ref, 2), "ref_ok": ref_ok,
             "day": day, "warned": warned, "day_loss": round(day_loss, 2), "used": round(used, 4), "floor_used": round(floor_used, 4),
+            "day_profit": round(day_profit, 2), "profit_used": round(day_profit / profit_limit, 4) if profit_limit > 0 else 0,
             "level": round(level, 4), "equity": live["equity"], "currency": live["currency"], "consec_losses": today["consec_losses"],
             "trades": today["trades"], "positions": len(live["positions"]), "tradable": acc.tradable, "error": "", "updated": int(now() * 1000),
         }

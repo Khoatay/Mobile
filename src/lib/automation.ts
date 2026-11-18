@@ -20,12 +20,15 @@ export interface GuardConfig {
   hard_lock: boolean
   /** Mốc tính lỗ ngày: số dư đầu ngày, hoặc số cao hơn giữa số dư và equity đầu ngày. */
   day_ref: 'balance' | 'higher'
+  /** Chốt lãi ngày: lãi trong ngày chạm mức này thì đóng hết lệnh và khoá tới hết ngày. 0 = tắt. */
+  profit_limit?: number
 }
 export interface GuardStops { on: boolean; protected: number; over: string[]; budget: number; at: number }
 export interface GuardState {
   day_loss: number; used: number; floor_used: number; level: number; equity: number; currency: string
   consec_losses: number; trades: number; positions: number; tradable: boolean; error: string; updated: number
   stops?: GuardStops; day_ref?: number; ref_ok?: boolean
+  day_profit?: number; profit_used?: number
 }
 export interface AutoEvent { at: number; kind: 'warn' | 'lock' | 'unlock' | 'news' | 'copy' | 'copy-error' | 'stop'; account: string; label: string; text: string }
 export interface CopyFollower { account: string; mode: 'fixed' | 'multiplier' | 'balance'; value: number; reverse: boolean }
@@ -44,8 +47,13 @@ export interface AutomationSnapshot {
 /** Cách IB/trader đặt giới hạn trên app; app tính ra số tiền cụ thể rồi gửi cho bridge. */
 export interface GuardUi {
   enabled: boolean
-  /** prop: lấy từ luật quỹ của tài khoản; custom: % số dư tự đặt. */
-  source: 'prop' | 'custom'
+  /** prop: lấy từ luật quỹ; custom: % số dư tự đặt (quỹ); simple: tài khoản Real, chỉ đặt dừng lỗ và chốt lãi trong ngày. */
+  source: 'prop' | 'custom' | 'simple'
+  /** Tài khoản Real: dừng khi lỗ / lãi trong ngày, theo % số dư hoặc số tiền. 0 = tắt. */
+  lossMode: 'pct' | 'money'
+  lossValue: number
+  profitMode: 'pct' | 'money'
+  profitValue: number
   dailyPct: number
   totalPct: number
   warn1: number
@@ -60,12 +68,24 @@ export interface GuardUi {
   /** Chỉ dùng khi tự đặt; theo luật quỹ thì lấy theo quỹ. */
   dayRef: 'balance' | 'higher'
 }
-export const DEFAULT_GUARD_UI: GuardUi = { enabled: true, source: 'prop', dailyPct: 3, totalPct: 8, warn1: 70, warn2: 90, actAt: 95, maxConsec: 3, maxTrades: 0, closeOnBreach: true, closeNew: true, hardStop: true, hardLock: true, dayRef: 'balance' }
+export const DEFAULT_GUARD_UI: GuardUi = { lossMode: 'pct', lossValue: 3, profitMode: 'pct', profitValue: 0, enabled: true, source: 'prop', dailyPct: 3, totalPct: 8, warn1: 70, warn2: 90, actAt: 95, maxConsec: 3, maxTrades: 0, closeOnBreach: true, closeNew: true, hardStop: true, hardLock: true, dayRef: 'balance' }
 
 /** Tính cấu hình gửi bridge. Với nguồn "prop", giới hạn lấy từ luật quỹ đã đánh giá (số tiền cụ thể của hôm nay). */
+/** Số tiền của một mức đặt theo % số dư hoặc theo tiền. */
+export const amountOf = (mode: 'pct' | 'money', value: number, balance: number) => round2(!(value > 0) ? 0 : mode === 'pct' ? (balance * value) / 100 : value)
+
 export function buildGuard(ui: GuardUi, serverOffset: number, balance: number, prop?: PropLimits): GuardConfig {
-  const fromProp = ui.source === 'prop' && prop
   const u = { ...DEFAULT_GUARD_UI, ...ui }
+  if (u.source === 'simple') {
+    // Tài khoản Real: chỉ dừng lỗ và chốt lãi trong ngày. Chạm là đóng hết lệnh và khoá tới hết ngày; cảnh báo ở 70% và 90% mức lỗ.
+    return {
+      enabled: u.enabled, daily_limit: amountOf(u.lossMode, u.lossValue, balance), floor: 0, max_loss: 0,
+      profit_limit: amountOf(u.profitMode, u.profitValue, balance),
+      warn_at: [0.7, 0.9], act_at: 1, max_consec_losses: 0, max_trades: 0, close_on_breach: true, close_new_when_locked: true,
+      server_offset: serverOffset, hard_stop: u.hardStop, hard_lock: u.hardLock, day_ref: 'balance',
+    }
+  }
+  const fromProp = u.source === 'prop' && prop
   return {
     enabled: ui.enabled,
     daily_limit: round2(fromProp ? prop.dailyLimit : (balance * ui.dailyPct) / 100),
