@@ -5,6 +5,8 @@ import RuleText from '../components/RuleText'
 import { ask } from '../lib/ask'
 import { bridgeGet, bridgePost, type BridgeState } from '../lib/bridge'
 import { TEMPLATES, type Playbook } from '../lib/kb'
+import { SERVER } from '../lib/server'
+import BridgeLink from '../server/BridgeLink'
 import { download } from '../lib/store'
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
@@ -39,6 +41,8 @@ function readFile(f: File, as: 'text' | 'dataurl'): Promise<string> {
 }
 
 export function AiSetup({ online }: { online: boolean }) {
+  // Bản web: AI đi qua máy chủ; chỉ cần nối máy chạy bridge.
+  if (SERVER) return online ? <p className="notice">Đang chờ bridge báo trạng thái AI…</p> : <BridgeLink />
   // Bridge đang chạy: nhập khoá ngay trong app. Chưa chạy bridge thì hướng dẫn cài bridge.
   if (online) return <AiSettings compact />
   return (

@@ -14,6 +14,8 @@ import { evaluateProp, type PropConfig } from '../lib/prop'
 import type { PartnerLinks } from '../lib/partners'
 import { FundPanel } from './Prop'
 import { mergeTrades, usePersistent } from '../lib/store'
+import { SERVER } from '../lib/server'
+import BridgeLink from '../server/BridgeLink'
 import type { Settings, Side, Trade } from '../lib/types'
 
 interface Props {
@@ -32,6 +34,7 @@ type Msg = { ok: boolean; text: string } | null
 const errText = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
 
 export function BridgeSetup() {
+  if (SERVER) return <BridgeLink />
   return (
     <section className="card">
       <h3>Chưa thấy chương trình nền (bridge) trên máy này</h3>

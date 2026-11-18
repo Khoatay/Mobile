@@ -79,7 +79,13 @@ Nhập số điện thoại riêng (dạng `+84…`), mã Telegram gửi về, m
 3. Tài khoản → Nối Telegram → bấm Start trong bot.
 4. Hỏi AI → hỏi thử một câu.
 
-Trang web là bản đầy đủ của Golden Duck: khách đăng nhập rồi dùng mọi trang. Gói Pro, Golden Duck Talk và kênh tín hiệu chạy qua máy chủ. Các trang cần MT5 (tài khoản, bảo vệ, copy lệnh) tạm thời dùng bridge trên máy Windows của khách; trong `bridge/config.json` của họ thêm `"web_origins": ["https://ten-mien-cua-ban.com"]`.
+Trang web là bản đầy đủ của Golden Duck: khách đăng nhập rồi dùng mọi trang. Gói Pro, Golden Duck Talk và kênh tín hiệu chạy trên máy chủ.
+
+Các trang cần MT5 (Tài khoản, Bảo vệ, Copy lệnh, AI học trade, AI phân tích) dùng **bridge trên máy Windows của khách** (PC hoặc VPS Windows họ thuê). Bridge tự nối lên máy chủ, khách không phải mở cổng:
+1. Khách vào **Tài khoản & gói → Kết nối máy MT5 → Tạo mã kết nối**.
+2. Dán dòng `"server": {...}` hiện ra vào `bridge/config.json` trên máy đó, chạy lại bridge.
+
+Máy chủ chặn tính năng Pro trước khi chuyển xuống bridge. AI học trade và AI phân tích của bridge dùng khoá Claude của bạn (model ở ô "mạnh" trong trang Quản trị), giới hạn lượt mỗi ngày bằng `FREE_BRIDGE_AI_PER_DAY` và `PRO_BRIDGE_AI_PER_DAY` trong `.env` (mặc định 3 và 50).
 
 Trên điện thoại, mở trang bằng trình duyệt → Chia sẻ → **Thêm vào màn hình chính** để dùng như app.
 

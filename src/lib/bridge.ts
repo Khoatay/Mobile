@@ -39,9 +39,14 @@ export interface TgMessage { channel: string; id: number; date: number; text: st
 /** Bản xem trước (build với VITE_PREVIEW=1) dùng bridge giả lập ngay trong trang. */
 export const PREVIEW = import.meta.env.VITE_PREVIEW === '1'
 
+/** Bản web trên máy chủ: gọi bridge của khách qua máy chủ (bridge tự nối lên máy chủ), không gọi thẳng 127.0.0.1. */
+const VIA_SERVER = import.meta.env.VITE_SERVER === '1'
+
 export async function bridgeGet<T>(path: string): Promise<T> {
   if (PREVIEW) return (await (await import('./mockBridge')).mockGet(path)) as T
-  const res = await fetch(BRIDGE_URL + path, { signal: AbortSignal.timeout(15000) })
+  const res = VIA_SERVER
+    ? await fetch(`/api/relay?p=${encodeURIComponent(path)}`, { credentials: 'same-origin', signal: AbortSignal.timeout(70000) })
+    : await fetch(BRIDGE_URL + path, { signal: AbortSignal.timeout(15000) })
   const body = await res.json()
   if (!res.ok) throw new Error(body?.error ?? `Lỗi ${res.status}`)
   return body as T
@@ -49,12 +54,14 @@ export async function bridgeGet<T>(path: string): Promise<T> {
 
 export async function bridgePost<T>(path: string, body: unknown): Promise<T> {
   if (PREVIEW) return (await (await import('./mockBridge')).mockPost(path, body as Record<string, unknown>)) as T
-  const res = await fetch(BRIDGE_URL + path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-FXDesk': '1' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(60000),
-  })
+  const res = VIA_SERVER
+    ? await fetch('/api/relay', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, body }), signal: AbortSignal.timeout(620000) })
+    : await fetch(BRIDGE_URL + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-FXDesk': '1' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60000),
+    })
   const out = await res.json()
   if (!res.ok) throw new Error(out?.error ?? `Lỗi ${res.status}`)
   return out as T

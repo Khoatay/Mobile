@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BRAND_NAME } from '../lib/brand'
 import { PREVIEW } from '../lib/bridge'
 import { api, type Me } from '../lib/server'
+import BridgeLink from './BridgeLink'
 import { MyAiCard } from './AiPicker'
 
 /** Tài khoản: gói, lượt AI hôm nay, nối Telegram một chạm, đăng xuất. */
@@ -26,7 +27,7 @@ export default function ServerMe({ me, setMe }: { me: Me; setMe: (m: Me | null) 
 
   return (
     <>
-      <h1>Tài khoản</h1>
+      <h1>Tài khoản &amp; gói</h1>
       <section className="lite-card">
         <div className="lite-label">Đăng nhập bằng</div>
         <strong>{me.name || me.email}</strong>{me.name && <small className="muted"> · {me.email}</small>}
@@ -39,6 +40,8 @@ export default function ServerMe({ me, setMe }: { me: Me; setMe: (m: Me | null) 
           <li>Hỏi AI: <strong>{me.chatToday}/{me.limits.chatPerDay}</strong> tin hôm nay</li>
         </ul>
       </section>
+
+      <BridgeLink />
 
       <section className="lite-card">
         <div className="lite-label">Nhận lệnh qua Telegram</div>

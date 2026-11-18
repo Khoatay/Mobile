@@ -1,11 +1,14 @@
 /** Bộ định tuyến nhỏ trên node:http: JSON vào/ra, cookie, phục vụ file tĩnh của web app. Không cần framework. */
 import { createReadStream, existsSync, statSync } from 'node:fs'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) { super(message) }
 }
+
+/** Trả mã trạng thái và nội dung tuỳ ý (dùng cho đường dẫn bắt chước API của bên khác). */
+export class Raw { constructor(public status: number, public body: unknown) {} }
 
 export interface Req {
   method: string
@@ -13,6 +16,7 @@ export interface Req {
   query: URLSearchParams
   body: Record<string, unknown>
   cookies: Record<string, string>
+  headers: IncomingHttpHeaders
   ip: string
   setCookie: (name: string, value: string, opts: { maxAge: number; secure: boolean }) => void
 }
@@ -27,12 +31,12 @@ export function parseCookies(header: string | undefined): Record<string, string>
   return out
 }
 
-async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+async function readBody(req: IncomingMessage, limit = 1_000_000): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = []
   let size = 0
   for await (const c of req) {
     size += (c as Buffer).length
-    if (size > 1_000_000) throw new HttpError(413, 'Dữ liệu gửi lên quá lớn')
+    if (size > limit) throw new HttpError(413, 'Dữ liệu gửi lên quá lớn')
     chunks.push(c as Buffer)
   }
   if (!chunks.length) return {}
@@ -80,12 +84,15 @@ export function createHandler(routes: Record<string, Handler>, webDir: string) {
     try {
       // Chống CSRF: yêu cầu ghi phải là JSON (form của trang khác không gửi được kiểu này) và cookie đặt SameSite=Lax.
       if (method !== 'GET' && !String(req.headers['content-type'] ?? '').startsWith('application/json')) throw new HttpError(415, 'Cần gửi JSON')
-      const body = method === 'GET' ? {} : await readBody(req)
+      // Bridge gửi lên nến, tài liệu PDF cho AI: cho phép lớn hơn.
+      const big = url.pathname.startsWith('/api/bridge/') || url.pathname === '/api/relay'
+      const body = method === 'GET' ? {} : await readBody(req, big ? 40_000_000 : 1_000_000)
       const ip = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket.remoteAddress || ''
       const out = await handler({
-        method, path: url.pathname, query: url.searchParams, body, cookies: parseCookies(req.headers.cookie), ip,
+        method, path: url.pathname, query: url.searchParams, body, cookies: parseCookies(req.headers.cookie), headers: req.headers, ip,
         setCookie: (name, value, o) => cookies.push(`${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${o.maxAge}${o.secure ? '; Secure' : ''}`),
       })
+      if (out instanceof Raw) return send(out.status, out.body)
       send(200, out ?? { ok: true })
     } catch (e) {
       if (e instanceof HttpError) return send(e.status, { error: e.message })

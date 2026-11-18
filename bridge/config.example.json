@@ -1,6 +1,6 @@
 {
   "port": 8787,
-  "web_origins": ["https://ten-mien-cua-ban.com"],
+  "server": {"url": "https://ten-mien-cua-ban.com", "token": "DÁN_MÃ_KẾT_NỐI_Ở_BẢN_WEB"},
   "anthropic_api_key": "sk-ant-...",
   "ai_model": "claude-opus-5-5",
   "accounts": [

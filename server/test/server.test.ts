@@ -10,6 +10,10 @@ import { openDb } from '../src/db'
 import { createHandler } from '../src/http'
 import { initSecrets, open as openSecret, seal } from '../src/secrets'
 import { complete, listModels } from '../src/llm'
+import { Relay } from '../src/relay'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 
 initSecrets('', Buffer.alloc(32, 7))
 
@@ -67,6 +71,7 @@ describe('API', () => {
       }) as typeof fetch,
     },
     channelsMax: { free: 2, pro: 20 }, secure: false,
+    relay: new Relay(), webDir: '/nonexistent', bridgeAiPerDay: { free: 1, pro: 50 },
   }
   let server: Server
   let base = ''
@@ -271,5 +276,101 @@ describe('bot nối tài khoản', () => {
     expect(out[0]).toMatch(/không đúng/)
     expect(out[1]).toMatch(/Đã nối/)
     expect(db.prepare('select tg_chat, tg_name from users').get()).toEqual({ tg_chat: 55, tg_name: 'Chi' })
+  })
+})
+
+describe('nối bridge trên máy khách', () => {
+  const db = openDb('', ':memory:')
+  const web = mkdtempSync(path.join(tmpdir(), 'gd-web-'))
+  writeFileSync(path.join(web, 'brand.json'), JSON.stringify({ proFeatures: ['copier', 'ai'] }))
+  const upstream: { headers: Record<string, string>; body: Record<string, unknown> }[] = []
+  const deps: AppDeps = {
+    db, reader: { ready: () => false, join: async () => { throw new Error('x') } }, bot: { username: '', configured: () => false, send: async () => false },
+    ai: {
+      envKey: 'sk-ant-cua-chu-app', envModel: 'claude-haiku-5-5', perDay: { free: 2, pro: 200 },
+      fetch: (async (url: string, init?: RequestInit) => {
+        upstream.push({ headers: init?.headers as Record<string, string>, body: JSON.parse(String(init?.body)) })
+        expect(String(url)).toBe('https://api.anthropic.com/v1/messages?beta=true')
+        return new Response(JSON.stringify({ id: 'm', model: 'claude-sonnet-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: '{"ok":true}' }], usage: { input_tokens: 1000, output_tokens: 200 } }))
+      }) as typeof fetch,
+    },
+    channelsMax: { free: 2, pro: 20 }, secure: false, relay: new Relay(), webDir: web, bridgeAiPerDay: { free: 1, pro: 50 }, pollMs: 300,
+  }
+  let server: Server
+  let base = ''
+  beforeAll(async () => {
+    server = createServer(createHandler(routes(deps), web))
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  })
+  afterAll(() => server.close())
+  let cookie = ''
+  const user = async (method: string, p: string, body?: unknown) => {
+    const res = await fetch(base + p, { method, headers: { 'content-type': 'application/json', cookie }, body: body === undefined ? undefined : JSON.stringify(body) })
+    const c = res.headers.get('set-cookie'); if (c) cookie = c.split(';')[0]
+    return { status: res.status, body: await res.json() }
+  }
+  const asBridge = async (token: string, p: string, body: unknown = {}, extra: Record<string, string> = {}) => {
+    const res = await fetch(base + p, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, ...extra }, body: JSON.stringify(body) })
+    return { status: res.status, body: await res.json() }
+  }
+  /** Bridge giả: hỏi việc một lần, làm bằng hàm cho sẵn rồi trả kết quả. */
+  const serveOnce = async (token: string, work: (job: { method: string; path: string; body: unknown }) => [number, unknown]) => {
+    const job = (await asBridge(token, '/api/bridge/poll')).body
+    if (!job.id) return null
+    const [status, body] = work(job)
+    await asBridge(token, '/api/bridge/reply', { id: job.id, status, body })
+    return job
+  }
+
+  it('chưa nối bridge: báo rõ; mã sai bị từ chối', async () => {
+    await user('POST', '/api/auth/register', { email: 'chu@app.com', password: '12345678' })
+    const r = await user('GET', '/api/relay?p=/status')
+    expect(r.status).toBe(503)
+    expect(r.body.error).toMatch(/chưa kết nối/)
+    expect((await asBridge('gdb_sai', '/api/bridge/poll')).status).toBe(401)
+  })
+
+  it('trình duyệt gọi bridge qua máy chủ, lỗi của bridge chuyển nguyên về', async () => {
+    const { token } = (await user('POST', '/api/bridge/token')).body
+    expect(token).toMatch(/^gdb_/)
+    expect((await asBridge(token, '/api/bridge/poll')).body.id).toBe('')  // không có việc: trả rỗng sau thời gian chờ
+    expect((await user('GET', '/api/bridge/status')).body).toMatchObject({ online: true, hasToken: true })
+    const pending = user('GET', '/api/relay?p=' + encodeURIComponent('/accounts'))
+    const job = await serveOnce(token, (j) => [200, [{ id: '1', path: j.path }]])
+    expect(job).toMatchObject({ method: 'GET', path: '/accounts' })
+    expect((await pending).body).toEqual([{ id: '1', path: '/accounts' }])
+    const bad = user('POST', '/api/relay', { path: '/order', body: { symbol: 'XAUUSD' } })
+    await serveOnce(token, (j) => { expect(j.body).toEqual({ symbol: 'XAUUSD' }); return [400, { error: 'Thiếu SL' }] })
+    expect(await bad).toEqual({ status: 400, body: { error: 'Thiếu SL' } })
+    // mã cũ hết hiệu lực khi tạo mã mới
+    const again = (await user('POST', '/api/bridge/token')).body.token
+    expect((await asBridge(token, '/api/bridge/poll')).status).toBe(401)
+    expect((await asBridge(again, '/api/bridge/poll')).status).toBe(200)
+  })
+
+  it('máy chủ chặn tính năng Pro trước khi tới bridge', async () => {
+    const r = await user('POST', '/api/relay', { path: '/automation/copier', body: { config: { enabled: true, master: '1', followers: [] } } })
+    expect(r.status).toBe(402)
+    expect(r.body.error).toMatch(/Copy lệnh là tính năng Pro/)
+    expect((await user('POST', '/api/relay', { path: '/ai/key', body: { key: 'x' } })).status).toBe(403)
+  })
+
+  it('AI của bridge đi qua máy chủ bằng khoá và model của chủ app, có giới hạn lượt', async () => {
+    const t = (await user('POST', '/api/bridge/token')).body.token
+    const ask = (feature: string) => asBridge(t, '/api/bridge/anthropic/v1/messages?beta=true', { model: 'claude-opus-5-5', max_tokens: 100, messages: [{ role: 'user', content: 'hi' }], fallbacks: 'default' },
+      { 'x-api-key': t, authorization: '', 'x-gd-feature': feature, 'anthropic-beta': 'server-side-fallback-2026-07-01', 'anthropic-version': '2023-06-01' })
+    const pro = await ask('analyze')
+    expect(pro.status).toBe(403)
+    expect(pro.body.error.message).toMatch(/AI phân tích là tính năng Pro/)
+    const ok = await ask('learn')
+    expect(ok.status).toBe(200)
+    expect(upstream[0].headers['x-api-key']).toBe('sk-ant-cua-chu-app')
+    expect(upstream[0].body.model).toBe('claude-sonnet-5-5')
+    expect(upstream[0].headers['anthropic-beta']).toBe('server-side-fallback-2026-07-01')
+    const over = await ask('learn')
+    expect(over.status).toBe(403)
+    expect(over.body).toMatchObject({ type: 'error', error: { type: 'permission_error' } })
+    expect(over.body.error.message).toMatch(/hết 1 lượt/)
   })
 })

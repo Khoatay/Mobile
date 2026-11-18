@@ -20,6 +20,8 @@ export const config = {
   tgApiHash: env('TG_API_HASH'),
   /** Số tin chat AI mỗi ngày theo gói. */
   chatPerDay: { free: num('FREE_CHAT_PER_DAY', 15), pro: num('PRO_CHAT_PER_DAY', 200) } as Record<string, number>,
+  /** Số lượt AI học trade và AI phân tích (qua bridge) mỗi ngày theo gói. */
+  bridgeAiPerDay: { free: num('FREE_BRIDGE_AI_PER_DAY', 3), pro: num('PRO_BRIDGE_AI_PER_DAY', 50) } as Record<string, number>,
   /** Số kênh mỗi khách được thêm theo gói. */
   channelsMax: { free: num('FREE_CHANNELS', 3), pro: num('PRO_CHANNELS', 20) } as Record<string, number>,
 }

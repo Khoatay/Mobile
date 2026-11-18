@@ -34,6 +34,14 @@ MODELS = {
 FEATURES = {"chat": "Golden Duck Talk", "learn": "AI học trade", "analyze": "AI phân tích", "rate": "Đánh giá tài khoản"}
 
 
+def api_message(e):
+    """Câu báo lỗi trong nội dung trả về (máy chủ Golden Duck ghi lý do ở error.message)."""
+    body = getattr(e, "body", None)
+    if isinstance(body, dict) and isinstance(body.get("error"), dict) and body["error"].get("message"):
+        return str(body["error"]["message"])
+    return str(getattr(e, "message", e))
+
+
 def fallback_args(model):
     """Dự phòng phía máy chủ khi bị từ chối: có ở Opus và Sonnet; Haiku 5.5 không có."""
     return {} if "haiku" in model else {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
@@ -349,9 +357,20 @@ class Brain:
                 import anthropic
             except ImportError:
                 raise RuntimeError("Chưa cài thư viện anthropic: pip install -r requirements.txt")
-            key = self.cfg.get("anthropic_api_key")
-            self._client = anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
+            srv = self.server()
+            if srv:
+                # Bản web: AI đi qua máy chủ Golden Duck bằng khoá của chủ app, tính lượt theo gói của bạn.
+                self._client = anthropic.Anthropic(base_url=srv["url"] + "/api/bridge/anthropic", api_key=srv["token"], max_retries=1, timeout=900)
+            else:
+                key = self.cfg.get("anthropic_api_key")
+                self._client = anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
         return self._client
+
+    def server(self):
+        """Máy chủ Golden Duck đã nối ("server" trong config.json), hoặc None."""
+        s = self.cfg.get("server") or {}
+        url, token = str(s.get("url") or "").rstrip("/"), str(s.get("token") or "")
+        return {"url": url, "token": token} if url and token else None
 
     def model_for(self, feature):
         """Model riêng của từng tính năng (chọn trong app), không có thì dùng model chung."""
@@ -360,9 +379,10 @@ class Brain:
 
     def status(self):
         key = str(self.cfg.get("anthropic_api_key") or "")
-        has_key = bool(key or os.environ.get("ANTHROPIC_API_KEY"))
+        has_key = bool(key or os.environ.get("ANTHROPIC_API_KEY") or self.server())
         return {
-            "configured": has_key, "model": self.model, "key_hint": f"…{key[-4:]}" if len(key) > 8 else "",
+            "configured": has_key, "model": self.model, "key_hint": "AI của Golden Duck (qua máy chủ)" if self.server() else f"…{key[-4:]}" if len(key) > 8 else "",
+            "via_server": bool(self.server()),
             "models": {f: self.model_for(f) for f in FEATURES},
             "choices": [{"id": k, "name": v["name"], "in": v["in"], "out": v["out"]} for k, v in MODELS.items()],
             "features": FEATURES,
@@ -444,12 +464,14 @@ class Brain:
                 system=system,
                 messages=content,
                 output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
+                extra_headers={"x-gd-feature": feature},
                 **fallback_args(model),
             )
         except anthropic.AuthenticationError:
-            raise RuntimeError("Khoá API không hợp lệ. Kiểm tra anthropic_api_key trong config.json")
+            raise RuntimeError("Mã kết nối máy chủ không đúng: lấy mã mới ở bản web" if self.server() else "Khoá API không hợp lệ. Kiểm tra anthropic_api_key trong config.json")
         except anthropic.PermissionDeniedError as e:
-            raise RuntimeError(f"Khoá API không có quyền dùng model {model}: {e.message}")
+            # Qua máy chủ: hết lượt, cần Pro… máy chủ ghi rõ lý do.
+            raise RuntimeError(api_message(e) if self.server() else f"Khoá API không có quyền dùng model {model}: {e.message}")
         except anthropic.RateLimitError:
             raise RuntimeError("Đang bị giới hạn số lần gọi API. Thử lại sau ít phút")
         except anthropic.BadRequestError as e:
@@ -667,6 +689,7 @@ def chat(brain, personas, body):
             system=[{"type": "text", "text": personas.system_prompt(p), "cache_control": {"type": "ephemeral"}}],
             messages=messages, output_config={"effort": "medium"},
             cache_control={"type": "ephemeral"},
+            extra_headers={"x-gd-feature": "chat"},
             **fallback_args(model),
         )
     except anthropic.AuthenticationError:
@@ -674,7 +697,7 @@ def chat(brain, personas, body):
     except anthropic.RateLimitError:
         raise RuntimeError("Đang bị giới hạn số lần gọi API. Thử lại sau ít phút")
     except anthropic.APIStatusError as e:
-        raise RuntimeError(f"Lỗi API {e.status_code}: {e.message}")
+        raise RuntimeError(api_message(e) if brain.server() else f"Lỗi API {e.status_code}: {e.message}")
     except anthropic.APIConnectionError:
         raise RuntimeError("Không kết nối được tới máy chủ Anthropic. Kiểm tra internet")
     if res.stop_reason == "refusal":

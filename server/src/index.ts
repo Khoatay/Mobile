@@ -6,6 +6,7 @@ import { Bot } from './bot'
 import { config, secureCookies } from './config'
 import { openDb } from './db'
 import { createHandler } from './http'
+import { Relay } from './relay'
 import { initSecrets } from './secrets'
 import { TgReader } from './tg'
 
@@ -19,6 +20,9 @@ const deps: AppDeps = {
   adminEmails: config.adminEmails,
   channelsMax: config.channelsMax,
   secure: secureCookies(),
+  relay: new Relay(),
+  webDir: config.webDir,
+  bridgeAiPerDay: config.bridgeAiPerDay,
 }
 const reader = new TgReader(config.tgApiId, config.tgApiHash, path.join(config.dataDir, 'tg.session'), (tgId, m) => {
   const row = db.prepare("select id from channels where tg_id = ? and status = 'ok'").get(tgId) as { id: number } | undefined
@@ -26,7 +30,10 @@ const reader = new TgReader(config.tgApiId, config.tgApiHash, path.join(config.d
 })
 deps.reader = reader
 
-createServer(createHandler(routes(deps), config.webDir)).listen(config.port, '127.0.0.1', () => {
+const server = createServer(createHandler(routes(deps), config.webDir))
+// AI phân tích qua bridge có thể chạy vài phút: không cắt yêu cầu dài.
+server.requestTimeout = 0
+server.listen(config.port, '127.0.0.1', () => {
   console.log(`[golden-duck] chạy ở cổng ${config.port} (${config.publicUrl})`)
 })
 reader.start().catch((e) => { reader.error = (e as Error).message; console.error('[telegram]', e) })

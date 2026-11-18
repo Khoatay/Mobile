@@ -6,6 +6,7 @@ import type { Bot } from './bot'
 import * as ch from './channels'
 import type { DB } from './db'
 import { HttpError, type Handler, type Req } from './http'
+import * as relay from './relay'
 
 export interface AppDeps {
   db: DB
@@ -15,6 +16,13 @@ export interface AppDeps {
   adminEmails?: string[]
   channelsMax: Record<string, number>
   secure: boolean
+  /** Nối bridge trên máy khách. */
+  relay: relay.Relay
+  /** Thư mục web app, để đọc danh sách tính năng Pro trong brand.json. */
+  webDir: string
+  bridgeAiPerDay: Record<string, number>
+  /** Thời gian giữ kết nối khi bridge hỏi việc (kiểm thử đặt ngắn). */
+  pollMs?: number
 }
 
 const COOKIE = 'gd_session'
@@ -49,9 +57,35 @@ export function routes(d: AppDeps): Record<string, Handler> {
     r.setCookie(COOKIE, auth.createSession(d.db, u.id), { maxAge: auth.SESSION_DAYS * 86_400, secure: d.secure })
     return view(u)
   }
+  relay.ensureTable(d.db)
+  const bridgeUser = (r: Req) => relay.userByToken(d.db, r.headers.authorization, r.headers['x-api-key'])
+  const relayed = async (r: Req, method: 'GET' | 'POST', p: string, body: Record<string, unknown>) => {
+    const u = me(r)
+    relay.checkRelay(u, method, p, body, relay.proFeatures(d.webDir))
+    const out = await d.relay.request(u.id, method, p, body, relay.timeoutFor(method, p))
+    if (out.status >= 400) throw new HttpError(out.status, String((out.body as { error?: string })?.error ?? `Lỗi ${out.status} từ bridge`))
+    return out.body
+  }
   const channelId = (r: Req) => { const n = Number(r.body.id); if (!Number.isInteger(n)) throw new HttpError(400, 'Thiếu kênh'); return n }
 
   return {
+    // ---------- bridge trên máy khách ----------
+    'POST /api/bridge/token': (r) => ({ token: relay.newToken(d.db, me(r).id) }),
+    'GET /api/bridge/status': (r) => { const u = me(r); return { online: d.relay.online(u.id), lastSeen: d.relay.lastSeen(u.id), hasToken: relay.hasToken(d.db, u.id) } },
+    'GET /api/bridge/me': (r) => { const u = bridgeUser(r); return { email: u.email, plan: auth.planOf(u) } },
+    'POST /api/bridge/poll': async (r) => (await d.relay.poll(bridgeUser(r).id, d.pollMs ?? 25_000)) ?? { id: '' },
+    'POST /api/bridge/reply': (r) => ({ ok: d.relay.reply(bridgeUser(r).id, String(r.body.id), Number(r.body.status) || 200, r.body.body) }),
+    'GET /api/relay': (r) => relayed(r, 'GET', r.query.get('p') ?? '', {}),
+    'POST /api/relay': (r) => relayed(r, 'POST', String(r.body.path ?? ''), (r.body.body ?? {}) as Record<string, unknown>),
+    'POST /api/bridge/anthropic/v1/messages': (r) => {
+      const u = bridgeUser(r)
+      const strong = ai.systemAi(d.db, d.ai).strong
+      return relay.proxyMessages({
+        db: d.db, key: ai.systemKey(d.db, d.ai, 'anthropic'), model: strong.provider === 'anthropic' && strong.model ? strong.model : 'claude-sonnet-5-5',
+        perDay: d.bridgeAiPerDay, pro: relay.proFeatures(d.webDir), fetch: d.ai.fetch,
+      }, u, r.headers, r.body, r.query.toString() ? `?${r.query.toString()}` : '')
+    },
+
     'GET /api/health': () => ({ ok: true, telegram: d.reader.ready(), telegramError: d.reader.ready() ? '' : d.reader.error ?? '', bot: d.bot.username || '', ai: ai.systemReady(d.db, d.ai) }),
 
     'POST /api/auth/register': (r) => { auth.checkRate(r.ip); return start(r, auth.register(d.db, r.body)) },

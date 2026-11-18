@@ -53,6 +53,8 @@ export async function mockApi(path: string, body?: unknown): Promise<unknown> {
     }
     case '/auth/logout': st.me = null; return { ok: true }
     case '/me': return need()
+    case '/bridge/status': need(); return { online: true, lastSeen: Date.now(), hasToken: true }
+    case '/bridge/token': need(); return { token: 'gdb_ban_xem_truoc_khong_dung_that' }
     case '/me/telegram/unlink': need().telegram = { ...need().telegram, linked: false, name: '' }; return need()
     case '/me/telegram/demo-link': need().telegram = { ...need().telegram, linked: true, name: 'Bạn' }; return need()
     case '/channels': need(); return st.channels
