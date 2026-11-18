@@ -555,9 +555,15 @@ class Registry:
             raise ValueError("Cần nhập mật khẩu và tên máy chủ")
         if auto:
             # Tự tạo bản MT5 riêng từ một bản đã cài (bản mẫu): khách chỉ cần cài MT5 một lần.
-            template = path or mt5clone.pick_template([t for t in find_terminals() if not mt5clone.is_clone(t)], server)
+            template, broker, matched = mt5clone.pick_template([t for t in find_terminals() if not mt5clone.is_clone(t)], server)
+            if path:
+                template, matched = path, True  # người dùng tự chọn bản mẫu
             if not template:
                 raise ValueError("Chưa thấy MT5 nào trên máy. Cài MT5 (bộ cài của sàn, ví dụ Exness) một lần rồi thử lại")
+            if not matched:
+                raise ValueError(f"Máy chạy bridge chưa cài MT5 của {broker}, nên bản sao sẽ không biết máy chủ {server}. "
+                                 f"Tải MT5 ở trang của {broker}, cài một lần (để thư mục mặc định), rồi thêm lại tài khoản này. "
+                                 f"Hoặc chọn tay một bản MT5 mẫu nếu bạn chắc nó có máy chủ này")
             if any(a.id == str(login) for a in self.items):
                 raise ValueError(f"Tài khoản {login} đã có trong danh sách")
             print(f"[mt5] Tạo bản MT5 riêng cho {login} từ {template}…")

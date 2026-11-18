@@ -16,7 +16,13 @@ from paths import DATA
 CLONES = DATA / "mt5"
 # Dữ liệu MT5 tự tạo lại (lịch sử giá, nhật ký, kiểm thử): không chép cho nhẹ.
 SKIP_TOP = {"logs", "tester", "bases", "history"}
-BROKER_HINTS = ("exness", "icmarkets", "ic markets", "ftmo", "5ers", "fivepercent", "the5ers", "tentrade", "xm", "fxpro", "pepperstone", "vantage", "fbs", "hfm")
+# Tên sàn/quỹ và các chữ hay gặp trong tên máy chủ hoặc thư mục cài MT5 của họ.
+BROKERS = [
+    ("Exness", ("exness",)), ("IC Markets", ("icmarkets", "ic markets")), ("FTMO", ("ftmo",)),
+    ("The5ers", ("fivepercent", "the5ers", "5ers")), ("TenTrade", ("tentrade",)), ("FundedNext", ("fundednext",)),
+    ("XM", ("xmglobal", "xm.com", "xmtrading")), ("FxPro", ("fxpro",)), ("Pepperstone", ("pepperstone",)),
+    ("Vantage", ("vantage",)), ("FBS", ("fbs",)), ("HFM", ("hfmarkets", "hotforex", "hfm")),
+]
 
 
 def is_clone(path):
@@ -26,15 +32,68 @@ def is_clone(path):
         return False
 
 
+def broker_of(text):
+    """Sàn/quỹ đoán từ tên máy chủ hoặc đường dẫn (ví dụ FivePercentOnline-Real → The5ers)."""
+    t = str(text or "").lower().replace(" ", "")
+    return next((name for name, keys in BROKERS if any(k.replace(" ", "") in t for k in keys)), "")
+
+
+def company_of(exe):
+    """Tên công ty ghi trong file terminal64.exe (MT5 của sàn nào ghi tên sàn đó). Chỉ đọc được trên Windows."""
+    if sys.platform != "win32":
+        return ""
+    try:
+        import ctypes
+        v = ctypes.windll.version
+        size = v.GetFileVersionInfoSizeW(str(exe), None)
+        if not size:
+            return ""
+        buf = ctypes.create_string_buffer(size)
+        if not v.GetFileVersionInfoW(str(exe), 0, size, buf):
+            return ""
+        ptr, n = ctypes.c_void_p(), ctypes.c_uint()
+        if not v.VerQueryValueW(buf, "\\VarFileInfo\\Translation", ctypes.byref(ptr), ctypes.byref(n)) or not n.value:
+            return ""
+        lang = ctypes.cast(ptr, ctypes.POINTER(ctypes.c_ushort * 2)).contents
+        key = f"\\StringFileInfo\\{lang[0]:04x}{lang[1]:04x}\\CompanyName"
+        if not v.VerQueryValueW(buf, key, ctypes.byref(ptr), ctypes.byref(n)) or not n.value:
+            return ""
+        return ctypes.wstring_at(ptr, n.value - 1)
+    except Exception:
+        return ""
+
+
+def _bases_of(exe):
+    """Máy chủ bản MT5 này đã từng nối: thư mục bases ngay cạnh (bản portable) hoặc trong thư mục dữ liệu (bản cài thường)."""
+    dirs = [Path(exe).parent / "bases"]
+    data = data_dir_of(Path(exe).parent)
+    if data:
+        dirs.append(data / "bases")
+    out = []
+    for d in dirs:
+        try:
+            out += [x.name for x in d.iterdir() if x.is_dir()]
+        except OSError:
+            pass
+    return out
+
+
+def terminal_brokers(exe):
+    """Bản MT5 này là của sàn/quỹ nào: theo đường dẫn, tên công ty trong file, và máy chủ đã từng nối."""
+    names = {broker_of(exe), broker_of(company_of(exe))} | {broker_of(s) for s in _bases_of(exe)}
+    return {n for n in names if n}
+
+
 def pick_template(terminals, server):
-    """Chọn bản MT5 mẫu khớp sàn nhất (theo tên máy chủ, ví dụ Exness-MT5Real8 → bản có chữ exness trong đường dẫn)."""
-    s = str(server or "").lower().replace(" ", "")
-    for hint in BROKER_HINTS:
-        if hint.replace(" ", "") in s:
-            for t in terminals:
-                if hint in t.lower() or hint.replace(" ", "") in t.lower().replace(" ", ""):
-                    return t
-    return terminals[0] if terminals else ""
+    """Chọn bản MT5 mẫu khớp sàn của máy chủ. Trả (đường dẫn, tên sàn, có khớp không).
+    Máy chủ của một sàn đã biết mà máy chưa có MT5 của sàn đó thì không khớp: bản sao sẽ không biết máy chủ của sàn."""
+    broker = broker_of(server)
+    if broker:
+        for t in terminals:
+            if broker in terminal_brokers(t):
+                return t, broker, True
+        return (terminals[0] if terminals else ""), broker, False
+    return (terminals[0] if terminals else ""), "", True
 
 
 def _read_origin(f):
