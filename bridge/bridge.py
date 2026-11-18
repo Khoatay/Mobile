@@ -937,6 +937,8 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot):
                 self.answer(lambda: brain.set_key(body))
             elif url.path == "/ai/models":
                 self.answer(lambda: brain.set_models(body))
+            elif url.path == "/ai/list-models":
+                self.answer(lambda: brain.list_models(body))
             elif url.path == "/accounts/add":
                 self.answer(lambda: registry.add(body))
             elif url.path == "/accounts/remove":
@@ -968,7 +970,7 @@ def main():
     auto.bot = bot
     bot.start()
     auto.start()
-    print(f"[ai] {'Đã có khoá API' if brain.status()['configured'] else 'Chưa có khoá API: thêm anthropic_api_key vào config.json để dùng phần Học và phân tích'} · model {brain.model}")
+    print(f"[ai] {'Đã có khoá AI' if brain.status()['configured'] else 'Chưa có khoá AI: thêm trong app → Cá nhân hoá → AI của bạn'}")
     for a in registry.list():
         print(f"[mt5] {a.label} ({a.type}){' — CHO PHÉP VÀO LỆNH' if a.tradable else ''}: đang kết nối…")
     tg.start()

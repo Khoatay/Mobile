@@ -10,6 +10,7 @@ Kho kiến thức và agent phân tích cho Golden Duck.
 Khoá API đọc từ "anthropic_api_key" trong config.json, nếu không có thì SDK tự tìm (biến môi trường ANTHROPIC_API_KEY).
 """
 import base64
+import copy
 import json
 import os
 import re
@@ -17,6 +18,8 @@ import threading
 import time
 import uuid
 from pathlib import Path
+
+import llm
 
 HERE = Path(__file__).resolve().parent
 KB_DIR = HERE / "knowledge"
@@ -32,6 +35,9 @@ MODELS = {
     "claude-haiku-5-5": {"name": "Haiku 5.5 (rẻ nhất)", "in": 0.10, "out": 0.50, "cache_read": 0.01, "cache_write": 0.125},
 }
 FEATURES = {"chat": "Golden Duck Talk", "learn": "AI học trade", "analyze": "AI phân tích", "rate": "Đánh giá tài khoản"}
+# Hai ô model: rẻ cho chat (phần lớn lượt dùng), mạnh cho việc cần suy luận kỹ.
+SLOT_OF = {"chat": "cheap", "learn": "strong", "analyze": "strong", "rate": "strong"}
+SLOTS = {"cheap": "Model rẻ: Golden Duck Talk", "strong": "Model mạnh: học trade, phân tích, đánh giá tài khoản"}
 
 
 def fallback_args(model):
@@ -343,69 +349,110 @@ class Brain:
         self.save_cfg = None  # bridge.py gắn hàm ghi config.json
         self.usage_lock = threading.Lock()
 
+    def key_for(self, provider):
+        k = str((self.cfg.get("ai_keys") or {}).get(provider) or "")
+        if provider == "anthropic":
+            k = k or str(self.cfg.get("anthropic_api_key") or "") or os.environ.get("ANTHROPIC_API_KEY", "")
+        return k
+
+    def slots(self):
+        """Cấu hình 2 ô. Bản cũ (chỉ Claude, chọn model theo từng tính năng) được chuyển sang tự động."""
+        cur = self.cfg.get("ai_slots")
+        if isinstance(cur, dict) and "cheap" in cur and "strong" in cur:
+            return cur
+        old = self.cfg.get("ai_models") or {}
+        return {
+            "cheap": {"provider": "anthropic", "model": old.get("chat") if old.get("chat") in MODELS else "claude-haiku-5-5", "base": ""},
+            "strong": {"provider": "anthropic", "model": old.get("rate") if old.get("rate") in MODELS else self.model, "base": ""},
+        }
+
+    def slot_for(self, feature):
+        return self.slots()[SLOT_OF.get(feature, "strong")]
+
     def client(self):
         if self._client is None:
             try:
                 import anthropic
             except ImportError:
                 raise RuntimeError("Chưa cài thư viện anthropic: pip install -r requirements.txt")
-            key = self.cfg.get("anthropic_api_key")
+            key = self.key_for("anthropic")
             self._client = anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
         return self._client
 
     def model_for(self, feature):
-        """Model riêng của từng tính năng (chọn trong app), không có thì dùng model chung."""
-        m = (self.cfg.get("ai_models") or {}).get(feature)
-        return m if m in MODELS else self.model
+        return self.slot_for(feature)["model"]
 
     def status(self):
-        key = str(self.cfg.get("anthropic_api_key") or "")
-        has_key = bool(key or os.environ.get("ANTHROPIC_API_KEY"))
+        slots = self.slots()
+        keys = {p["id"]: (f"…{self.key_for(p['id'])[-4:]}" if len(self.key_for(p["id"])) > 8 else "") for p in llm.PROVIDERS}
+        ready = {k: bool(v.get("model") and self.key_for(v["provider"])) for k, v in slots.items()}
         return {
-            "configured": has_key, "model": self.model, "key_hint": f"…{key[-4:]}" if len(key) > 8 else "",
-            "models": {f: self.model_for(f) for f in FEATURES},
-            "choices": [{"id": k, "name": v["name"], "in": v["in"], "out": v["out"]} for k, v in MODELS.items()],
-            "features": FEATURES,
+            "configured": ready["cheap"] or ready["strong"], "ready": ready, "slots": slots, "slot_labels": SLOTS, "keys": keys,
+            "providers": llm.PROVIDERS, "slot_of": SLOT_OF, "features": FEATURES,
+            # Trường cũ, cho các trang chỉ cần biết đã có AI chưa.
+            "model": slots["strong"]["model"], "key_hint": keys.get("anthropic", ""), "models": {f: self.model_for(f) for f in FEATURES},
         }
 
     def set_key(self, body):
-        """Lưu khoá API nhập trong app vào config.json (chỉ trên máy này), sau khi thử gọi một lần cho chắc."""
+        """Lưu khoá của một nhà cung cấp vào config.json (chỉ trên máy này), sau khi thử lấy danh sách model cho chắc."""
+        provider = str(body.get("provider") or "anthropic")
         key = str(body.get("key") or "").strip()
-        if not key.startswith("sk-ant-"):
+        if provider not in llm.BY_ID:
+            raise ValueError("Không có nhà cung cấp này")
+        if not key:
+            raise ValueError("Dán khoá vào trước")
+        if provider == "anthropic" and not key.startswith("sk-ant-"):
             raise ValueError("Khoá API của Anthropic bắt đầu bằng sk-ant-. Tạo ở console.anthropic.com → API Keys")
-        import anthropic
-        try:
-            anthropic.Anthropic(api_key=key).models.list(limit=1)
-        except anthropic.AuthenticationError:
-            raise ValueError("Khoá API không hợp lệ hoặc đã bị xoá")
-        except anthropic.PermissionDeniedError:
-            raise ValueError("Khoá API không có quyền dùng API. Kiểm tra lại ở console.anthropic.com")
-        except anthropic.APIConnectionError:
-            raise RuntimeError("Không kết nối được tới máy chủ Anthropic. Kiểm tra internet")
-        self.cfg["anthropic_api_key"] = key
-        self._client = None
+        base = self.slots()["cheap"].get("base") if provider == "custom" else ""
+        llm.list_models(provider, key, base or str(body.get("base") or ""))
+        self.cfg.setdefault("ai_keys", {})[provider] = key
+        if provider == "anthropic":
+            self.cfg["anthropic_api_key"] = key
+            self._client = None
         if self.save_cfg:
             self.save_cfg()
         return self.status()
 
+    def list_models(self, body):
+        provider = str(body.get("provider") or "")
+        if provider not in llm.BY_ID:
+            raise ValueError("Không có nhà cung cấp này")
+        key = str(body.get("key") or "").strip() or self.key_for(provider)
+        return {"models": llm.list_models(provider, key, str(body.get("base") or ""))}
+
     def set_models(self, body):
-        chosen = body.get("models") or {}
-        cur = dict(self.cfg.get("ai_models") or {})
-        for f, m in chosen.items():
-            if f in FEATURES and m in MODELS:
-                cur[f] = m
-        self.cfg["ai_models"] = cur
+        """Đổi một ô: nhà cung cấp, model (và địa chỉ nếu là dịch vụ tự nhập)."""
+        slot = body.get("slot")
+        if slot not in SLOTS:
+            raise ValueError("Thiếu ô model (cheap hoặc strong)")
+        provider = str(body.get("provider") or "anthropic")
+        if provider not in llm.BY_ID:
+            raise ValueError("Không có nhà cung cấp này")
+        model = str(body.get("model") or "").strip()
+        if not model:
+            raise ValueError("Chọn model trước")
+        base = str(body.get("base") or "").strip() if provider == "custom" else ""
+        if provider == "custom" and not base.startswith("https://"):
+            raise ValueError("Địa chỉ API phải bắt đầu bằng https://")
+        slots = self.slots()
+        slots[slot] = {"provider": provider, "model": model, "base": base}
+        self.cfg["ai_slots"] = slots
         if self.save_cfg:
             self.save_cfg()
         return self.status()
 
     # ------------------------------------------------------------- chi phí
     def record(self, feature, res):
-        """Ghi số token và chi phí ước tính của một lần gọi, theo ngày và theo tính năng."""
-        u = res.usage
-        price = MODELS.get(res.model) or MODELS.get(self.model_for(feature)) or MODELS[DEFAULT_MODEL]
-        tok = {"input": u.input_tokens or 0, "output": u.output_tokens or 0,
-               "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0, "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0}
+        """Ghi số token và chi phí ước tính của một lần gọi, theo ngày và theo tính năng.
+        res: kết quả của thư viện anthropic, hoặc usage (dict) của llm.py. Model ngoài Claude chưa có giá thì chỉ đếm token."""
+        if isinstance(res, dict):
+            model = res.get("model") or self.model_for(feature)
+            tok = {k: int(res.get(k) or 0) for k in ("input", "output", "cache_read", "cache_write")}
+        else:
+            u, model = res.usage, res.model
+            tok = {"input": u.input_tokens or 0, "output": u.output_tokens or 0,
+                   "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0, "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0}
+        price = MODELS.get(model) or MODELS.get(self.model_for(feature)) or {"in": 0, "out": 0, "cache_read": 0, "cache_write": 0}
         cost = (tok["input"] * price["in"] + tok["output"] * price["out"] + tok["cache_read"] * price["cache_read"] + tok["cache_write"] * price["cache_write"]) / 1e6
         day = time.strftime("%Y-%m-%d")
         with self.usage_lock:
@@ -421,7 +468,7 @@ class Brain:
             tmp = USAGE_FILE.with_suffix(".tmp")
             tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
             os.replace(tmp, USAGE_FILE)
-        return {**tok, "cost": round(cost, 6), "model": res.model}
+        return {**tok, "cost": round(cost, 6), "model": model}
 
     def _usage_data(self):
         try:
@@ -435,8 +482,15 @@ class Brain:
 
     def _ask(self, system, content, schema, effort, feature):
         """Một lệnh gọi Claude trả về JSON theo schema, bằng model của tính năng. Bật dự phòng phía máy chủ khi bị từ chối (trừ Haiku)."""
+        slot = self.slot_for(feature)
+        model = slot["model"]
+        if slot["provider"] != "anthropic":
+            try:
+                out, usage = llm.complete(slot["provider"], model, self.key_for(slot["provider"]), system, messages_plain(content), 16000, schema, slot.get("base", ""))
+            except llm.LlmError as e:
+                raise RuntimeError(str(e))
+            return out, self.record(feature, usage)
         import anthropic
-        model = self.model_for(feature)
         try:
             res = self.client().beta.messages.create(
                 model=model,
@@ -525,6 +579,16 @@ class Brain:
         return {"analysis": out, "usage": usage, "model": usage["model"]}
 
 
+def messages_plain(messages):
+    """Bỏ đánh dấu cache (chỉ Claude hiểu) trước khi gửi cho nhà cung cấp khác."""
+    out = copy.deepcopy(messages)
+    for m in out:
+        if isinstance(m.get("content"), list):
+            for b in m["content"]:
+                b.pop("cache_control", None)
+    return out
+
+
 def strip_subtitles(text):
     """Bỏ số thứ tự và mốc thời gian của file .srt / .vtt, giữ lời thoại."""
     out = []
@@ -542,7 +606,7 @@ def strip_subtitles(text):
 
 PERSONAS = KB_DIR / "personas.json"
 PERSONA_FIELDS = ("name", "avatar", "tagline", "personality", "values", "style", "boundaries", "greeting", "examples", "playbooks", "use_account")
-MAX_CHAT_TURNS = 30  # số lượt gần nhất gửi lại cho Claude
+MAX_CHAT_TURNS = 12  # số lượt gần nhất gửi lại cho AI: đủ nhớ mạch chuyện, đỡ tốn tiền
 
 CHAT_RULES = """Quy tắc chung, luôn áp dụng bất kể nhân cách:
 - Bạn là một trợ lý AI. Nếu người dùng hỏi thẳng bạn có phải người thật không, hãy nói thật.
@@ -637,7 +701,6 @@ class Personas:
 
 def chat(brain, personas, body):
     """Một lượt trò chuyện: nhân cách + bộ quy tắc trong system (có cache), lịch sử gần nhất, bối cảnh tài khoản nếu bật."""
-    import anthropic
     pid, message = str(body.get("persona")), str(body.get("message") or "").strip()
     if not message:
         raise ValueError("Tin nhắn đang trống")
@@ -658,7 +721,18 @@ def chat(brain, personas, body):
         messages[-1]["content"] += "\n\n" + user_text
     else:
         messages.append({"role": "user", "content": user_text})
-    model = brain.model_for("chat")
+    slot = brain.slot_for("chat")
+    model = slot["model"]
+    if slot["provider"] != "anthropic":
+        try:
+            reply, usage = llm.complete(slot["provider"], model, brain.key_for(slot["provider"]), personas.system_prompt(p), messages, 4000, None, slot.get("base", ""))
+        except llm.LlmError as e:
+            raise RuntimeError(str(e))
+        usage = brain.record("chat", usage)
+        personas.append(pid, "user", message)
+        personas.append(pid, "assistant", reply or "…")
+        return {"reply": reply or "…", "usage": usage, **personas.list()}
+    import anthropic
     try:
         # Hai điểm cache: nhân cách + kiến thức (system), và toàn bộ lịch sử tới tin này (cache tự động ở khối cuối),
         # nên tin sau chỉ trả giá đầy đủ cho phần mới; lịch sử cũ tính giá đọc cache (rẻ hơn khoảng 20 lần).

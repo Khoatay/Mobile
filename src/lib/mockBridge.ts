@@ -160,12 +160,30 @@ const calendar: CalEvent[] = [
 
 // ---------- AI: khoá, model theo tính năng, chi phí mẫu 7 ngày
 const AI_FEATURES = { chat: 'Golden Duck Talk', learn: 'AI học trade', analyze: 'AI phân tích', rate: 'Đánh giá tài khoản' }
-let aiKey = 'sk-ant-xemtruoc-1234'
-const aiModels: Record<string, string> = { chat: 'claude-opus-5-5', learn: 'claude-opus-5-5', analyze: 'claude-opus-5-5', rate: 'claude-opus-5-5' }
-const aiStatus = () => ({
-  configured: !!aiKey, model: 'claude-opus-5-5', key_hint: `…${aiKey.slice(-4)}`, models: aiModels, features: AI_FEATURES,
-  choices: [{ id: 'claude-opus-5-5', name: 'Opus 5.5 (thông minh nhất)', in: 4, out: 20 }, { id: 'claude-sonnet-5-5', name: 'Sonnet 5.5 (cân bằng)', in: 2, out: 10 }, { id: 'claude-haiku-5-5', name: 'Haiku 5.5 (rẻ nhất)', in: 0.1, out: 0.5 }],
-})
+const AI_PROVIDERS = [
+  { id: 'anthropic', label: 'Claude (Anthropic)', key_url: 'console.anthropic.com', hint: 'Khoá bắt đầu bằng sk-ant-' },
+  { id: 'openai', label: 'ChatGPT (OpenAI)', key_url: 'platform.openai.com/api-keys', hint: 'Khoá bắt đầu bằng sk-' },
+  { id: 'gemini', label: 'Gemini (Google)', key_url: 'aistudio.google.com/apikey', hint: 'Khoá bắt đầu bằng AIza' },
+  { id: 'deepseek', label: 'DeepSeek', key_url: 'platform.deepseek.com', hint: '' },
+  { id: 'xai', label: 'Grok (xAI)', key_url: 'console.x.ai', hint: '' },
+  { id: 'openrouter', label: 'OpenRouter (hàng trăm model)', key_url: 'openrouter.ai/keys', hint: 'Một khoá dùng được model của nhiều hãng' },
+  { id: 'qwen', label: 'Qwen (Alibaba)', key_url: 'dashscope.console.aliyun.com', hint: '' },
+  { id: 'groq', label: 'Groq', key_url: 'console.groq.com/keys', hint: '' },
+  { id: 'custom', label: 'Địa chỉ khác (tương thích OpenAI)', key_url: '', hint: 'Nhập địa chỉ API, ví dụ https://…/v1' },
+]
+const aiKeys: Record<string, string> = { anthropic: 'sk-ant-xemtruoc-1234' }
+const aiSlots: Record<string, { provider: string; model: string; base: string }> = {
+  cheap: { provider: 'anthropic', model: 'claude-haiku-5-5', base: '' }, strong: { provider: 'anthropic', model: 'claude-opus-5-5', base: '' },
+}
+const DEMO_LIST: Record<string, string[]> = { anthropic: ['claude-haiku-5-5', 'claude-opus-5-5', 'claude-sonnet-5-5'] }
+const aiStatus = () => {
+  const ready = Object.fromEntries(Object.entries(aiSlots).map(([k, v]) => [k, !!(v.model && aiKeys[v.provider])]))
+  return {
+    configured: ready.cheap || ready.strong, ready, slots: aiSlots, keys: Object.fromEntries(Object.entries(aiKeys).map(([k, v]) => [k, `…${v.slice(-4)}`])),
+    providers: AI_PROVIDERS, features: AI_FEATURES, slot_of: { chat: 'cheap', learn: 'strong', analyze: 'strong', rate: 'strong' },
+    slot_labels: { cheap: 'Model rẻ: Golden Duck Talk', strong: 'Model mạnh: học trade, phân tích, đánh giá tài khoản' },
+  }
+}
 const aiUsage: Record<string, Record<string, { calls: number; input: number; output: number; cache_read: number; cache_write: number; cost: number }>> = Object.fromEntries(
   Array.from({ length: 7 }, (_, i) => [new Date(T0 - i * 86_400_000).toISOString().slice(0, 10), {
     chat: { calls: 20 + i * 3, input: 0, output: 0, cache_read: 0, cache_write: 0, cost: (20 + i * 3) * 0.0006 },
@@ -470,8 +488,14 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
     } else delete auto.guards[id]
     return autoSnapshot()
   }
-  if (path === '/ai/key') { await wait(700); if (!String(body.key).startsWith('sk-ant-')) throw new Error('Khoá API của Anthropic bắt đầu bằng sk-ant-. Tạo ở console.anthropic.com → API Keys'); aiKey = String(body.key); return aiStatus() }
-  if (path === '/ai/models') { Object.assign(aiModels, body.models as Record<string, string>); return aiStatus() }
+  if (path === '/ai/key') {
+    await wait(700)
+    const pv = String(body.provider || 'anthropic')
+    if (pv === 'anthropic' && !String(body.key).startsWith('sk-ant-')) throw new Error('Khoá API của Anthropic bắt đầu bằng sk-ant-. Tạo ở console.anthropic.com → API Keys')
+    aiKeys[pv] = String(body.key); return aiStatus()
+  }
+  if (path === '/ai/list-models') { await wait(500); return { models: DEMO_LIST[String(body.provider)] ?? ['mô-hình-mẫu-nhanh', 'mô-hình-mẫu-mạnh'] } }
+  if (path === '/ai/models') { aiSlots[String(body.slot)] = { provider: String(body.provider), model: String(body.model), base: String(body.base ?? '') }; return aiStatus() }
   if (path === '/tgbot/token') { await wait(600); if (!/^\d+:[\w-]{10,}$/.test(String(body.token))) throw new Error('Token không đúng dạng. Token có dạng 123456789:AA... do @BotFather gửi'); Object.assign(bot, { token: String(body.token), linked: false, since: Date.now() }); return botStatus() }
   if (path === '/tgbot/unlink') { Object.assign(bot, { linked: false, chat_name: '', since: Date.now() }); return botStatus() }
   if (path === '/tgbot/remove') { Object.assign(bot, { token: '', linked: false, chat_name: '' }); return botStatus() }

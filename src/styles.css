@@ -302,3 +302,7 @@ button.mini { padding: 2px 8px; font-size: 12px; }
 .checklist li.met > span { color: var(--pos); font-weight: 700; }
 .checklist li.unmet > span { color: var(--neg); font-weight: 700; }
 pre.json { max-height: 280px; overflow: auto; background: var(--page); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 11.5px; }
+.ai-slot { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px; }
+.ai-slot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.ai-slot-grid .actions { flex-wrap: nowrap; }
+.ai-slot-grid .actions > :first-child { flex: 1; min-width: 0; }

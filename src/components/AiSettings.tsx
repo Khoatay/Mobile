@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { bridgeGet, bridgePost } from '../lib/bridge'
 
-interface Choice { id: string; name: string; in: number; out: number }
-export interface AiStatus { configured: boolean; model: string; key_hint: string; models: Record<string, string>; choices: Choice[]; features: Record<string, string> }
+interface Provider { id: string; label: string; key_url: string; hint: string }
+interface SlotCfg { provider: string; model: string; base: string }
+type Slot = 'cheap' | 'strong'
+export interface AiStatus {
+  configured: boolean; ready: Record<Slot, boolean>; slots: Record<Slot, SlotCfg>; keys: Record<string, string>
+  providers: Provider[]; features: Record<string, string>; slot_of: Record<string, Slot>; slot_labels: Record<Slot, string>
+}
 interface UsageRow { calls: number; input: number; output: number; cache_read: number; cache_write: number; cost: number }
 interface Usage { days: Record<string, Record<string, UsageRow>>; features: Record<string, string> }
 
@@ -13,37 +18,82 @@ const vnd = (v: number) => `≈ ${Math.round((v * VND) / 100) * 100 >= 1000 ? (M
 
 /** Chi phí ước tính một tin chat trung bình theo model (đã tính lưu tạm lịch sử), để chọn model dễ hơn. */
 const CHAT_HINT: Record<string, string> = { 'claude-haiku-5-5': '≈ 10–25đ/tin', 'claude-sonnet-5-5': '≈ 300–500đ/tin', 'claude-opus-5-5': '≈ 600–1.000đ/tin' }
+const SLOT_NOTE: Record<Slot, string> = {
+  cheap: 'Dùng cho chat, chiếm phần lớn lượt dùng. Chọn loại nhanh, rẻ.',
+  strong: 'Dùng cho học trade, phân tích, đánh giá tài khoản: cần suy luận kỹ. Đọc tài liệu PDF cần Claude hoặc Gemini.',
+}
+
+/** Một ô model: chọn hãng, dán khoá (nếu hãng đó chưa có khoá), lấy danh sách model, lưu. */
+function SlotEditor({ slot, st, setSt, title, note, both }: { slot: Slot; st: AiStatus; setSt: (s: AiStatus) => void; title: string; note: string; both?: boolean }) {
+  const cur = st.slots[slot]
+  const [p, setP] = useState(cur.provider)
+  const [m, setM] = useState(cur.model)
+  const [base, setBase] = useState(cur.base)
+  const [key, setKey] = useState('')
+  const [list, setList] = useState<string[]>([])
+  const [busy, setBusy] = useState('')
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const info = st.providers.find((x) => x.id === p)
+  const saved = st.keys[p]
+  useEffect(() => { setList([]); if (p !== cur.provider) setM('') }, [p])
+
+  async function load() {
+    setBusy('list'); setMsg(null)
+    try { const r = await bridgePost<{ models: string[] }>('/ai/list-models', { provider: p, key, base }); setList(r.models); if (!r.models.includes(m)) setM(r.models[0] ?? ''); setMsg({ ok: true, text: `Khoá dùng được, có ${r.models.length} model.` }) }
+    catch (e) { setMsg({ ok: false, text: errText(e) }) } finally { setBusy('') }
+  }
+  async function save() {
+    setBusy('save'); setMsg(null)
+    try {
+      let s = st
+      if (key) s = await bridgePost<AiStatus>('/ai/key', { provider: p, key, base })
+      for (const sl of both ? (['cheap', 'strong'] as Slot[]) : [slot]) s = await bridgePost<AiStatus>('/ai/models', { slot: sl, provider: p, model: m, base })
+      setSt(s); setKey(''); setMsg({ ok: true, text: both ? 'Đã lưu. Các tính năng AI dùng được ngay.' : 'Đã lưu.' })
+      if (both) setTimeout(() => window.location.reload(), 900)
+    } catch (e) { setMsg({ ok: false, text: errText(e) }) } finally { setBusy('') }
+  }
+
+  return (
+    <div className="ai-slot">
+      <h4 className="form-sub">{title} {st.ready[slot] && !both && <span className="muted small">· đang dùng {st.providers.find((x) => x.id === cur.provider)?.label} · {cur.model}</span>}</h4>
+      <p className="muted small">{note}</p>
+      <div className="ai-slot-grid">
+        <label className="field"><span className="field-label">Nhà cung cấp</span>
+          <select value={p} onChange={(e) => setP(e.target.value)}>{st.providers.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select>
+        </label>
+        {p === 'custom' && <label className="field"><span className="field-label">Địa chỉ API</span><input value={base} onChange={(e) => setBase(e.target.value)} placeholder="https://…/v1" /></label>}
+        <label className="field"><span className="field-label">Khoá API {saved && <span className="muted">· đã có {saved}</span>}</span>
+          <input type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value.trim())} placeholder={saved ? 'Để trống nếu giữ khoá cũ' : 'Dán khoá vào đây'} />
+          <span className="field-hint">{info?.key_url && <>Lấy khoá ở <b>{info.key_url}</b>. </>}{info?.hint}</span>
+        </label>
+        <label className="field"><span className="field-label">Model</span>
+          <div className="actions">
+            {list.length ? <select value={m} onChange={(e) => setM(e.target.value)}>{list.map((x) => <option key={x}>{x}</option>)}</select>
+              : <input value={m} onChange={(e) => setM(e.target.value)} placeholder="Bấm Lấy danh sách, hoặc gõ tên model" />}
+            <button disabled={!!busy || (!key && !saved)} onClick={load}>{busy === 'list' ? 'Đang lấy…' : 'Lấy danh sách'}</button>
+          </div>
+          {slot === 'cheap' && CHAT_HINT[m] && <span className="field-hint">{CHAT_HINT[m]}</span>}
+        </label>
+      </div>
+      <div className="actions">
+        <button className="primary" disabled={!!busy || !m || (!key && !saved)} onClick={save}>{busy === 'save' ? 'Đang lưu…' : 'Lưu'}</button>
+      </div>
+      {msg && <p className={msg.ok ? 'notice' : 'notice bad'}>{msg.ok ? '✓' : '⚠'} {msg.text}</p>}
+    </div>
+  )
+}
 
 /**
- * Cài AI cho bản IB: nhập khoá API của chính bạn (lưu trên máy chạy bridge), chọn model cho từng tính năng, xem chi phí.
+ * Cài AI cho bản IB: chọn hãng, nhập khoá API của chính bạn (lưu trên máy chạy bridge), chọn model rẻ và model mạnh, xem chi phí.
  * `compact`: chỉ phần nhập khoá (dùng ở các trang AI khi chưa có khoá).
  */
 export default function AiSettings({ compact = false }: { compact?: boolean }) {
   const [st, setSt] = useState<AiStatus | null>(null)
   const [usage, setUsage] = useState<Usage | null>(null)
-  const [key, setKey] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
-  const load = () => {
+  useEffect(() => {
     bridgeGet<AiStatus>('/ai/status').then(setSt).catch(() => {})
     if (!compact) bridgeGet<Usage>('/ai/usage').then(setUsage).catch(() => {})
-  }
-  useEffect(load, [])
-
-  const saveKey = async () => {
-    setBusy(true); setMsg(null)
-    try {
-      setSt(await bridgePost<AiStatus>('/ai/key', { key })); setKey('')
-      setMsg({ ok: true, text: compact ? 'Khoá hợp lệ, đã lưu. Đang mở lại trang…' : 'Khoá hợp lệ, đã lưu. Các tính năng AI dùng được ngay.' })
-      // Ở các trang AI, trang đang chờ khoá: tải lại để dùng được ngay.
-      if (compact) setTimeout(() => window.location.reload(), 900)
-    }
-    catch (e) { setMsg({ ok: false, text: errText(e) }) } finally { setBusy(false) }
-  }
-  const setModel = async (feature: string, model: string) => {
-    try { setSt(await bridgePost<AiStatus>('/ai/models', { models: { [feature]: model } })) } catch (e) { setMsg({ ok: false, text: errText(e) }) }
-  }
-
+  }, [])
   // Tổng theo khoảng: hôm nay, 7 ngày, 30 ngày; và theo tính năng trong 30 ngày.
   const sums = useMemo(() => {
     if (!usage) return null
@@ -55,48 +105,23 @@ export default function AiSettings({ compact = false }: { compact?: boolean }) {
     return { today: total(today), week: total(since(7)), month: total(since(30)), byFeature }
   }, [usage])
 
-  const keyForm = (
-    <>
-      {st?.configured ? (
-        <p className="tg-ok">✅ Đã có khoá API {st.key_hint && <code>{st.key_hint}</code>}. Muốn đổi khoá thì dán khoá mới bên dưới.</p>
-      ) : (
-        <ol className="tg-steps">
-          <li>Vào <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">console.anthropic.com</a>, đăng ký bằng email.</li>
-          <li>Mục <b>Billing</b>: nạp tiền (thẻ Visa/Mastercard), ví dụ 5–10 USD để bắt đầu. Ở mục <b>Limits</b> đặt giới hạn chi mỗi tháng để không bao giờ tốn quá tay.</li>
-          <li>Mục <b>API Keys</b> → <b>Create Key</b> → chép khoá bắt đầu bằng <code>sk-ant-</code>.</li>
-          <li>Dán vào ô dưới và bấm Lưu. App thử khoá trước khi lưu.</li>
-        </ol>
-      )}
-      <div className="actions">
-        <input className="tg-token" type="password" autoComplete="off" placeholder="sk-ant-…" value={key} onChange={(e) => setKey(e.target.value.trim())} />
-        <button className="primary" disabled={busy || !key} onClick={saveKey}>{busy ? 'Đang thử khoá…' : 'Lưu khoá'}</button>
-      </div>
-      <p className="muted small">Khoá chỉ lưu trong <code>bridge/config.json</code> trên máy chạy bridge, không gửi lên trình duyệt hay máy chủ nào khác. Không đưa khoá cho người khác: ai có khoá là dùng bằng tiền của bạn.</p>
-      {msg && <p className={msg.ok ? 'notice' : 'notice bad'}>{msg.ok ? '✓' : '⚠'} {msg.text}</p>}
-    </>
+  if (compact) return (
+    <section className="card">
+      <h3>Cài AI</h3>
+      <p className="muted small">Chọn hãng AI, dán khoá API của bạn, chọn một model là dùng được. Sau này vào Cá nhân hoá để chọn model rẻ cho chat và model mạnh cho phân tích.</p>
+      {st ? <SlotEditor slot="cheap" st={st} setSt={setSt} title="AI của bạn" note="" both /> : <p className="muted">Cần chạy bridge để cài AI.</p>}
+      <p className="muted small">Khoá chỉ lưu trong <code>bridge/config.json</code> trên máy chạy bridge. Không đưa khoá cho người khác: ai có khoá là dùng bằng tiền của bạn.</p>
+    </section>
   )
-
-  if (compact) return <section className="card"><h3>Cài khoá AI (khoá API của Anthropic)</h3>{keyForm}</section>
 
   return (
     <section className="card ai-settings">
       <h3>AI của bạn</h3>
-      <p className="muted small">Các tính năng AI (Golden Duck Talk, AI học trade, AI phân tích, đánh giá tài khoản) chạy bằng khoá API của chính bạn, tính tiền theo lượng chữ gửi đi và nhận về.</p>
+      <p className="muted small">Các tính năng AI chạy bằng khoá API của chính bạn: Claude, ChatGPT, Gemini, DeepSeek, Grok, OpenRouter, Qwen hoặc Groq. Tiền tính theo lượng chữ gửi đi và nhận về.</p>
       {!st ? <p className="muted">Cần chạy bridge để cài AI.</p> : (
         <>
-          {keyForm}
-          <h4 className="form-sub">Model cho từng tính năng</h4>
-          <div className="ai-models">
-            {Object.entries(st.features).map(([f, label]) => (
-              <label key={f} className="field">
-                <span className="field-label">{label}</span>
-                <select value={st.models[f]} onChange={(e) => setModel(f, e.target.value)}>
-                  {st.choices.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <span className="field-hint">{f === 'chat' ? `${CHAT_HINT[st.models[f]] ?? ''}. Chat nên dùng Haiku: đủ tốt, rẻ hơn Opus khoảng 40 lần.` : f === 'rate' ? 'Mỗi lần chấm ≈ 1–4 nghìn đ với Opus. Kết quả được lưu, chỉ chấm lại khi có lệnh mới.' : 'Cần suy luận kỹ: nên dùng Opus hoặc Sonnet.'}</span>
-              </label>
-            ))}
-          </div>
+          {(['cheap', 'strong'] as Slot[]).map((sl) => <SlotEditor key={sl + st.slots[sl].provider + st.slots[sl].model} slot={sl} st={st} setSt={setSt} title={sl === 'cheap' ? 'Model rẻ' : 'Model mạnh'} note={SLOT_NOTE[sl]} />)}
+          <p className="muted small">Khoá chỉ lưu trong <code>bridge/config.json</code> trên máy chạy bridge, không gửi đi đâu khác. Mỗi hãng một khoá, dùng chung cho cả hai ô.</p>
           <h4 className="form-sub">Chi phí (ước tính)</h4>
           {sums && (sums.month > 0 ? (
             <>
@@ -113,7 +138,7 @@ export default function AiSettings({ compact = false }: { compact?: boolean }) {
               </div>
             </>
           ) : <p className="muted small">Chưa có lần gọi AI nào.</p>)}
-          <p className="muted small">Tính theo bảng giá của Anthropic (11/2026) và tỷ giá khoảng {VND.toLocaleString('vi-VN')}đ/USD. Số chính xác xem ở console.anthropic.com → Usage.</p>
+          <p className="muted small">Chi phí tính theo bảng giá Claude (11/2026) và tỷ giá khoảng {VND.toLocaleString('vi-VN')}đ/USD. Model của hãng khác chỉ đếm lượt, xem tiền ở trang của hãng đó.</p>
         </>
       )}
     </section>
