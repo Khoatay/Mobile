@@ -1,3 +1,4 @@
+import { DEFAULT_WATCH, isWatched, newsKey, type ActiveNews, type NewsWatchConfig } from './newsWatch'
 import { BLANK_PERSONA, DUCK_PERSONA, PERSONA_TEMPLATES, type ChatTurn, type Persona, type PersonaStore } from './persona'
 /**
  * Bridge giả lập, chỉ dùng cho bản xem trước (build với VITE_PREVIEW=1).
@@ -157,6 +158,27 @@ const calendar: CalEvent[] = [
   { title: 'Bank Holiday', currency: 'CAD', date: at(90), impact: 'Holiday', forecast: '', previous: '' },
 ]
 
+// ---------- cảnh báo tin (giả lập giống bridge): bật sẵn cho tin mạnh của USD, báo trước 60 phút, nhắc lại mỗi 1 phút
+let newsWatch: NewsWatchConfig = { ...DEFAULT_WATCH, currencies: ['USD'], lead_min: 60, repeat_min: 1 }
+const newsAcks = new Set<string>()
+const newsActive: Record<string, ActiveNews> = {}
+function newsTick() {
+  if (!newsWatch.enabled) return
+  for (const e of calendar) {
+    const key = newsKey(e)
+    if (!isWatched(e, newsWatch) || newsAcks.has(key)) continue
+    const t = Date.parse(e.date), left = t - Date.now()
+    if (left < 0) { delete newsActive[key]; continue }
+    if (left > newsWatch.lead_min * 60_000) continue
+    const st = newsActive[key]
+    if (!st || (newsWatch.repeat_min > 0 && Date.now() - st.last >= newsWatch.repeat_min * 60_000)) {
+      newsActive[key] = { key, at: t, title: e.title, currency: e.currency, impact: e.impact, count: (st?.count ?? 0) + 1, last: Date.now() }
+      auto.events.unshift({ at: Date.now(), kind: 'news', account: '', label: 'Hệ thống', text: `🔔 ${e.currency} · ${e.title} (còn ${Math.floor(left / 60_000)} phút)${st ? ` · nhắc lần ${st.count + 1}` : ''}` })
+    }
+  }
+}
+const newsSnapshot = () => ({ config: newsWatch, active: Object.values(newsActive).filter((a) => !newsAcks.has(a.key)).sort((a, b) => a.at - b.at), acks: [...newsAcks], telegram: true })
+
 // ---------- kho kiến thức mẫu
 const playbooks: Playbook[] = [{
   id: 'pb-demo', name: 'ICT + SMC của tôi (mẫu)', rules: TEMPLATES.find((t) => t.id === 'ict')!.rules,
@@ -310,6 +332,7 @@ export async function mockGet(path: string): Promise<unknown> {
     case '/candles': return candles(q('symbol'), q('tf') || 'H1', Math.min(Number(q('count')) || 300, 20000))
     case '/telegram/messages': return messages.filter((m) => m.date > Number(q('after') || 0))
     case '/calendar': return calendar
+    case '/news/watch': newsTick(); return newsSnapshot()
     case '/kb': return JSON.parse(JSON.stringify(playbooks))
     case '/automation': return autoSnapshot()
     case '/personas': return personaStore()
@@ -426,6 +449,8 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
     } else delete auto.guards[id]
     return autoSnapshot()
   }
+  if (path === '/news/watch') { newsWatch = { ...newsWatch, ...(body.config as NewsWatchConfig) }; newsTick(); return newsSnapshot() }
+  if (path === '/news/ack') { for (const k of body.all ? Object.keys(newsActive) : [String(body.key)]) { newsAcks.add(k); delete newsActive[k] } return newsSnapshot() }
   if (path === '/automation/unlock') { const id = String(body.account); const lk = auto.locks[id]; if (lk?.unlock_at && lk.unlock_at > Date.now() / 1000) throw new Error(lk.unlock_at >= lk.until ? 'Khoá cứng vì chạm giới hạn lỗ: tự mở lúc hết ngày máy chủ, không mở tay được.' : 'Khoá cứng: chưa hết 30 phút chờ.'); delete auto.locks[id]; auto.events.unshift({ at: Date.now(), kind: 'unlock', account: id, label: find(id).label, text: 'Đã mở khoá bằng tay.' }); closedToday[id] = 0; return autoSnapshot() }
   if (path === '/automation/alerts') { auto.alerts = { news: !!body.news, minutes: Number(body.minutes) || 30, notify: !!body.notify }; return autoSnapshot() }
   if (path === '/automation/copier') {

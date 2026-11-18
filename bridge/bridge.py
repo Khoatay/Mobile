@@ -859,6 +859,7 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas):
                 "/kb": kb.list,
                 "/ai/status": brain.status,
                 "/automation": auto.snapshot,
+                "/news/watch": auto.news_snapshot,
                 "/personas": personas.list,
             }
             if url.path not in routes:
@@ -903,6 +904,10 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas):
                 self.answer(lambda: auto.set_copier(body))
             elif url.path == "/automation/test":
                 self.answer(auto.test_notify)
+            elif url.path == "/news/watch":
+                self.answer(lambda: auto.set_news_watch(body))
+            elif url.path == "/news/ack":
+                self.answer(lambda: auto.ack_news(body))
             elif url.path == "/kb/save":
                 self.answer(lambda: kb.save(body))
             elif url.path == "/kb/delete":

@@ -32,6 +32,8 @@ import { lockedTabs, PRO_FEATURES } from './lib/pro'
 import { useAutopost } from './lib/useAutopost'
 import { useAutoQuotes } from './lib/quotes'
 import { useJournalSync } from './lib/journalSync'
+import { useNewsWatch } from './lib/newsWatch'
+import NewsAlertBar from './components/NewsAlertBar'
 import type { SignalDraft } from './lib/share'
 import ProfilePage from './pages/Profile'
 import Personalize from './pages/Personalize'
@@ -99,6 +101,9 @@ export default function App() {
   const ownBridge = useMemo(() => ({ ...bridge, accounts: bridge.accounts.filter((a) => !isView(infos[a.id])), metas: bridge.metas.filter((m) => !isView(infos[m.id])) }), [bridge, infos])
   // Nhật ký tự đọc lịch sử lệnh của các tài khoản đã kết nối (không gồm Only view).
   const journalSync = useJournalSync(ownBridge, trades, setTrades)
+  // Cảnh báo tin: bridge canh giờ và nhắc; app hiện thanh cảnh báo ở mọi trang.
+  const newsWatch = useNewsWatch(bridge.online)
+  const newsBar = <NewsAlertBar state={newsWatch.state} ack={newsWatch.ack} onOpen={mode === 'full' ? () => setTab('news') : undefined} />
   // Bấm "Copy lệnh của người này" ở trang Tài khoản: mở trang Copy lệnh với tài khoản đó làm nguồn.
   const [copyFrom, setCopyFrom] = useState('')
 
@@ -114,6 +119,7 @@ export default function App() {
     return (
       <>
         {previewBar}
+        {newsBar}
         <LiteApp settings={settings} patch={patchSettings} trades={trades} setTrades={setTrades} bridge={ownBridge} infos={infos} user={user} profile={profile} pack={pack} links={links}
           goFull={(t) => { if (t && GROUPS.some((g) => g.tabs.some(([id]) => id === t))) setTab(t as Tab); setMode('full'); window.scrollTo(0, 0) }} />
       </>
@@ -122,6 +128,7 @@ export default function App() {
   return (
     <>
     {previewBar}
+    {newsBar}
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
@@ -171,7 +178,7 @@ export default function App() {
         {tab === 'copier' && (locked.has('copier') ? <ProLockPage feature={lockOf('copier')} onOpenPro={() => setTab('pro')} /> : <Copier bridge={bridge} infos={infos} presetMaster={copyFrom} onPresetUsed={() => setCopyFrom('')} />)}
         {tab === 'learn' && (locked.has('learn') ? <ProLockPage feature={lockOf('learn')} onOpenPro={() => setTab('pro')} /> : <Learn bridge={bridge} />)}
         {tab === 'ai' && (locked.has('ai') ? <ProLockPage feature={lockOf('ai')} onOpenPro={() => setTab('pro')} /> : <Analyze bridge={bridge} settings={settings} shareLocked={featureLocked('copy-ai')} onShare={(d) => { if (featureLocked('copy-ai')) { setTab('pro'); return } setDraft(d); setTab('share') }} />)}
-        {tab === 'news' && <News bridge={bridge} messages={messages} />}
+        {tab === 'news' && <News bridge={bridge} messages={messages} watch={newsWatch} />}
         {tab === 'ledger' && <Ledger bridge={ownBridge} settings={settings} labels={labels} infos={infos} />}
         {tab === 'share' && <Share bridge={ownBridge} trades={trades} settings={settings} profile={profile} labels={labels} infos={infos} user={user} messages={messages} locked={featureLocked} onOpenPro={() => setTab('pro')} draft={draft} onDraftUsed={() => setDraft(null)} autopost={autopost} />}
         {tab === 'offers' && <Offers links={links} bridge={bridge} disclaimer={profile.disclaimer} pack={pack} setPack={canEdit ? setPack : null} />}

@@ -22,6 +22,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 STATE_FILE = HERE / "automation.json"
+NEWS_WATCH_DEFAULT = {"enabled": True, "events": [], "currencies": [], "impact": "High", "lead_min": 15, "repeat_min": 0, "telegram": True}
 TAG = "FXD#"
 
 
@@ -51,11 +52,15 @@ class Automation:
         self.alerts = {"news": True, "minutes": 30, "notify": True, **data.get("alerts", {})}
         self.copier = data.get("copier", {"enabled": False, "master": "", "followers": [], "copy_sltp": True})
         self.day_refs = data.get("day_refs", {})
+        # Cảnh báo tin kiểu Investing: tin được đánh dấu, hoặc mọi tin từ một mức độ của các đồng tiền đã chọn.
+        self.news_watch = {**NEWS_WATCH_DEFAULT, **data.get("news_watch", {})}
+        self.news_acks = set(data.get("news_acks", []))  # tin người dùng đã bấm "Tắt"
+        self.news_active = {}  # tin đang nhắc: key -> lần gửi gần nhất, số lần, thông tin tin
 
     # ------------------------------------------------------------ lưu trạng thái
     def _save(self):
         tmp = STATE_FILE.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"guards": self.guards, "locks": self.locks, "alerts": self.alerts, "copier": self.copier, "day_refs": self.day_refs}, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.write_text(json.dumps({"guards": self.guards, "locks": self.locks, "alerts": self.alerts, "copier": self.copier, "day_refs": self.day_refs, "news_watch": self.news_watch, "news_acks": sorted(self.news_acks)[-500:]}, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, STATE_FILE)
 
     def event(self, kind, account, text, notify=True):
@@ -153,6 +158,84 @@ class Automation:
             self._save()
         return self.snapshot()
 
+    # ------------------------------------------------------------ cảnh báo tin
+    def news_snapshot(self):
+        with self.lock:
+            active = [{"key": k, **v} for k, v in self.news_active.items() if k not in self.news_acks]
+            return {"config": self.news_watch, "active": sorted(active, key=lambda x: x["at"]), "acks": sorted(self.news_acks)[-200:], "telegram": bool(self.tg.connected)}
+
+    def set_news_watch(self, body):
+        cfg = body.get("config") or {}
+        impact = cfg.get("impact") if cfg.get("impact") in ("High", "Medium", "Low") else "High"
+        with self.lock:
+            self.news_watch = {
+                "enabled": bool(cfg.get("enabled", True)),
+                "events": [str(x) for x in (cfg.get("events") or [])][-300:],
+                "currencies": [str(c).upper()[:3] for c in (cfg.get("currencies") or [])],
+                "impact": impact,
+                "lead_min": max(1, min(240, int(cfg.get("lead_min") or 15))),
+                "repeat_min": max(0, min(30, int(cfg.get("repeat_min") or 0))),
+                "telegram": bool(cfg.get("telegram", True)),
+            }
+            self._save()
+        return self.news_snapshot()
+
+    def ack_news(self, body):
+        """Bấm "Tắt" trong app: dừng nhắc một tin (key) hoặc mọi tin đang nhắc (all)."""
+        with self.lock:
+            keys = list(self.news_active) if body.get("all") else [str(body.get("key") or "")]
+            for k in keys:
+                if k:
+                    self.news_acks.add(k)
+                    self.news_active.pop(k, None)
+            self._save()
+        return self.news_snapshot()
+
+    def _news_watch_tick(self):
+        cfg = self.news_watch
+        if not cfg.get("enabled"):
+            return
+        try:
+            events = self.calendar.get()
+        except Exception:
+            return
+        from datetime import datetime
+        rank = {"High": 3, "Medium": 2, "Low": 1}
+        lead, rep = cfg["lead_min"] * 60, cfg["repeat_min"] * 60
+        for e in events:
+            key = f"{e.get('currency')}|{e.get('title')}|{e.get('date')}"
+            by_rule = e.get("currency") in cfg["currencies"] and rank.get(e.get("impact"), 0) >= rank[cfg["impact"]]
+            if not (key in cfg["events"] or by_rule) or key in self.news_acks:
+                continue
+            try:
+                t = datetime.fromisoformat(e["date"]).timestamp()
+            except (ValueError, KeyError):
+                continue
+            left = t - now()
+            if left < 0:
+                self.news_active.pop(key, None)  # tin đã ra: thôi nhắc
+                continue
+            if left > lead:
+                continue
+            st = self.news_active.get(key)
+            if st is None or (rep > 0 and now() - st["last"] >= rep):
+                count = (st or {}).get("count", 0) + 1
+                self.news_active[key] = {"last": now(), "count": count, "at": int(t * 1000), "title": e.get("title", ""), "currency": e.get("currency", ""), "impact": e.get("impact", "")}
+                hhmm = datetime.fromtimestamp(t).strftime("%H:%M")
+                text = f"🔔 {e.get('currency')} · {e.get('title')} lúc {hhmm} (còn {int(left // 60)} phút)" + (f" · nhắc lần {count}" if count > 1 else "")
+                if rep > 0:
+                    text += f". Nhắc lại mỗi {cfg['repeat_min']} phút tới khi bấm Tắt trong app."
+                self.event("news", "", text, notify=False)
+                if cfg.get("telegram", True):
+                    self.notify(text)
+
+    def notify(self, text):
+        """Gửi một tin cảnh báo về điện thoại qua Telegram (Saved Messages của tài khoản đã đăng nhập)."""
+        try:
+            self.tg.send_me(f"Golden Duck\n{text}")
+        except Exception as ex:
+            print(f"[telegram] Không gửi được: {ex}")
+
     def test_notify(self):
         if not self.tg.connected:
             raise RuntimeError("Telegram chưa kết nối")
@@ -165,7 +248,7 @@ class Automation:
 
     # ------------------------------------------------------------- vòng lặp
     def start(self):
-        for target, period in ((self._guard_tick, 3), (self._news_tick, 60), (self._copy_tick, 1.5)):
+        for target, period in ((self._guard_tick, 3), (self._news_tick, 60), (self._news_watch_tick, 20), (self._copy_tick, 1.5)):
             threading.Thread(target=self._loop, args=(target, period), daemon=True).start()
 
     def _loop(self, fn, period):
