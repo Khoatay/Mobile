@@ -18,11 +18,11 @@ import time
 import uuid
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-KB_DIR = HERE / "knowledge"
+from paths import DATA
+KB_DIR = DATA / "knowledge"
 INDEX = KB_DIR / "index.json"
 DEFAULT_MODEL = "claude-opus-5-5"
-USAGE_FILE = HERE / "knowledge" / "usage.json"
+USAGE_FILE = DATA / "knowledge" / "usage.json"
 
 # Model chọn được trong app và giá (USD / 1 triệu token, bảng giá 11/2026): vào, ra, đọc cache, ghi cache.
 # Chi phí trong app là ước tính theo bảng này; số chính xác xem ở console.anthropic.com.

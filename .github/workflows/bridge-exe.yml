@@ -1,0 +1,59 @@
+# Build GoldenDuckBridge.exe (bridge chạy ngầm cho Windows) mỗi khi bridge đổi, rồi đặt vào bản phát hành "bridge-latest".
+name: Build Golden Duck Bridge
+
+on:
+  push:
+    branches: [claude/vibe-code-trader-finance-jtwj46]
+    paths: ['bridge/**', '.github/workflows/bridge-exe.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cài thư viện
+        run: pip install -r bridge/requirements.txt -r bridge/requirements-desktop.txt
+
+      - name: Biểu tượng
+        run: python -c "from PIL import Image; im = Image.open('public/icon-512.png'); im.save('bridge/icon.ico', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)]); im.resize((64,64)).save('bridge/icon.png')"
+
+      - name: Build .exe
+        working-directory: bridge
+        run: pyinstaller --noconfirm --onefile --noconsole --name GoldenDuckBridge --icon icon.ico --add-data "icon.png;." --hidden-import MetaTrader5 --hidden-import pystray._win32 --collect-submodules telethon app.py
+
+      - name: Chạy thử 25 giây
+        shell: pwsh
+        run: |
+          $env:GD_DATA_DIR = "$env:RUNNER_TEMP\gd"
+          $p = Start-Process -FilePath bridge\dist\GoldenDuckBridge.exe -PassThru
+          Start-Sleep -Seconds 25
+          $log = Get-Content "$env:GD_DATA_DIR\bridge.log" -Raw
+          Write-Output $log
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process GoldenDuckBridge -ErrorAction SilentlyContinue | Stop-Process -Force
+          if ($log -notmatch "bridge đang chạy") { throw "Bridge không khởi động được" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GoldenDuckBridge
+          path: bridge/dist/GoldenDuckBridge.exe
+
+      - name: Đặt vào bản phát hành bridge-latest
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view bridge-latest *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create bridge-latest --prerelease --target $env:GITHUB_SHA --title "Golden Duck Bridge (bản mới nhất)" --notes "Bridge chạy ngầm cho Windows. Tải GoldenDuckBridge.exe, mở file, dán mã kết nối lấy ở Golden Duck trên web (Tài khoản & gói → Kết nối máy MT5)."
+          }
+          gh release upload bridge-latest bridge/dist/GoldenDuckBridge.exe --clobber

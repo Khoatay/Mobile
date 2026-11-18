@@ -1,0 +1,4 @@
+# Thêm cho bản cài GoldenDuckBridge.exe (biểu tượng khay hệ thống, đóng gói .exe)
+pystray
+pillow
+pyinstaller

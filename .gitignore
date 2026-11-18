@@ -14,3 +14,9 @@ bridge/automation.json
 bridge/telegram_bot.json
 dist-server
 dist-srvpreview
+bridge/build/
+bridge/dist/
+bridge/*.spec
+bridge/icon.ico
+bridge/icon.png
+bridge/bridge.log

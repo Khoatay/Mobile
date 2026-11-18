@@ -20,8 +20,8 @@ import time
 import traceback
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-STATE_FILE = HERE / "automation.json"
+from paths import DATA
+STATE_FILE = DATA / "automation.json"
 NEWS_WATCH_DEFAULT = {"enabled": True, "events": [], "currencies": [], "impact": "High", "lead_min": 15, "repeat_min": 0, "telegram": True}
 TAG = "FXD#"
 

@@ -17,8 +17,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-FILE = HERE / "telegram_bot.json"
+from paths import DATA
+FILE = DATA / "telegram_bot.json"
 API = "https://api.telegram.org/bot{token}/{method}"
 STOP_WORDS = {"tắt", "tat", "/tat", "/stop", "stop", "off", "dừng", "dung"}
 

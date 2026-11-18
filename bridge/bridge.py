@@ -36,9 +36,10 @@ from automation import Automation
 from tgbot import TelegramBot
 from brain import Brain, Knowledge, Personas, chat
 from relay import ServerLink
+import desktop
 
-HERE = Path(__file__).resolve().parent
-CONFIG_PATH = HERE / "config.json"
+from paths import DATA
+CONFIG_PATH = DATA / "config.json"
 LOCAL_HOSTS = {"127.0.0.1", "localhost"}
 
 
@@ -609,7 +610,7 @@ class Telegram:
 
     def client(self):
         from telethon import TelegramClient
-        return TelegramClient(str(HERE / "fxdesk"), int(self.cfg["api_id"]), str(self.cfg["api_hash"]))
+        return TelegramClient(str(DATA / "fxdesk"), int(self.cfg["api_id"]), str(self.cfg["api_hash"]))
 
     def add(self, title, msg):
         text = msg.message or ""
@@ -767,7 +768,7 @@ class Calendar:
 
 # ---------------------------------------------------------------------------- HTTP
 
-def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot):
+def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot, link=None, cfg=None):
 
     def send_post(body):
         image = str(body.get("image") or "")
@@ -848,6 +849,20 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot):
             if not self.local_only():
                 return self.send(403, {"error": "Chỉ chấp nhận yêu cầu từ chính máy này"})
             url = urlparse(self.path)
+            if url.path == "/setup" and not self.headers.get("X-GD-Relay"):
+                data = desktop.SETUP_HTML.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("X-Frame-Options", "DENY")
+                self.end_headers()
+                return self.wfile.write(data)
+            if url.path == "/setup/state" and not self.headers.get("X-GD-Relay"):
+                return self.answer(lambda: {
+                    "server": {"url": link.url if link else "", "connected": bool(link and link.connected), "error": link.error if link else "", "email": link.email if link else ""},
+                    "accounts": [{"label": a.label, "connected": a.info().get("connected"), "error": a.info().get("error", "")} for a in registry.list()],
+                    "autostart": desktop.autostart_enabled(), "autostart_supported": desktop.autostart_supported(),
+                })
             q = {k: v[0] for k, v in parse_qs(url.query).items()}
             routes = {
                 "/status": lambda: {"accounts": parallel(lambda a: a.info()), "telegram": {"connected": tg.connected, "error": tg.error, "channels": tg.channels, "postTargets": list(tg.targets)}},
@@ -900,6 +915,18 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot):
                 self.answer(lambda: personas.clear(str(body["persona"])))
             elif url.path == "/automation/guard":
                 self.answer(lambda: auto.set_guard(body))
+            elif url.path.startswith("/setup/") and self.headers.get("X-GD-Relay"):
+                self.send(403, {"error": "Chỉ đổi được trên chính máy chạy bridge"})
+            elif url.path == "/setup/server":
+                def save_server():
+                    cfg["server"] = desktop.parse_code(body.get("code"))
+                    save_config(cfg)
+                    brain._client = None  # AI đi qua máy chủ mới
+                    link.configure(cfg["server"])
+                    return {"ok": True, "url": cfg["server"]["url"]}
+                self.answer(save_server)
+            elif url.path == "/setup/autostart":
+                self.answer(lambda: {"autostart": desktop.set_autostart(bool(body.get("on")))})
             elif url.path == "/automation/continue":
                 self.answer(lambda: auto.continue_after_profit(body))
             elif url.path == "/automation/unlock":
@@ -954,7 +981,7 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot):
     return Handler
 
 
-def main():
+def main(ready=None):
     cfg = load_config()
     tg = Telegram(cfg.get("telegram"))
     if len(sys.argv) > 1 and sys.argv[1] == "login":
@@ -976,10 +1003,13 @@ def main():
         print(f"[mt5] {a.label} ({a.type}){' — CHO PHÉP VÀO LỆNH' if a.tradable else ''}: đang kết nối…")
     tg.start()
     port = int(cfg.get("port", 8787))
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(registry, tg, kb, brain, calendar, auto, personas, bot))
+    link = ServerLink(None, port)
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(registry, tg, kb, brain, calendar, auto, personas, bot, link, cfg))
     print(f"Golden Duck bridge đang chạy tại http://127.0.0.1:{port} (Ctrl+C để dừng)")
     # Nối lên máy chủ Golden Duck (bản web trên tên miền) nếu config.json có "server".
-    ServerLink(cfg.get("server"), port).start()
+    link.configure(cfg.get("server"))
+    if ready:
+        ready(port, link)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

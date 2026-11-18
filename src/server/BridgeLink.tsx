@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/server'
 
+/** File cài bridge cho Windows, build tự động trên GitHub. Đổi bằng VITE_BRIDGE_DOWNLOAD khi tự đặt file ở chỗ khác. */
+const DOWNLOAD = import.meta.env.VITE_BRIDGE_DOWNLOAD || 'https://github.com/Khoatay/Mobile/releases/download/bridge-latest/GoldenDuckBridge.exe'
+
 interface Status { online: boolean; lastSeen: number; hasToken: boolean; outages?: { start: number; end: number | null }[]; telegram?: boolean }
 
 const t = (ms: number) => new Date(ms).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
@@ -23,6 +26,8 @@ export default function BridgeLink() {
     try { setToken((await api<{ token: string }>('/bridge/token', {})).token); setCopied(false) } catch (e) { setErr((e as Error).message) }
   }
   const snippet = token ? `"server": {"url": "${location.origin}", "token": "${token}"},` : ''
+  const code = token ? `${token}@${location.host}` : ''
+  const copy = (v: string) => { navigator.clipboard?.writeText(v); setCopied(true) }
   return (
     <section className="card bridge-link">
       <h3>Kết nối máy chạy MT5</h3>
@@ -39,19 +44,34 @@ export default function BridgeLink() {
       )}
       {token ? (
         <>
+          <p><strong>Mã kết nối của bạn:</strong></p>
+          <pre className="code-line">{code}</pre>
+          <button className="mini" onClick={() => copy(code)}>{copied ? '✓ Đã chép' : 'Chép mã'}</button>
           <ol className="steps">
-            <li>Trên máy chạy MT5, mở file <code>bridge/config.json</code>.</li>
-            <li>Dán dòng dưới đây ngay sau dấu <code>{'{'}</code> đầu tiên:
-              <pre className="code-line">{snippet}</pre>
-              <button className="mini" onClick={() => { navigator.clipboard?.writeText(snippet); setCopied(true) }}>{copied ? '✓ Đã chép' : 'Chép'}</button>
-            </li>
-            <li>Chạy lại bridge. Vài giây sau dòng trạng thái ở trên chuyển sang “đang kết nối”.</li>
+            <li>Trên máy chạy MT5, mở <strong>Golden Duck Bridge</strong> (chưa cài thì tải ở dưới). Trang cài đặt tự mở trong trình duyệt.</li>
+            <li>Dán mã vào ô <em>Kết nối Golden Duck</em> → <strong>Lưu và kết nối</strong>. Vài giây sau dòng trạng thái ở trên chuyển sang “đang kết nối”.</li>
+            <li>Thêm tài khoản MT5 ở trang <strong>Tài khoản</strong> trên web.</li>
           </ol>
+          <details className="small"><summary>Đang chạy bridge bằng Python?</summary>
+            <p className="muted">Mở <code>bridge/config.json</code>, dán dòng này ngay sau dấu <code>{'{'}</code> đầu tiên, rồi chạy lại <code>python bridge.py</code>:</p>
+            <pre className="code-line">{snippet}</pre>
+            <button className="mini" onClick={() => copy(snippet)}>Chép dòng này</button>
+          </details>
           <p className="muted small">Mã này chỉ hiện một lần. Ai có mã sẽ điều khiển được bridge của bạn qua web: đừng gửi cho người khác.</p>
         </>
       ) : (
         <button className="primary" onClick={create}>{st?.hasToken ? 'Tạo mã kết nối mới' : 'Tạo mã kết nối'}</button>
       )}
+      <details className="small bridge-install" open={!st?.hasToken}>
+        <summary><strong>Cài Golden Duck Bridge trên máy Windows</strong></summary>
+        <ol className="steps">
+          <li><a className="button" href={DOWNLOAD} rel="noopener">⬇ Tải GoldenDuckBridge.exe</a> và mở file vừa tải.</li>
+          <li>Windows có thể hiện “Windows protected your PC” vì file chưa có chữ ký số: bấm <strong>More info → Run anyway</strong>.</li>
+          <li>Trang cài đặt tự mở: dán mã kết nối (bấm <em>Tạo mã kết nối</em> ở trên để có mã).</li>
+          <li>Chương trình chạy ngầm, có biểu tượng con vịt ở góc phải thanh Taskbar, và tự chạy lại mỗi khi bật máy.</li>
+        </ol>
+        <p className="muted">Máy cần cài sẵn MT5 (mỗi tài khoản một bản cài ở thư mục riêng) và luôn bật. Không muốn để máy tính bật cả ngày thì thuê VPS Windows.</p>
+      </details>
       {err && <p className="notice bad">⚠ {err}</p>}
     </section>
   )
