@@ -14,7 +14,7 @@ import type { AutopostApi } from '../lib/useAutopost'
 import { usePersistent } from '../lib/store'
 import { BIAS_TEXT, type AnalysisResult } from '../lib/kb'
 import { loadImage } from '../lib/images'
-import { BRAND_LOGO } from '../lib/brand'
+import { logoOf } from '../lib/brand'
 import { parseSignal, type Signal } from '../lib/signals'
 import type { TgMessage } from '../lib/bridge'
 import type { UserProfile } from '../lib/user'
@@ -35,7 +35,7 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
   const [avatarImg, setAvatarImg] = useState<HTMLImageElement | null>(null)
   useEffect(() => { loadImage(user.avatar).then(setAvatarImg) }, [user.avatar])
   const [logoImg, setLogoImg] = useState<HTMLImageElement | null>(null)
-  useEffect(() => { loadImage(BRAND_LOGO).then(setLogoImg) }, [])
+  useEffect(() => { loadImage(logoOf(profile)).then(setLogoImg) }, [profile.logo])
   // Tín hiệu đọc được từ các kênh Telegram đang theo dõi, mới nhất trước.
   const tgSignals = useMemo(() => messages.map(parseSignal).filter((x): x is Signal => !!x && x.entry != null && x.sl != null).sort((a, b) => b.time - a.time).slice(0, 40), [messages])
   function applySignal(id: string) {

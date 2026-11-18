@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import Icon, { type IconName } from '../components/Icon'
 import ModeSwitch from './ModeSwitch'
-import { BRAND_LOGO } from '../lib/brand'
+import { logoOf } from '../lib/brand'
 import type { BrandPack } from '../lib/brandpack'
 import type { InfoMap } from '../lib/accounts'
 import type { BridgeState } from '../lib/bridge'
@@ -49,7 +49,7 @@ export default function LiteApp(props: LiteProps) {
   return (
     <div className="lite">
       <header className="lite-top">
-        <img className="logo logo-img" src={BRAND_LOGO} alt="" />
+        <img className="logo logo-img" src={logoOf(profile)} alt="" />
         <strong className="lite-brand">{profile.brand}</strong>
         <ModeSwitch mode="lite" onChange={() => goFull()} />
       </header>

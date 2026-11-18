@@ -4,7 +4,7 @@ import Icon, { type IconName } from './components/Icon'
 import { DEFAULT_USER, type UserProfile } from './lib/user'
 import { useBrandPack } from './lib/brandpack'
 import { EDITION } from './lib/edition'
-import { BRAND_LOGO, brandName } from './lib/brand'
+import { brandName, logoOf } from './lib/brand'
 import { partnerLinks } from './lib/partners'
 import { resolveInfos, type AccountInfo } from './lib/accounts'
 import { PREVIEW, useBridge, useTelegramMessages } from './lib/bridge'
@@ -82,6 +82,8 @@ export default function App() {
 
   useEffect(() => { document.documentElement.style.setProperty('--accent', profile.accent) }, [profile.accent])
   useEffect(() => { document.title = profile.brand }, [profile.brand])
+  // Icon trên tab trình duyệt theo logo của IB.
+  useEffect(() => { document.querySelector<HTMLLinkElement>('link[rel=icon]')?.setAttribute('href', logoOf(profile)) }, [profile.logo])
 
   // Nhãn từng tài khoản (tên, broker, nhóm…): mặc định từ bridge, phần người dùng sửa lưu trong trình duyệt.
   const [storedInfo, setStoredInfo] = usePersistent<Record<string, Partial<AccountInfo>>>('fx.accountInfo', {})
@@ -97,7 +99,7 @@ export default function App() {
   }, [bridge.accounts])
 
   const previewBar = PREVIEW && <div className="preview-bar">Bản xem trước: dữ liệu giả lập, không nối MT5 hay Telegram thật. Lệnh, tin nhắn và tài khoản ở đây đều là mẫu.</div>
-  if (mode === '') return <>{previewBar}<ModePicker brand={profile.brand} onPick={setMode} /></>
+  if (mode === '') return <>{previewBar}<ModePicker brand={profile.brand} logo={logoOf(profile)} onPick={setMode} /></>
   if (mode === 'lite')
     return (
       <>
@@ -113,7 +115,7 @@ export default function App() {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <img className="logo logo-img" src={BRAND_LOGO} alt="" />
+          <img className="logo logo-img" src={logoOf(profile)} alt="" />
           <span className="brand-text">{profile.brand}{profile.tagline && <small>{profile.tagline}</small>}</span>
         </div>
         <ModeSwitch mode="full" onChange={(m) => { setMode(m); window.scrollTo(0, 0) }} dark />

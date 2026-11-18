@@ -5,7 +5,7 @@ import { inScope, scopeLabel, type InfoMap } from '../lib/accounts'
 import type { PartnerLinks } from '../lib/partners'
 import type { Profile } from '../lib/share'
 import { download } from '../lib/store'
-import { logoDataUrl } from '../lib/brand'
+import { logoDataUrl, logoOf } from '../lib/brand'
 import { dataHash, trackRecordHtml } from '../lib/trackrecord'
 import type { Trade } from '../lib/types'
 
@@ -30,7 +30,7 @@ export default function Track({ trades, infos, profile, links, currency }: { tra
   }, [trades, scope, days, onlyMt5, infos])
   useEffect(() => { dataHash(list).then(setHash) }, [list])
   const [logo, setLogo] = useState('')
-  useEffect(() => { logoDataUrl().then(setLogo) }, [])
+  useEffect(() => { logoDataUrl(logoOf(profile)).then(setLogo) }, [profile.logo])
 
   const link = cta ? links[cta] : undefined
   const html = useMemo(() => hash ? trackRecordHtml(list, {

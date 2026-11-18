@@ -1,11 +1,10 @@
-import { BRAND_LOGO } from '../lib/brand'
 import type { Mode } from './plain'
 
 /** Hỏi một lần khi mở app lần đầu. Đổi lại được bất cứ lúc nào bằng nút ở góc trên (bản đơn giản) hoặc thanh bên (bản đầy đủ). */
-export default function ModePicker({ brand, onPick }: { brand: string; onPick: (m: Mode) => void }) {
+export default function ModePicker({ brand, logo, onPick }: { brand: string; logo: string; onPick: (m: Mode) => void }) {
   return (
     <div className="mode-picker">
-      <img className="logo logo-img" src={BRAND_LOGO} alt="" />
+      <img className="logo logo-img" src={logo} alt="" />
       <h1>Chào mừng tới {brand}</h1>
       <p className="muted">Bạn muốn dùng giao diện nào? Đổi lại lúc nào cũng được.</p>
       <div className="mode-options">

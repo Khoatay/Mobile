@@ -26,8 +26,8 @@ export function initials(name: string): string {
 /** Tên người dùng: chữ thường, số, dấu chấm và gạch dưới, 3–20 ký tự. */
 export const validUsername = (u: string) => /^[a-z0-9._]{3,20}$/.test(u)
 
-/** Cắt ảnh thành hình vuông ở giữa và thu về 256px, để lưu gọn trong trình duyệt. */
-export function squareAvatar(file: File, size = 256): Promise<string> {
+/** Cắt ảnh thành hình vuông ở giữa và thu về 256px, để lưu gọn trong trình duyệt. `png` giữ nền trong suốt (dùng cho logo). */
+export function squareAvatar(file: File, size = 256, png = false): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) return reject(new Error('Hãy chọn một file ảnh'))
     const url = URL.createObjectURL(file)
@@ -39,7 +39,7 @@ export function squareAvatar(file: File, size = 256): Promise<string> {
       const g = c.getContext('2d')!
       g.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size)
       URL.revokeObjectURL(url)
-      resolve(c.toDataURL('image/jpeg', 0.85))
+      resolve(png ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.85))
     }
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Không đọc được ảnh này')) }
     img.src = url

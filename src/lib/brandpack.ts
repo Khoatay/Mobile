@@ -13,7 +13,8 @@ import { usePersistent } from './store'
  */
 export interface BrandPack {
   version: 1
-  brand: { brand: string; tagline: string; accent: string; link: string; disclaimer: boolean }
+  /** logo: data URL hoặc link ảnh; trống = logo Golden Duck. */
+  brand: { brand: string; logo?: string; tagline: string; accent: string; link: string; disclaimer: boolean }
   partners: PartnerConfig[]
   offers: Offer[]
   products: Product[]
@@ -31,7 +32,7 @@ export interface BrandPack {
 
 export const EMPTY_PACK: BrandPack = {
   version: 1,
-  brand: { brand: BRAND_NAME, tagline: '', accent: '#2a78d6', link: '', disclaimer: true },
+  brand: { brand: BRAND_NAME, logo: '', tagline: '', accent: '#2a78d6', link: '', disclaimer: true },
   partners: mergePartners(undefined),
   offers: [], products: [], communities: [],
   proForAll: false, proUrl: '', proFeatures: DEFAULT_PRO_FEATURES, proPrice: '', updatedAt: 0,

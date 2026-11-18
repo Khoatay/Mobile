@@ -22,6 +22,8 @@ export default function Calculator({ settings, patch }: Props) {
   const sl = mode === 'pips' ? slPips : Math.abs(entry - slPrice) / pip
   const tp = mode === 'pips' ? tpPips : Math.abs(tpPrice - entry) / pip
   const ccy = settings.accountCcy
+  // Giá vàng làm ví dụ cho phần giải thích pip (lấy theo tỷ giá đang dùng).
+  const gold = Math.round(settings.quotes.XAUUSD || 2600)
   const r = calcPosition({
     symbol, accountCcy: ccy, balance: settings.balance, riskPct: settings.riskPct,
     slPips: sl, tpPips: Number.isFinite(tp) ? tp : undefined, leverage: settings.leverage, quotes: settings.quotes,
@@ -85,7 +87,14 @@ export default function Calculator({ settings, patch }: Props) {
               <Field label="Giá take profit" hint="Không bắt buộc"><Num value={tpPrice} onChange={setTpPrice} /></Field>
             </div>
           )}
-          <p className="muted small">1 pip {symbol} = {pip} giá. {info.base === 'XAU' && 'Vàng: 1 lot = 100 oz, tức 10 USD mỗi pip.'}</p>
+          {info.base === 'XAU' ? (
+            <div className="gold-note">
+              <p><strong>Vàng: 10 pip = 1 giá.</strong> Ví dụ giá đi từ {gold.toFixed(1)} lên {(gold + 1).toFixed(1)} là 10 pip; stop loss 50 pip nghĩa là cách giá vào 5 giá. 1 lot = 100 oz, tức 10 USD mỗi pip, 100 USD mỗi 1 giá.</p>
+              <p className="warn">⚠ Giá vàng chạy rất nhanh, có lúc đi vài giá chỉ trong vài phút khi có tin. Nếu chưa có kinh nghiệm, hãy giao dịch khối lượng nhỏ (bắt đầu từ 0.01 lot) và luôn đặt stop loss.</p>
+            </div>
+          ) : (
+            <p className="muted small">1 pip {symbol} = {pip} giá.</p>
+          )}
         </section>
 
         <section className="card result">

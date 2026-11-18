@@ -17,11 +17,13 @@ export interface Profile {
   hideMoney: boolean
   /** Link IB, affiliate quỹ và công cụ, kèm mã giảm giá nếu có. */
   partners: PartnerLinks
+  /** Logo riêng của IB (data URL PNG vuông 256px hoặc link ảnh). Trống = logo Golden Duck. */
+  logo?: string
   /** Người dùng bản trader đã tự chọn màu nhấn (thay cho màu của IB). */
   accentCustom?: boolean
 }
 
-export const DEFAULT_PROFILE: Profile = { brand: BRAND_NAME, tagline: '', accent: '#2a78d6', link: '', disclaimer: true, hideMoney: true, partners: {} }
+export const DEFAULT_PROFILE: Profile = { brand: BRAND_NAME, logo: '', tagline: '', accent: '#2a78d6', link: '', disclaimer: true, hideMoney: true, partners: {} }
 export const ACCENTS = ['#2a78d6', '#1baf7a', '#eb6834', '#6250d6', '#d55181', '#c98500']
 export const DISCLAIMER = 'Chia sẻ góc nhìn cá nhân, không phải khuyến nghị đầu tư. Giao dịch có rủi ro mất vốn.'
 
