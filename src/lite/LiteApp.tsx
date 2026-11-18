@@ -2,22 +2,25 @@ import { useState } from 'react'
 import Icon, { type IconName } from '../components/Icon'
 import ModeSwitch from './ModeSwitch'
 import type { BrandPack } from '../lib/brandpack'
+import type { InfoMap } from '../lib/accounts'
 import type { BridgeState } from '../lib/bridge'
 import type { PartnerLinks } from '../lib/partners'
 import type { Profile } from '../lib/share'
 import type { Settings, Trade } from '../lib/types'
 import type { UserProfile } from '../lib/user'
 import LiteCalc from './LiteCalc'
+import LiteChat from './LiteChat'
 import LiteHome from './LiteHome'
 import LiteLearn from './LiteLearn'
 import LiteOffers from './LiteOffers'
 import LiteResults from './LiteResults'
 
-export type LiteTab = 'home' | 'calc' | 'results' | 'learn' | 'offers'
+export type LiteTab = 'home' | 'calc' | 'chat' | 'results' | 'learn' | 'offers'
 
 const TABS: [LiteTab, string, IconName][] = [
   ['home', 'Trang chủ', 'home'],
   ['calc', 'Tính lệnh', 'calc'],
+  ['chat', 'Hỏi AI', 'chat'],
   ['results', 'Kết quả', 'chart'],
   ['learn', 'Học', 'book'],
   ['offers', 'Ưu đãi', 'gift'],
@@ -29,6 +32,7 @@ export interface LiteProps {
   trades: Trade[]
   setTrades: (t: Trade[]) => void
   bridge: BridgeState
+  infos: InfoMap
   user: UserProfile
   profile: Profile
   pack: BrandPack
@@ -51,6 +55,7 @@ export default function LiteApp(props: LiteProps) {
       <main className="lite-main">
         {tab === 'home' && <LiteHome {...props} go={setTab} />}
         {tab === 'calc' && <LiteCalc settings={props.settings} patch={props.patch} />}
+        {tab === 'chat' && <LiteChat bridge={props.bridge} trades={props.trades} infos={props.infos} goFull={goFull} />}
         {tab === 'results' && <LiteResults trades={props.trades} setTrades={props.setTrades} settings={props.settings} goFull={goFull} />}
         {tab === 'learn' && <LiteLearn goFull={goFull} />}
         {tab === 'offers' && <LiteOffers pack={props.pack} links={props.links} disclaimer={profile.disclaimer} />}

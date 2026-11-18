@@ -99,7 +99,7 @@ export default function App() {
     return (
       <>
         {previewBar}
-        <LiteApp settings={settings} patch={patchSettings} trades={trades} setTrades={setTrades} bridge={bridge} user={user} profile={profile} pack={pack} links={links}
+        <LiteApp settings={settings} patch={patchSettings} trades={trades} setTrades={setTrades} bridge={bridge} infos={infos} user={user} profile={profile} pack={pack} links={links}
           goFull={(t) => { if (t && GROUPS.some((g) => g.tabs.some(([id]) => id === t))) setTab(t as Tab); setMode('full'); window.scrollTo(0, 0) }} />
       </>
     )

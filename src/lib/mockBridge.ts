@@ -1,4 +1,4 @@
-import { BLANK_PERSONA, PERSONA_TEMPLATES, type ChatTurn, type Persona, type PersonaStore } from './persona'
+import { BLANK_PERSONA, DUCK_PERSONA, PERSONA_TEMPLATES, type ChatTurn, type Persona, type PersonaStore } from './persona'
 /**
  * Bridge giả lập, chỉ dùng cho bản xem trước (build với VITE_PREVIEW=1).
  * Trả đúng dạng dữ liệu như bridge.py: vài tài khoản, lệnh đang mở, lịch sử, giá, nến, tin Telegram, lịch kinh tế.
@@ -306,7 +306,7 @@ export async function mockGet(path: string): Promise<unknown> {
 }
 
 // ---- trò chuyện AI (xem trước: trả lời soạn sẵn, không gọi AI) ----
-const personas: Persona[] = [{ id: 'p1', ...PERSONA_TEMPLATES[0].p, playbooks: ['pb-demo'], createdAt: Date.now(), updatedAt: Date.now() }]
+const personas: Persona[] = [{ id: 'p1', ...PERSONA_TEMPLATES[0].p, playbooks: ['pb-demo'], createdAt: Date.now(), updatedAt: Date.now() }, { id: 'p2', ...DUCK_PERSONA, createdAt: Date.now(), updatedAt: Date.now() }]
 const chats: Record<string, ChatTurn[]> = { p1: [
   { role: 'user', text: 'Thầy ơi hôm qua em thua 3 lệnh vàng liền, giờ muốn vào lot gấp đôi để gỡ.', at: Date.now() - 3600_000 },
   { role: 'assistant', text: 'Dừng tay đã em. Gấp đôi lot sau 3 lệnh thua là cách nhanh nhất để biến một ngày xấu thành một tháng xấu.\n\nThầy thấy trong nhật ký, 30 ngày qua em có chuỗi thua dài nhất 5 lệnh, và mấy lệnh vào vội sau khi thua đều lỗ nặng hơn lệnh thường. Hôm nay em nghỉ, tối nay ngồi xem lại 3 lệnh đó: có lệnh nào đúng kế hoạch không? Kể thầy nghe lệnh đầu tiên.', at: Date.now() - 3590_000 },

@@ -63,6 +63,12 @@ export default function LiteHome({ user, bridge, trades, settings, go }: LitePro
         </section>
       )}
 
+      <button className="lite-card lite-ask" onClick={() => go('chat')}>
+        <span className="lite-duck" aria-hidden="true">🦆</span>
+        <span><strong>Hỏi Vịt Vàng</strong><small>Không hiểu gì cứ hỏi, AI giải thích dễ hiểu</small></span>
+        <span className="lite-ask-go" aria-hidden="true">›</span>
+      </button>
+
       <div className="lite-actions">
         {ACTIONS.map(([id, icon, title, sub]) => (
           <button key={id} className="lite-action" onClick={() => go(id)}>
