@@ -13,3 +13,4 @@ dist-trader
 bridge/automation.json
 bridge/telegram_bot.json
 dist-server
+dist-srvpreview
