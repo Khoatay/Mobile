@@ -47,9 +47,13 @@ const R = (r: Partial<Rules> & Pick<Rules, 'targetPct' | 'dailyLossPct' | 'daily
  * Stellar 1-Step 10%, 3% ngày, 6% tổng; không có luật nhất quán.
  */
 export const PRESETS: { id: string; name: string; rules: Rules }[] = [
-  { id: 'ftmo-2s-1', name: 'FTMO 2-Step · Challenge', rules: R({ targetPct: 10, dailyLossPct: 5, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'static', minDays: 4 }) },
-  { id: 'ftmo-2s-2', name: 'FTMO 2-Step · Verification', rules: R({ targetPct: 5, dailyLossPct: 5, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'static', minDays: 4 }) },
-  { id: 'ftmo-1s', name: 'FTMO 1-Step', rules: R({ targetPct: 10, dailyLossPct: 3, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'trailing', minDays: 0 }) },
+  // FTMO: đọc từ trang chọn gói trader.ftmo.com (18/11/2026). Lỗ ngày và lỗ tổng tính trên vốn ban đầu.
+  // Trang ghi thêm "thời gian giao dịch 14 ngày"; app chưa đếm hạn này. Mục tiêu bước 1 của gói 2 bước chưa thấy trên ảnh: giữ 10%, cần đối chiếu.
+  { id: 'ftmo-2s-1', name: 'FTMO 2-Step · Challenge', rules: R({ targetPct: 10, dailyLossPct: 5, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'static', minDays: 2 }) },
+  { id: 'ftmo-2s-2', name: 'FTMO 2-Step · Verification', rules: R({ targetPct: 5, dailyLossPct: 5, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'static', minDays: 2 }) },
+  { id: 'ftmo-1s', name: 'FTMO 1-Step', rules: R({ targetPct: 5, dailyLossPct: 3, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'trailing', minDays: 0, consistencyPct: 50 }) },
+  // Instant: sàn lỗ tổng bám theo đỉnh trong ngày; app đang tính theo đỉnh số dư cuối ngày nên có thể chậm hơn quỹ một chút.
+  { id: 'ftmo-instant', name: 'FTMO Instant (không có mục tiêu)', rules: R({ targetPct: 0, dailyLossPct: 3, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'trailing', minDays: 0, consistencyPct: 30 }) },
   { id: 'ftmo-funded', name: 'FTMO Account (đã cấp vốn)', rules: R({ targetPct: 0, dailyLossPct: 5, dailyBase: 'initial', maxLossPct: 10, maxLossType: 'static', minDays: 0, profitSplitPct: 80, payoutDays: 14 }) },
   // The5ers: đọc từ trang mua gói hub.the5ers.com (18/11/2026). Lỗ ngày tính từ số cao hơn giữa số dư và equity đầu ngày.
   // Số ngày giao dịch tối thiểu không hiện trên trang mua gói: giữ số cũ, cần đối chiếu.
@@ -87,7 +91,7 @@ const SIZES = [5000, 10000, 15000, 25000, 50000, 100000, 200000, 400000]
 export function suggestProp(broker: string, phase: string, balance?: number): PropConfig {
   const b = broker.toLowerCase().replace(/\s/g, '')
   const second = /2|verification|xác minh/i.test(phase)
-  const id = b.includes('ftmo') ? (second ? 'ftmo-2s-2' : 'ftmo-2s-1')
+  const id = b.includes('ftmo') ? (/instant/i.test(phase) ? 'ftmo-instant' : /1.?step|1 bước/i.test(phase) ? 'ftmo-1s' : second ? 'ftmo-2s-2' : 'ftmo-2s-1')
     : b.includes('5ers') ? (second ? '5ers-hs-2' : '5ers-hs-1')
     : b.includes('tentrade') ? (/instant/i.test(phase) ? 'ten-express-i' : 'ten-express')
     : b.includes('fundednext') ? (second ? 'fn-2s-2' : 'fn-2s-1')

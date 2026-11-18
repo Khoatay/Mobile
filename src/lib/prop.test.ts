@@ -22,7 +22,7 @@ describe('evaluateProp', () => {
     expect(s.totalRemaining).toBe(10000)
     expect(s.room).toBe(4000)
     expect(s.tradingDays).toBe(3)
-    expect(s.daysLeftToMin).toBe(1)
+    expect(s.daysLeftToMin).toBe(0)  // FTMO: tối thiểu 2 ngày giao dịch, đã có 3
   })
   it('hôm nay chưa có lệnh: còn nguyên giới hạn ngày', () => {
     const s = evaluateProp([mk(5, -3000)], cfg, now)
