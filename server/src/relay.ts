@@ -81,6 +81,46 @@ const hash = (t: string) => createHash('sha256').update(t).digest('hex')
 
 export function ensureTable(db: DB) {
   db.exec('create table if not exists bridge_tokens (user_id integer primary key references users(id) on delete cascade, token_hash text unique not null, created integer not null)')
+  db.exec('create table if not exists bridge_outages (id integer primary key, user_id integer not null references users(id) on delete cascade, start integer not null, end integer)')
+}
+
+/** Các lần máy MT5 mất kết nối gần đây (7 ngày), mới nhất trước. */
+export function outages(db: DB, uid: number) {
+  return db.prepare('select start, end from bridge_outages where user_id = ? and start > ? order by start desc limit 10').all(uid, Date.now() - 7 * 86_400_000) as { start: number; end: number | null }[]
+}
+
+const vnTime = (ms: number) => new Date(ms).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+const mins = (ms: number) => { const m = Math.round(ms / 60_000); return m < 60 ? `${m} phút` : `${Math.floor(m / 60)} giờ ${m % 60} phút` }
+
+/**
+ * Canh máy MT5 của từng khách: mất kết nối quá `graceMs` thì báo về Telegram (bảo vệ tài khoản đang không chạy),
+ * kết nối lại thì báo đã chạy lại và mất bao lâu. Chỉ canh máy đã thấy kết nối từ lúc máy chủ khởi động.
+ */
+export class Watchdog {
+  private state = new Map<number, { online: boolean; since: number; outage: number | null }>()
+  constructor(private db: DB, private relay: Relay, private send: (chat: number, text: string) => Promise<unknown>, private graceMs = 120_000) {}
+
+  tick(now = Date.now()) {
+    const rows = this.db.prepare('select b.user_id as uid, u.tg_chat as chat from bridge_tokens b join users u on u.id = b.user_id').all() as { uid: number; chat: number | null }[]
+    for (const { uid, chat } of rows) {
+      const on = this.relay.online(uid)
+      const s = this.state.get(uid)
+      if (!s) { if (on) this.state.set(uid, { online: true, since: now, outage: null }); continue }
+      if (s.online && !on) {
+        s.online = false
+        s.since = this.relay.lastSeen(uid) || now
+      } else if (!s.online && !on && s.outage == null && now - s.since >= this.graceMs) {
+        s.outage = Number(this.db.prepare('insert into bridge_outages (user_id, start) values (?, ?)').run(uid, s.since).lastInsertRowid)
+        if (chat) void this.send(chat, `⚠️ Máy chạy MT5 mất kết nối từ ${vnTime(s.since)}.\nBảo vệ tài khoản, copy lệnh và cảnh báo đang KHÔNG chạy. SL khẩn cấp đã đặt trên sàn vẫn còn.\nKiểm tra máy đó còn bật, còn mạng và bridge còn chạy.`)
+      } else if (!s.online && on) {
+        if (s.outage != null) {
+          this.db.prepare('update bridge_outages set end = ? where id = ?').run(now, s.outage)
+          if (chat) void this.send(chat, `✅ Máy chạy MT5 đã kết nối lại sau ${mins(now - s.since)}. Bảo vệ tài khoản chạy lại.`)
+        }
+        Object.assign(s, { online: true, since: now, outage: null })
+      }
+    }
+  }
 }
 
 /** Tạo mã mới (mã cũ hết hiệu lực). Chỉ trả mã một lần; máy chủ chỉ giữ bản băm. */

@@ -644,3 +644,4 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 .keep-going input { max-width: 140px; }
 .period-picker { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .period-picker input[type=date] { width: auto; }
+.bridge-link .outages ul { margin: 4px 0 8px; padding-left: 18px; }

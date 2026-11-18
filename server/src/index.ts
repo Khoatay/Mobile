@@ -6,7 +6,7 @@ import { Bot } from './bot'
 import { config, secureCookies } from './config'
 import { openDb } from './db'
 import { createHandler } from './http'
-import { Relay } from './relay'
+import { Relay, Watchdog, ensureTable } from './relay'
 import { initSecrets } from './secrets'
 import { TgReader } from './tg'
 
@@ -31,6 +31,10 @@ const reader = new TgReader(config.tgApiId, config.tgApiHash, path.join(config.d
 deps.reader = reader
 
 const server = createServer(createHandler(routes(deps), config.webDir))
+// Máy MT5 của khách mất kết nối quá 2 phút thì báo về Telegram của khách.
+ensureTable(db)
+const watchdog = new Watchdog(db, deps.relay, (chat, text) => bot.send(chat, text))
+setInterval(() => watchdog.tick(), 30_000).unref()
 // AI phân tích qua bridge có thể chạy vài phút: không cắt yêu cầu dài.
 server.requestTimeout = 0
 server.listen(config.port, '127.0.0.1', () => {

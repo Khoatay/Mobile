@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../lib/server'
 
-interface Status { online: boolean; lastSeen: number; hasToken: boolean }
+interface Status { online: boolean; lastSeen: number; hasToken: boolean; outages?: { start: number; end: number | null }[]; telegram?: boolean }
+
+const t = (ms: number) => new Date(ms).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+const dur = (ms: number) => { const m = Math.max(1, Math.round(ms / 60_000)); return m < 60 ? `${m} phút` : `${Math.floor(m / 60)} giờ ${m % 60} phút` }
 
 /** Nối máy chạy MT5 (PC hoặc VPS Windows của khách) với tài khoản web: tạo mã, xem trạng thái. */
 export default function BridgeLink() {
@@ -27,6 +30,13 @@ export default function BridgeLink() {
       <p className="bridge-status">
         <span className={st?.online ? 'led on' : 'led'} /> {st == null ? 'Đang kiểm tra…' : st.online ? 'Máy MT5 đang kết nối' : st.lastSeen ? `Mất kết nối từ ${new Date(st.lastSeen).toLocaleString('vi-VN')}` : 'Chưa có máy nào kết nối'}
       </p>
+      {st?.hasToken && !st.telegram && <p className="warn small">⚠ Chưa nối Telegram: máy MT5 mất kết nối thì bạn sẽ không được báo. Nối ở mục "Nhận lệnh qua Telegram" bên dưới.</p>}
+      {!!st?.outages?.length && (
+        <div className="outages">
+          <div className="muted small">Gián đoạn 7 ngày qua (lúc này bảo vệ tài khoản không chạy):</div>
+          <ul>{st.outages.map((o) => <li key={o.start} className="small">{t(o.start)} · {o.end ? `mất ${dur(o.end - o.start)}` : <strong className="neg">đang mất kết nối</strong>}</li>)}</ul>
+        </div>
+      )}
       {token ? (
         <>
           <ol className="steps">

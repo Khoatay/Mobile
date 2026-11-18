@@ -71,7 +71,7 @@ export function routes(d: AppDeps): Record<string, Handler> {
   return {
     // ---------- bridge trên máy khách ----------
     'POST /api/bridge/token': (r) => ({ token: relay.newToken(d.db, me(r).id) }),
-    'GET /api/bridge/status': (r) => { const u = me(r); return { online: d.relay.online(u.id), lastSeen: d.relay.lastSeen(u.id), hasToken: relay.hasToken(d.db, u.id) } },
+    'GET /api/bridge/status': (r) => { const u = me(r); return { online: d.relay.online(u.id), lastSeen: d.relay.lastSeen(u.id), hasToken: relay.hasToken(d.db, u.id), outages: relay.outages(d.db, u.id), telegram: !!u.tg_chat } },
     'GET /api/bridge/me': (r) => { const u = bridgeUser(r); return { email: u.email, plan: auth.planOf(u) } },
     'POST /api/bridge/poll': async (r) => (await d.relay.poll(bridgeUser(r).id, d.pollMs ?? 25_000)) ?? { id: '' },
     'POST /api/bridge/reply': (r) => ({ ok: d.relay.reply(bridgeUser(r).id, String(r.body.id), Number(r.body.status) || 200, r.body.body) }),

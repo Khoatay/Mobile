@@ -10,7 +10,7 @@ import { openDb } from '../src/db'
 import { createHandler } from '../src/http'
 import { initSecrets, open as openSecret, seal } from '../src/secrets'
 import { complete, listModels } from '../src/llm'
-import { Relay, toOpenAi, fromOpenAi } from '../src/relay'
+import { Relay, toOpenAi, fromOpenAi, Watchdog, ensureTable, newToken, outages } from '../src/relay'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -408,5 +408,32 @@ describe('đổi định dạng Claude ↔ OpenAI', () => {
   it('cắt lời, từ chối', () => {
     expect(fromOpenAi({ choices: [{ message: { content: 'x' }, finish_reason: 'length' }] }, 'm', false).stop_reason).toBe('max_tokens')
     expect(fromOpenAi({ choices: [{ message: { content: '', refusal: 'no' }, finish_reason: 'stop' }] }, 'm', false).stop_reason).toBe('refusal')
+  })
+})
+
+describe('canh máy MT5 mất kết nối', () => {
+  it('mất quá 2 phút thì báo Telegram, có lại thì báo; chớp mạng ngắn không báo', () => {
+    const db = openDb('', ':memory:')
+    ensureTable(db)
+    db.prepare("insert into users (id, email, pass, created, link_code, tg_chat) values (1, 'a@b.c', 'x', 0, 'c', 555)").run()
+    newToken(db, 1)
+    let online = true, seen = 0
+    const relay = { online: () => online, lastSeen: () => seen } as unknown as Relay
+    const sent: string[] = []
+    const w = new Watchdog(db, relay, async (_c, t) => { sent.push(t) }, 120_000)
+    w.tick(0)                                   // thấy kết nối lần đầu
+    online = false; seen = 10_000; w.tick(40_000) // vừa mất
+    w.tick(100_000)                             // mới 90 giây: chưa báo
+    online = true; w.tick(110_000)              // có lại nhanh: không báo gì
+    expect(sent).toEqual([])
+    online = false; seen = 200_000; w.tick(230_000); w.tick(330_000)  // mất 130 giây
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatch(/mất kết nối/)
+    w.tick(400_000)
+    expect(sent).toHaveLength(1)                // không báo lặp
+    online = true; w.tick(800_000)
+    expect(sent[1]).toMatch(/kết nối lại sau 10 phút/)
+    expect(outages(db, 1).length).toBe(0)       // mốc thời gian giả quá cũ so với 7 ngày gần đây
+    expect((db.prepare('select start, end from bridge_outages').get() as { start: number; end: number })).toEqual({ start: 200_000, end: 800_000 })
   })
 })
