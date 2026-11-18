@@ -1,4 +1,4 @@
-# FX Desk
+# Golden Duck
 
 Công cụ cho người giao dịch forex, chạy trên trình duyệt máy tính. Dữ liệu lưu ngay trong trình duyệt (localStorage), không gửi lên máy chủ nào.
 
@@ -29,6 +29,10 @@ Công cụ cho người giao dịch forex, chạy trên trình duyệt máy tín
 - **Thu chi đầu tư**: ghi khoản bỏ ra (phí quỹ, nạp tài khoản, công cụ, khoá học) và thu về (rút từ quỹ, từ tài khoản, backcom, affiliate); lấy nạp/rút từ MT5; tính lãi/lỗ tổng và tỷ suất trên tiền bỏ ra.
 - **Chia sẻ cộng đồng**: tạo banner và nội dung cho tín hiệu, kết quả lệnh, thống kê theo ngày/tuần/tháng; tải ảnh, sao chép, hoặc gửi thẳng lên nhóm Telegram trong danh sách cho phép.
 - **Hướng dẫn** và **Cá nhân hoá**: bài hướng dẫn dùng app, kết nối, quỹ (cách vận hành, luật từng chương trình), sàn và giao dịch cơ bản, kèm nút mở link giới thiệu của bạn; link IB, affiliate và mã giảm giá khai báo một chỗ ở Cá nhân hoá; thư viện link bài viết, video của riêng bạn; tên thương hiệu, màu, link giới thiệu, dòng cảnh báo, ẩn số tiền khi chia sẻ.
+
+## Thương hiệu
+
+Tên mặc định **Golden Duck**, logo là icon vịt 3D `public/golden-duck.svg` (vẽ riêng cho app). Logo dùng ở thanh bên, góc trên bản đơn giản, màn hình chào, favicon, icon khi thêm vào màn hình điện thoại (`apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `manifest.webmanifest`), banner chia sẻ và trang thành tích công khai. IB vẫn đổi được tên, khẩu hiệu và màu ở Cá nhân hoá; ai còn tên cũ "FX Desk" sẽ tự hiện Golden Duck.
 
 ## Bản đơn giản và bản đầy đủ
 

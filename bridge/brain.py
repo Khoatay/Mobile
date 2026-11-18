@@ -1,5 +1,5 @@
 """
-Kho kiến thức và agent phân tích cho FX Desk.
+Kho kiến thức và agent phân tích cho Golden Duck.
 
 - Bộ kiến thức (playbook) lưu trên đĩa, trong thư mục bridge/knowledge/: tên, bộ quy tắc, tài liệu nguồn
   (PDF, văn bản, phụ đề video) và lịch sử trò chuyện khi dạy.

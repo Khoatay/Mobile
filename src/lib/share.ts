@@ -1,3 +1,4 @@
+import { BRAND_NAME, brandName } from './brand'
 import type { PartnerLinks } from './partners'
 import { parseSymbol, pipSize } from './forex'
 import { pct, signed } from './format'
@@ -20,7 +21,7 @@ export interface Profile {
   accentCustom?: boolean
 }
 
-export const DEFAULT_PROFILE: Profile = { brand: 'FX Desk', tagline: '', accent: '#2a78d6', link: '', disclaimer: true, hideMoney: true, partners: {} }
+export const DEFAULT_PROFILE: Profile = { brand: BRAND_NAME, tagline: '', accent: '#2a78d6', link: '', disclaimer: true, hideMoney: true, partners: {} }
 export const ACCENTS = ['#2a78d6', '#1baf7a', '#eb6834', '#6250d6', '#d55181', '#c98500']
 export const DISCLAIMER = 'Chia sẻ góc nhìn cá nhân, không phải khuyến nghị đầu tư. Giao dịch có rủi ro mất vốn.'
 
@@ -112,7 +113,8 @@ export function statsPost(trades: Trade[], periodLabel: string, ccy: string, p: 
 /** Tác giả hiện ở góc trên bên phải banner: ảnh đại diện tròn và tên. */
 export interface BannerAuthor { name: string; handle?: string; image: HTMLImageElement | null }
 
-export function drawBanner(canvas: HTMLCanvasElement, spec: BannerSpec, p: Profile, author?: BannerAuthor) {
+/** `logo`: icon thương hiệu vẽ cạnh tên ở góc trên trái; không có thì chỉ có chữ. */
+export function drawBanner(canvas: HTMLCanvasElement, spec: BannerSpec, p: Profile, author?: BannerAuthor, logo?: HTMLImageElement | null) {
   const W = 1080
   canvas.width = canvas.height = W
   const g = canvas.getContext('2d')
@@ -130,11 +132,13 @@ export function drawBanner(canvas: HTMLCanvasElement, spec: BannerSpec, p: Profi
   g.fillStyle = p.accent
   g.fillRect(0, 0, 16, W)
 
+  if (logo) g.drawImage(logo, 80, 56, 100, 100)
+  const textX = logo ? 204 : 80
   g.textBaseline = 'alphabetic'
   g.fillStyle = '#f0efec'
   g.font = font(40, 700)
-  g.fillText(p.brand || 'FX Desk', 80, 110)
-  if (p.tagline) { g.fillStyle = '#9a988f'; g.font = font(26); g.fillText(p.tagline, 80, 152, author ? W - 520 : W - 160) }
+  g.fillText(brandName(p.brand), textX, 110)
+  if (p.tagline) { g.fillStyle = '#9a988f'; g.font = font(26); g.fillText(p.tagline, textX, 152, author ? W - 440 - textX : W - 80 - textX) }
 
   if (author && (author.name || author.image)) {
     const r = 40, cx = W - 80 - r, cy = 108

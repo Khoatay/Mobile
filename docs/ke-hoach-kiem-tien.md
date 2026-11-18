@@ -1,4 +1,4 @@
-# Kế hoạch kiếm tiền từ FX Desk
+# Kế hoạch kiếm tiền từ Golden Duck
 
 Ghi chú từ buổi trao đổi ngày 16/11/2026. Chưa triển khai; dùng để định hướng các bước tiếp theo.
 

@@ -14,6 +14,7 @@ import type { AutopostApi } from '../lib/useAutopost'
 import { usePersistent } from '../lib/store'
 import { BIAS_TEXT, type AnalysisResult } from '../lib/kb'
 import { loadImage } from '../lib/images'
+import { BRAND_LOGO } from '../lib/brand'
 import { parseSignal, type Signal } from '../lib/signals'
 import type { TgMessage } from '../lib/bridge'
 import type { UserProfile } from '../lib/user'
@@ -33,6 +34,8 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
   const [picked, setPicked] = useState('')
   const [avatarImg, setAvatarImg] = useState<HTMLImageElement | null>(null)
   useEffect(() => { loadImage(user.avatar).then(setAvatarImg) }, [user.avatar])
+  const [logoImg, setLogoImg] = useState<HTMLImageElement | null>(null)
+  useEffect(() => { loadImage(BRAND_LOGO).then(setLogoImg) }, [])
   // Tín hiệu đọc được từ các kênh Telegram đang theo dõi, mới nhất trước.
   const tgSignals = useMemo(() => messages.map(parseSignal).filter((x): x is Signal => !!x && x.entry != null && x.sl != null).sort((a, b) => b.time - a.time).slice(0, 40), [messages])
   function applySignal(id: string) {
@@ -111,7 +114,7 @@ export default function Share({ bridge, trades, settings, profile, labels, infos
   useEffect(() => { setCaption(post?.caption ?? '') }, [post])
   // Ảnh kết quả lệnh và thống kê có ảnh đại diện, tên của người đăng.
   const author = kind !== 'signal' && (user.displayName || user.avatar) ? { name: user.displayName || user.username, handle: user.username ? `@${user.username}` : undefined, image: avatarImg } : undefined
-  useEffect(() => { if (post && canvas.current) drawBanner(canvas.current, post.spec, profile, author) }, [post, profile, avatarImg, user.displayName, user.username, kind])
+  useEffect(() => { if (post && canvas.current) drawBanner(canvas.current, post.spec, profile, author, logoImg) }, [post, profile, avatarImg, logoImg, user.displayName, user.username, kind])
 
   const wrongSide = kind === 'signal' && [entry, sl].every(Number.isFinite) && (side === 'buy' ? sl >= entry : sl <= entry)
 

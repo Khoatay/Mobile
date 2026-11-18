@@ -6,6 +6,8 @@ export interface TrackOptions {
   title: string
   subtitle: string
   brand: string
+  /** Logo dạng data URL, nhúng thẳng vào trang; trống thì chỉ có chữ. */
+  logo?: string
   accent: string
   hideMoney: boolean
   currency: string
@@ -96,7 +98,7 @@ export function trackRecordHtml(trades: Trade[], o: TrackOptions, hash: string):
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
 .wrap{max-width:980px;margin:0 auto;padding:28px max(16px,env(safe-area-inset-left)) 48px}
 header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:18px}
-.brand{font-weight:800;color:var(--accent);letter-spacing:.02em;text-transform:uppercase;font-size:13px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:800;color:var(--accent);letter-spacing:.02em;text-transform:uppercase;font-size:13px}.brand img{width:32px;height:32px;border-radius:9px}
 h1{margin:4px 0;font-size:28px;line-height:1.2}p{margin:0}.sub{color:var(--ink2)}
 .badge{display:inline-flex;gap:6px;align-items:center;background:color-mix(in srgb,var(--pos) 14%,transparent);color:var(--pos);font-weight:700;font-size:13px;padding:5px 12px;border-radius:999px}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0}
@@ -112,7 +114,7 @@ th:first-child,td:first-child{text-align:left}.pos{color:var(--pos)}.neg{color:v
 .cta a{background:var(--accent);color:#fff;text-decoration:none;font-weight:700;padding:10px 18px;border-radius:10px}
 footer{color:var(--muted);font-size:12px;margin-top:18px}code{font-size:11.5px;word-break:break-all}
 </style></head><body><div class="wrap">
-<header><div><div class="brand">${esc(o.brand)}</div><h1>${esc(o.title)}</h1>${o.subtitle ? `<p class="sub">${esc(o.subtitle)}</p>` : ''}<p class="sub">${d.firstDay} – ${d.lastDay} · ${d.n} lệnh</p></div>
+<header><div><div class="brand">${o.logo ? `<img src="${esc(o.logo)}" alt="">` : ''}${esc(o.brand)}</div><h1>${esc(o.title)}</h1>${o.subtitle ? `<p class="sub">${esc(o.subtitle)}</p>` : ''}<p class="sub">${d.firstDay} – ${d.lastDay} · ${d.n} lệnh</p></div>
 <span class="badge">✓ ${Math.round(d.verifiedShare * 100)}% lệnh đọc thẳng từ MT5</span></header>
 <div class="tiles">
 ${tile(o.hideMoney ? 'Tổng pip' : `Lãi/lỗ ròng (${esc(o.currency)})`, o.hideMoney ? sign(d.pips) : sign(d.net, 2), tone(o.hideMoney ? d.pips : d.net))}

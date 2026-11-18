@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { DEFAULT_AUTOPOST, EMPTY_STATE, morningDue, morningText, newResults, weekKey, weeklyDue, ymd, type AutopostConfig, type AutopostState, type QueuedPost } from './autopost'
 import { bridgeGet, bridgePost, type Mt5Deal, type Mt5Order } from './bridge'
 import { loadImage } from './images'
+import { BRAND_LOGO } from './brand'
 import { dealsToTrades } from './mt5deals'
 import type { CalEvent } from './news'
 import { drawBanner, footer, periodTrades, resultPost, statsPost, type Post, type Profile } from './share'
@@ -24,8 +25,8 @@ interface Deps { online: boolean; trades: Trade[]; setTrades: (t: Trade[]) => vo
 /** Vẽ banner ra ảnh PNG (data URL), có ảnh đại diện người đăng. */
 async function bannerImage(post: Post, profile: Profile, user: UserProfile): Promise<string> {
   const c = document.createElement('canvas')
-  const img = await loadImage(user.avatar)
-  drawBanner(c, post.spec, profile, user.displayName || user.avatar ? { name: user.displayName || user.username, handle: user.username ? `@${user.username}` : undefined, image: img } : undefined)
+  const [img, logo] = await Promise.all([loadImage(user.avatar), loadImage(BRAND_LOGO)])
+  drawBanner(c, post.spec, profile, user.displayName || user.avatar ? { name: user.displayName || user.username, handle: user.username ? `@${user.username}` : undefined, image: img } : undefined, logo)
   return c.toDataURL('image/png')
 }
 

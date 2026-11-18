@@ -4,6 +4,7 @@ import Icon, { type IconName } from './components/Icon'
 import { DEFAULT_USER, type UserProfile } from './lib/user'
 import { useBrandPack } from './lib/brandpack'
 import { EDITION } from './lib/edition'
+import { BRAND_LOGO, brandName } from './lib/brand'
 import { partnerLinks } from './lib/partners'
 import { resolveInfos, type AccountInfo } from './lib/accounts'
 import { PREVIEW, useBridge, useTelegramMessages } from './lib/bridge'
@@ -63,7 +64,9 @@ export default function App() {
   // Bản trader lấy thương hiệu từ gói cấu hình của IB; màu nhấn và việc ẩn tiền là lựa chọn riêng của người dùng.
   const profile = useMemo(() => {
     const base = { ...DEFAULT_PROFILE, ...stored }
-    return EDITION === 'trader' ? { ...base, ...pack.brand, accent: stored.accentCustom ? stored.accent : pack.brand.accent } : base
+    const p = EDITION === 'trader' ? { ...base, ...pack.brand, accent: stored.accentCustom ? stored.accent : pack.brand.accent } : base
+    // Tên trống hoặc còn tên cũ "FX Desk" thì hiện Golden Duck.
+    return { ...p, brand: brandName(p.brand) }
   }, [stored, pack.brand])
   const links = useMemo(() => partnerLinks(pack.partners), [pack.partners])
   const locked = useMemo(() => lockedTabs(pack.proFeatures, isPro), [pack.proFeatures, isPro])
@@ -78,7 +81,7 @@ export default function App() {
   const messages = useTelegramMessages(!!bridge.status?.telegram.connected)
 
   useEffect(() => { document.documentElement.style.setProperty('--accent', profile.accent) }, [profile.accent])
-  useEffect(() => { document.title = profile.brand || 'FX Desk' }, [profile.brand])
+  useEffect(() => { document.title = profile.brand }, [profile.brand])
 
   // Nhãn từng tài khoản (tên, broker, nhóm…): mặc định từ bridge, phần người dùng sửa lưu trong trình duyệt.
   const [storedInfo, setStoredInfo] = usePersistent<Record<string, Partial<AccountInfo>>>('fx.accountInfo', {})
@@ -110,8 +113,8 @@ export default function App() {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <span className="logo" aria-hidden="true">{(profile.brand || 'FX').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase() || 'FX'}</span>
-          <span className="brand-text">{profile.brand || 'FX Desk'}{profile.tagline && <small>{profile.tagline}</small>}</span>
+          <img className="logo logo-img" src={BRAND_LOGO} alt="" />
+          <span className="brand-text">{profile.brand}{profile.tagline && <small>{profile.tagline}</small>}</span>
         </div>
         <ModeSwitch mode="full" onChange={(m) => { setMode(m); window.scrollTo(0, 0) }} dark />
         <nav>

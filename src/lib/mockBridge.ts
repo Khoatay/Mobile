@@ -497,7 +497,7 @@ export function seed() {
   const now = T0
   put('fx.brandpack', {
     version: 1,
-    brand: { brand: 'FX Desk', tagline: '', accent: '#2a78d6', link: '', disclaimer: true },
+    brand: { brand: 'Golden Duck', tagline: '', accent: '#2a78d6', link: '', disclaimer: true },
     partners: [
       { id: 'exness', name: 'Exness', kind: 'broker', url: 'https://www.exness.com', code: '', cta: 'Mở tài khoản Exness', pitch: '(Ví dụ) Hoàn một phần phí cho khách của nhóm', visible: true },
       { id: 'icmarkets', name: 'IC Markets', kind: 'broker', url: 'https://www.icmarkets.com', code: '', cta: '', pitch: '', visible: true },

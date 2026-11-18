@@ -1,5 +1,5 @@
 """
-FX Desk bridge: chương trình nền chạy trên máy Windows có cài MT5.
+Golden Duck bridge: chương trình nền chạy trên máy Windows có cài MT5.
 
 - Đọc nhiều tài khoản MT5 cùng lúc. Mỗi tài khoản chạy trong một tiến trình riêng, nối với một bản MT5
   cài ở thư mục riêng (một bản MT5 chỉ đăng nhập được một tài khoản tại một thời điểm).
@@ -275,7 +275,7 @@ class Mt5:
             return self._send({
                 "action": mt5.TRADE_ACTION_DEAL, "symbol": name, "volume": volume,
                 "type": mt5.ORDER_TYPE_BUY if buy else mt5.ORDER_TYPE_SELL, "price": price,
-                "sl": sl, "tp": tp, "deviation": 20, "magic": 20261115, "comment": "FX Desk",
+                "sl": sl, "tp": tp, "deviation": 20, "magic": 20261115, "comment": "Golden Duck",
                 "type_time": mt5.ORDER_TIME_GTC, "type_filling": self._filling(info),
             })
 
@@ -294,11 +294,11 @@ class Mt5:
             return self._send({
                 "action": mt5.TRADE_ACTION_DEAL, "symbol": pos.symbol, "volume": pos.volume, "position": pos.ticket,
                 "type": mt5.ORDER_TYPE_SELL if was_buy else mt5.ORDER_TYPE_BUY, "price": tick.bid if was_buy else tick.ask,
-                "deviation": 20, "magic": 20261115, "comment": "FX Desk close",
+                "deviation": 20, "magic": 20261115, "comment": "Golden Duck close",
                 "type_time": mt5.ORDER_TIME_GTC, "type_filling": self._filling(info),
             })
 
-    def close_all(self, reason="FX Desk guard"):
+    def close_all(self, reason="Golden Duck guard"):
         """Đóng mọi lệnh đang mở. Trả về số lệnh đã đóng và lỗi nếu có (không dừng giữa chừng)."""
         with self.lock:
             self._tradable()
@@ -865,7 +865,7 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas):
         def do_POST(self):
             # Tiêu đề riêng buộc trình duyệt hỏi trước (preflight), nên form trên trang web lạ không gửi lệnh được.
             if not self.local_only() or self.headers.get("X-FXDesk") != "1":
-                return self.send(403, {"error": "Chỉ chấp nhận yêu cầu từ FX Desk trên chính máy này"})
+                return self.send(403, {"error": "Chỉ chấp nhận yêu cầu từ Golden Duck trên chính máy này"})
             url = urlparse(self.path)
             size = int(self.headers.get("Content-Length") or 0)
             # Tài liệu PDF gửi lên có thể lớn; các yêu cầu khác giữ giới hạn nhỏ.
@@ -944,7 +944,7 @@ def main():
     tg.start()
     port = int(cfg.get("port", 8787))
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(registry, tg, kb, brain, calendar, auto, personas))
-    print(f"FX Desk bridge đang chạy tại http://127.0.0.1:{port} (Ctrl+C để dừng)")
+    print(f"Golden Duck bridge đang chạy tại http://127.0.0.1:{port} (Ctrl+C để dừng)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

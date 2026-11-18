@@ -1,3 +1,4 @@
+import { BRAND_NAME } from './brand'
 import { useEffect, useState } from 'react'
 import type { Community, Product } from './catalog'
 import { BRAND_URL, EDITION } from './edition'
@@ -30,7 +31,7 @@ export interface BrandPack {
 
 export const EMPTY_PACK: BrandPack = {
   version: 1,
-  brand: { brand: 'FX Desk', tagline: '', accent: '#2a78d6', link: '', disclaimer: true },
+  brand: { brand: BRAND_NAME, tagline: '', accent: '#2a78d6', link: '', disclaimer: true },
   partners: mergePartners(undefined),
   offers: [], products: [], communities: [],
   proForAll: false, proUrl: '', proFeatures: DEFAULT_PRO_FEATURES, proPrice: '', updatedAt: 0,

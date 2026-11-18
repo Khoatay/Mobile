@@ -66,7 +66,7 @@ class Automation:
             del self.events[:-200]
         print(f"[{kind}] {label}: {text}")
         if notify and self.alerts.get("notify", True):
-            self.tg.send_me(f"FX Desk · {label}\n{text}")
+            self.tg.send_me(f"Golden Duck · {label}\n{text}")
 
     def _label(self, account_id):
         a = self.registry.get(account_id) if account_id else None
@@ -154,7 +154,7 @@ class Automation:
     def test_notify(self):
         if not self.tg.connected:
             raise RuntimeError("Telegram chưa kết nối")
-        self.tg.send_me("FX Desk: tin nhắn thử. Cảnh báo bảo vệ tài khoản và tin mạnh sẽ được gửi vào đây.")
+        self.tg.send_me("Golden Duck: tin nhắn thử. Cảnh báo bảo vệ tài khoản và tin mạnh sẽ được gửi vào đây.")
         return {"sent": True}
 
     def locked(self, account):

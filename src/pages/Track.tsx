@@ -5,6 +5,7 @@ import { inScope, scopeLabel, type InfoMap } from '../lib/accounts'
 import type { PartnerLinks } from '../lib/partners'
 import type { Profile } from '../lib/share'
 import { download } from '../lib/store'
+import { logoDataUrl } from '../lib/brand'
 import { dataHash, trackRecordHtml } from '../lib/trackrecord'
 import type { Trade } from '../lib/types'
 
@@ -28,12 +29,14 @@ export default function Track({ trades, infos, profile, links, currency }: { tra
     return trades.filter((t) => inScope(scope, t.account, infos) && (!days || t.closeTime >= latest - days * 86_400_000) && (!onlyMt5 || (t.source === 'mt5' && t.account)))
   }, [trades, scope, days, onlyMt5, infos])
   useEffect(() => { dataHash(list).then(setHash) }, [list])
+  const [logo, setLogo] = useState('')
+  useEffect(() => { logoDataUrl().then(setLogo) }, [])
 
   const link = cta ? links[cta] : undefined
   const html = useMemo(() => hash ? trackRecordHtml(list, {
-    title, subtitle: subtitle || (scope ? scopeLabel(scope, infos) : ''), brand: profile.brand || 'FX Desk', accent: profile.accent,
+    title, subtitle: subtitle || (scope ? scopeLabel(scope, infos) : ''), brand: profile.brand, logo, accent: profile.accent,
     hideMoney, currency, ctaLabel: link?.cta || (link?.name ? `Mở tài khoản ${link.name}` : ''), ctaUrl: link?.url || profile.link, disclaimer: profile.disclaimer, recent,
-  }, hash) : '', [list, hash, title, subtitle, scope, hideMoney, recent, link, profile, currency])
+  }, hash) : '', [list, hash, logo, title, subtitle, scope, hideMoney, recent, link, profile, currency])
 
   const copy = async () => {
     try { await navigator.clipboard.writeText(html); setMsg('Đã sao chép mã HTML.') } catch { setMsg('Trình duyệt không cho sao chép tự động.') }
