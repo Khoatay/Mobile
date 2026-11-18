@@ -33,6 +33,7 @@ from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
 from automation import Automation
+from tgbot import TelegramBot
 from brain import Brain, Knowledge, Personas, chat
 
 HERE = Path(__file__).resolve().parent
@@ -765,7 +766,7 @@ class Calendar:
 
 # ---------------------------------------------------------------------------- HTTP
 
-def make_handler(registry, tg, kb, brain, calendar, auto, personas):
+def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot):
 
     def send_post(body):
         image = str(body.get("image") or "")
@@ -860,6 +861,7 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas):
                 "/ai/status": brain.status,
                 "/automation": auto.snapshot,
                 "/news/watch": auto.news_snapshot,
+                "/tgbot": bot.status,
                 "/personas": personas.list,
             }
             if url.path not in routes:
@@ -908,6 +910,14 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas):
                 self.answer(lambda: auto.set_news_watch(body))
             elif url.path == "/news/ack":
                 self.answer(lambda: auto.ack_news(body))
+            elif url.path == "/tgbot/token":
+                self.answer(lambda: bot.set_token(body))
+            elif url.path == "/tgbot/unlink":
+                self.answer(bot.unlink)
+            elif url.path == "/tgbot/remove":
+                self.answer(bot.remove)
+            elif url.path == "/tgbot/test":
+                self.answer(bot.test)
             elif url.path == "/kb/save":
                 self.answer(lambda: kb.save(body))
             elif url.path == "/kb/delete":
@@ -947,13 +957,17 @@ def main():
     personas = Personas(kb)
     calendar = Calendar()
     auto = Automation(registry, tg, calendar)
+    bot = TelegramBot()
+    bot.on_stop = auto.stop_all_news
+    auto.bot = bot
+    bot.start()
     auto.start()
     print(f"[ai] {'Đã có khoá API' if brain.status()['configured'] else 'Chưa có khoá API: thêm anthropic_api_key vào config.json để dùng phần Học và phân tích'} · model {brain.model}")
     for a in registry.list():
         print(f"[mt5] {a.label} ({a.type}){' — CHO PHÉP VÀO LỆNH' if a.tradable else ''}: đang kết nối…")
     tg.start()
     port = int(cfg.get("port", 8787))
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(registry, tg, kb, brain, calendar, auto, personas))
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(registry, tg, kb, brain, calendar, auto, personas, bot))
     print(f"Golden Duck bridge đang chạy tại http://127.0.0.1:{port} (Ctrl+C để dừng)")
     try:
         server.serve_forever()

@@ -11,3 +11,4 @@ dist-preview
 bridge/knowledge/
 dist-trader
 bridge/automation.json
+bridge/telegram_bot.json

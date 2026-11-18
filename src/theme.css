@@ -624,3 +624,9 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 .news-alert-list > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .watch-grid .seg { flex-wrap: wrap; }
 .watch-grid .seg button { white-space: nowrap; }
+
+/* Hồ sơ: nối Telegram */
+.tg-steps { margin: 8px 0 12px; padding-left: 20px; line-height: 1.6; display: grid; gap: 4px; }
+.tg-steps li.done { color: var(--pos); }
+.tg-token { flex: 1; min-width: 220px; }
+.tg-ok { margin: 4px 0; }

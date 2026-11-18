@@ -158,6 +158,10 @@ const calendar: CalEvent[] = [
   { title: 'Bank Holiday', currency: 'CAD', date: at(90), impact: 'Holiday', forecast: '', previous: '' },
 ]
 
+// ---------- bot Telegram (giả lập): dán token bất kỳ đúng dạng, 6 giây sau coi như đã bấm Start
+const bot = { token: '', linked: false, chat_name: '', since: 0 }
+const botStatus = () => ({ configured: !!bot.token, username: bot.token ? 'GoldenDuckCuaBanBot' : '', linked: bot.linked, chat_name: bot.chat_name, code: bot.token ? 'a1b2c3d4' : '', link: bot.token ? 'https://t.me/GoldenDuckCuaBanBot?start=a1b2c3d4' : '', error: '' })
+
 // ---------- cảnh báo tin (giả lập giống bridge): bật sẵn cho tin mạnh của USD, báo trước 60 phút, nhắc lại mỗi 1 phút
 let newsWatch: NewsWatchConfig = { ...DEFAULT_WATCH, currencies: ['USD'], lead_min: 60, repeat_min: 1 }
 const newsAcks = new Set<string>()
@@ -333,6 +337,7 @@ export async function mockGet(path: string): Promise<unknown> {
     case '/telegram/messages': return messages.filter((m) => m.date > Number(q('after') || 0))
     case '/calendar': return calendar
     case '/news/watch': newsTick(); return newsSnapshot()
+    case '/tgbot': { if (bot.token && !bot.linked && Date.now() - bot.since > 6000) { bot.linked = true; bot.chat_name = 'Bạn (xem trước)' } return botStatus() }
     case '/kb': return JSON.parse(JSON.stringify(playbooks))
     case '/automation': return autoSnapshot()
     case '/personas': return personaStore()
@@ -449,6 +454,10 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
     } else delete auto.guards[id]
     return autoSnapshot()
   }
+  if (path === '/tgbot/token') { await wait(600); if (!/^\d+:[\w-]{10,}$/.test(String(body.token))) throw new Error('Token không đúng dạng. Token có dạng 123456789:AA... do @BotFather gửi'); Object.assign(bot, { token: String(body.token), linked: false, since: Date.now() }); return botStatus() }
+  if (path === '/tgbot/unlink') { Object.assign(bot, { linked: false, chat_name: '', since: Date.now() }); return botStatus() }
+  if (path === '/tgbot/remove') { Object.assign(bot, { token: '', linked: false, chat_name: '' }); return botStatus() }
+  if (path === '/tgbot/test') { if (!bot.linked) throw new Error('Bot chưa nối'); return { sent: true } }
   if (path === '/news/watch') { newsWatch = { ...newsWatch, ...(body.config as NewsWatchConfig) }; newsTick(); return newsSnapshot() }
   if (path === '/news/ack') { for (const k of body.all ? Object.keys(newsActive) : [String(body.key)]) { newsAcks.add(k); delete newsActive[k] } return newsSnapshot() }
   if (path === '/automation/unlock') { const id = String(body.account); const lk = auto.locks[id]; if (lk?.unlock_at && lk.unlock_at > Date.now() / 1000) throw new Error(lk.unlock_at >= lk.until ? 'Khoá cứng vì chạm giới hạn lỗ: tự mở lúc hết ngày máy chủ, không mở tay được.' : 'Khoá cứng: chưa hết 30 phút chờ.'); delete auto.locks[id]; auto.events.unshift({ at: Date.now(), kind: 'unlock', account: id, label: find(id).label, text: 'Đã mở khoá bằng tay.' }); closedToday[id] = 0; return autoSnapshot() }

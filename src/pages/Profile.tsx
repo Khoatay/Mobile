@@ -5,8 +5,9 @@ import { EXPERIENCE, MARKETS, squareAvatar, STYLES, validUsername, type UserProf
 import { computeStats } from '../lib/stats'
 import { pct } from '../lib/format'
 import type { Trade } from '../lib/types'
+import TelegramConnect from '../components/TelegramConnect'
 
-export default function Profile({ user, setUser, trades }: { user: UserProfile; setUser: (u: UserProfile) => void; trades: Trade[] }) {
+export default function Profile({ user, setUser, trades, online }: { user: UserProfile; setUser: (u: UserProfile) => void; trades: Trade[]; online: boolean }) {
   const [err, setErr] = useState('')
   const file = useRef<HTMLInputElement>(null)
   const set = (p: Partial<UserProfile>) => setUser({ ...user, ...p })
@@ -66,10 +67,12 @@ export default function Profile({ user, setUser, trades }: { user: UserProfile; 
           </div>
         </div>
         <div className="row">
-          <Field label="Telegram"><input value={user.telegram} placeholder="@ten_cua_ban" onChange={(e) => set({ telegram: e.target.value.trim() })} /></Field>
+          <Field label="Telegram" hint="Chỉ để hiện trên hồ sơ. Nhận cảnh báo thì nối ở khung bên dưới"><input value={user.telegram} placeholder="@ten_cua_ban" onChange={(e) => set({ telegram: e.target.value.trim() })} /></Field>
           <Field label="Facebook"><input value={user.facebook} placeholder="https://facebook.com/…" onChange={(e) => set({ facebook: e.target.value.trim() })} /></Field>
         </div>
       </section>
+
+      <TelegramConnect online={online} />
 
       <section className="card">
         <h3>Đăng nhập</h3>

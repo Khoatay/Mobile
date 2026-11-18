@@ -56,6 +56,7 @@ class Automation:
         self.news_watch = {**NEWS_WATCH_DEFAULT, **data.get("news_watch", {})}
         self.news_acks = set(data.get("news_acks", []))  # tin người dùng đã bấm "Tắt"
         self.news_active = {}  # tin đang nhắc: key -> lần gửi gần nhất, số lần, thông tin tin
+        self.bot = None  # bot Telegram nối ở trang Hồ sơ (gắn từ bridge.py)
 
     # ------------------------------------------------------------ lưu trạng thái
     def _save(self):
@@ -71,7 +72,7 @@ class Automation:
             del self.events[:-200]
         print(f"[{kind}] {label}: {text}")
         if notify and self.alerts.get("notify", True):
-            self.tg.send_me(f"Golden Duck · {label}\n{text}")
+            self.notify(f"{label}\n{text}")
 
     def _label(self, account_id):
         a = self.registry.get(account_id) if account_id else None
@@ -84,7 +85,7 @@ class Automation:
                 "guards": self.guards, "states": self.states, "locks": self.locks, "events": list(reversed(self.events[-100:])),
                 "alerts": self.alerts, "copier": self.copier,
                 "copyState": {"started": self.copy_state["started"], "last": self.copy_state["last"], "error": self.copy_state["error"]},
-                "telegram": bool(self.tg.connected),
+                "telegram": self.telegram_ready(),
             }
 
     def set_guard(self, body):
@@ -162,7 +163,7 @@ class Automation:
     def news_snapshot(self):
         with self.lock:
             active = [{"key": k, **v} for k, v in self.news_active.items() if k not in self.news_acks]
-            return {"config": self.news_watch, "active": sorted(active, key=lambda x: x["at"]), "acks": sorted(self.news_acks)[-200:], "telegram": bool(self.tg.connected)}
+            return {"config": self.news_watch, "active": sorted(active, key=lambda x: x["at"]), "acks": sorted(self.news_acks)[-200:], "telegram": self.telegram_ready()}
 
     def set_news_watch(self, body):
         cfg = body.get("config") or {}
@@ -229,16 +230,29 @@ class Automation:
                 if cfg.get("telegram", True):
                     self.notify(text)
 
+    def telegram_ready(self):
+        return bool((self.bot and self.bot.chat_id is not None) or self.tg.connected)
+
     def notify(self, text):
-        """Gửi một tin cảnh báo về điện thoại qua Telegram (Saved Messages của tài khoản đã đăng nhập)."""
+        """Gửi cảnh báo về điện thoại: qua bot đã nối ở trang Hồ sơ; chưa có bot thì vào Saved Messages của tài khoản Telegram đã đăng nhập."""
+        if self.bot and self.bot.send(f"Golden Duck · {text}"):
+            return
         try:
-            self.tg.send_me(f"Golden Duck\n{text}")
+            self.tg.send_me(f"Golden Duck · {text}")
         except Exception as ex:
             print(f"[telegram] Không gửi được: {ex}")
 
+    def stop_all_news(self):
+        """Người dùng gõ "tắt" trong Telegram: dừng mọi cảnh báo tin đang nhắc. Trả về số tin đã tắt."""
+        n = len([k for k in self.news_active if k not in self.news_acks])
+        self.ack_news({"all": True})
+        return n
+
     def test_notify(self):
+        if self.bot and self.bot.chat_id is not None:
+            return self.bot.test()
         if not self.tg.connected:
-            raise RuntimeError("Telegram chưa kết nối")
+            raise RuntimeError("Telegram chưa kết nối. Nối bot ở trang Hồ sơ")
         self.tg.send_me("Golden Duck: tin nhắn thử. Cảnh báo bảo vệ tài khoản và tin mạnh sẽ được gửi vào đây.")
         return {"sent": True}
 

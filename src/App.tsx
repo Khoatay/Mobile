@@ -184,7 +184,7 @@ export default function App() {
         {tab === 'offers' && <Offers links={links} bridge={bridge} disclaimer={profile.disclaimer} pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'shop' && <Shop pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'community' && <Community pack={pack} setPack={canEdit ? setPack : null} />}
-        {tab === 'profile' && <ProfilePage user={user} setUser={setUser} trades={trades} />}
+        {tab === 'profile' && <ProfilePage user={user} setUser={setUser} trades={trades} online={bridge.online} />}
         {tab === 'chat' && <Chat bridge={ownBridge} trades={trades} infos={infos} />}
         {tab === 'track' && <Track trades={trades} infos={infos} profile={profile} links={links} currency={settings.accountCcy} />}
         {tab === 'guides' && <Guides links={links} />}
