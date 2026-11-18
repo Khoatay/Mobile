@@ -5,6 +5,7 @@ import { Field, Num, Tile } from '../components/Field'
 import { badges, bridgeType, BROKERS, CATEGORIES, categoryOf, GROUP_SUGGESTIONS, groupsOf, isView, PHASES, ROLE_TEXT, type AccountInfo, type Category, type Env, type InfoMap, type Role } from '../lib/accounts'
 import EquityChart from '../components/EquityChart'
 import { computeStats } from '../lib/stats'
+import { assess, type Score } from '../lib/traderScore'
 import { netOf } from '../lib/types'
 import { partnerFor } from '../lib/partners'
 import { bridgeGet, bridgePost, type BridgeState, type LiveAccount, type LivePosition, type Mt5Deal, type Mt5Order } from '../lib/bridge'
@@ -302,48 +303,99 @@ function AddAccount({ bridge, groups, onAdded, role }: { bridge: BridgeState; gr
   )
 }
 
-/** Hiệu suất của một tài khoản (thường là Only view): đọc lịch sử từ MT5, tính ngay, không lưu vào Nhật ký của bạn. */
-function Performance({ id, currency, serverOffset }: { id: string; currency: string; serverOffset: number }) {
-  const [days, setDays] = useState(30)
-  const [list, setList] = useState<Trade[] | null>(null)
+const GRADE_TONE = { good: 'pos', ok: 'ok', weak: 'warn', bad: 'neg' } as const
+const CONF_TEXT = { low: 'thấp', medium: 'trung bình', high: 'cao' }
+
+function ScoreCard({ title, hint, s }: { title: string; hint: string; s: Score }) {
+  return (
+    <div className={`score-card ${GRADE_TONE[s.grade]}`}>
+      <div className="score-head">
+        <span className="muted small">{title}</span>
+        <strong>{s.score}<small>/100</small></strong>
+      </div>
+      <div className="score-bar" role="img" aria-label={`${title}: ${s.score} trên 100`}><i style={{ width: `${s.score}%` }} /></div>
+      <div className="score-label">{s.label}</div>
+      <ul>{s.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+      <p className="muted small">{hint}</p>
+    </div>
+  )
+}
+
+/**
+ * Đánh giá một tài khoản Only view: chỉ số, bốn điểm (an toàn, tăng trưởng, kỷ luật, FOMO) và có đáng theo không.
+ * Đọc lịch sử từ MT5 mỗi lần mở, tính ngay trên máy, không lưu vào Nhật ký của bạn.
+ */
+function Performance({ id, acc, serverOffset }: { id: string; acc: LiveAccount; serverOffset: number }) {
+  const [days, setDays] = useState(90)
+  const [data, setData] = useState<{ trades: Trade[]; deposits: number } | null>(null)
   const [err, setErr] = useState('')
   useEffect(() => {
     let stop = false
-    setList(null); setErr('')
+    setData(null); setErr('')
     bridgeGet<{ deals: Mt5Deal[]; orders: Mt5Order[] }>(`/history?days=${days}&account=${id}`)
-      .then((h) => { if (!stop) setList(dealsToTrades(h.deals, h.orders, id)) })
+      .then((h) => { if (!stop) setData({ trades: dealsToTrades(h.deals, h.orders, id), deposits: h.deals.filter((d) => d.type === 2).reduce((s, d) => s + d.profit, 0) }) })
       .catch((e) => { if (!stop) setErr(errText(e)) })
     return () => { stop = true }
   }, [id, days])
-  const s = useMemo(() => (list ? computeStats(list, serverOffset) : null), [list, serverOffset])
-  const recent = useMemo(() => (list ? [...list].sort((a, b) => b.closeTime - a.closeTime).slice(0, 8) : []), [list])
+  const ccy = acc.currency
+  const a = useMemo(() => (data ? assess(data.trades, acc.balance, data.deposits, acc.balance > 0 ? acc.profit / acc.balance : 0, acc.positions.filter((p) => !p.sl).length) : null),
+    // Số dư và lệnh mở đổi liên tục; chỉ chấm lại khi tải lịch sử mới để điểm không nhảy theo từng tick.
+    [data])
+  const s = useMemo(() => (data ? computeStats(data.trades, serverOffset) : null), [data, serverOffset])
+  const recent = useMemo(() => (data ? [...data.trades].sort((x, y) => y.closeTime - x.closeTime).slice(0, 8) : []), [data])
+  const m = a?.metrics
+  const pc = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v * 100).toFixed(1)}%`
   return (
     <section className="card">
       <div className="card-head">
-        <h3>Kết quả giao dịch</h3>
+        <h3>Đánh giá tài khoản</h3>
         <div className="seg">
-          {[7, 30, 90, 365].map((d) => <button key={d} className={days === d ? 'active' : ''} aria-pressed={days === d} onClick={() => setDays(d)}>{d === 365 ? '1 năm' : `${d} ngày`}</button>)}
+          {[30, 90, 180, 365].map((d) => <button key={d} className={days === d ? 'active' : ''} aria-pressed={days === d} onClick={() => setDays(d)}>{d === 365 ? '1 năm' : d === 180 ? '6 tháng' : `${d} ngày`}</button>)}
         </div>
       </div>
       {err && <p className="notice bad">⚠ {err}</p>}
-      {!s && !err && <p className="muted">Đang đọc lịch sử…</p>}
-      {s && s.n === 0 && <p className="muted">Không có lệnh nào đóng trong {days} ngày qua.</p>}
-      {s && s.n > 0 && (
+      {!a && !err && <p className="muted">Đang đọc lịch sử…</p>}
+      {a && m && (
         <>
-          <div className="tiles wide">
-            <Tile tone={s.net} label="Lãi/lỗ ròng" value={`${signed(s.net)} ${currency}`} sub={`${s.n} lệnh`} />
-            <Tile label="Tỷ lệ thắng" value={`${Math.round(s.winRate * 100)}%`} sub={`${s.wins} thắng · ${s.losses} thua`} />
-            <Tile label="Profit factor" value={Number.isFinite(s.profitFactor) ? s.profitFactor.toFixed(2) : '∞'} sub="Lãi gộp / lỗ gộp" />
-            <Tile tone="neg" label="Sụt giảm lớn nhất" value={money(s.maxDrawdown, currency)} sub={`Chuỗi thua dài nhất ${s.maxLosingStreak} lệnh`} />
+          <div className={`verdict ${a.verdict.level}`}>
+            <div>
+              <span className="muted small">Có đáng theo không?</span>
+              <strong>{a.verdict.title}</strong>
+              <p>{a.verdict.detail}</p>
+            </div>
+            <span className="chip">Độ tin cậy {CONF_TEXT[a.confidence]} · {m.n} lệnh / {Math.max(1, Math.round(m.spanDays))} ngày</span>
           </div>
-          <EquityChart points={s.equity} ccy={currency} />
-          <div className="table-wrap">
-            <table>
-              <thead><tr><th>Đóng lúc</th><th>Cặp</th><th>Chiều</th><th className="num">Lot</th><th className="num">Lãi/lỗ</th></tr></thead>
-              <tbody>{recent.map((t) => { const n = netOf(t); return <tr key={t.id}><td className="nowrap">{fmtServerTime(t.closeTime).slice(0, 16)}</td><td>{t.symbol}</td><td>{t.side === 'buy' ? 'Buy' : 'Sell'}</td><td className="num">{t.volume.toFixed(2)}</td><td className="num strong"><span className={n > 0 ? 'pip pos' : n < 0 ? 'pip neg' : 'pip'} />{signed(n)}</td></tr> })}</tbody>
-            </table>
-          </div>
-          <p className="muted small">Đọc trực tiếp từ MT5 mỗi lần mở, không đưa vào Nhật ký hay Thống kê của bạn.</p>
+
+          {m.n > 0 && (
+            <>
+              <div className="score-grid">
+                <ScoreCard title="An toàn" hint="Sụt giảm, lệnh thua lớn nhất, stop loss, gấp thếp." s={a.safety} />
+                <ScoreCard title="Tăng trưởng" hint="Lãi theo % vốn, profit factor, số tuần có lãi." s={a.growth} />
+                <ScoreCard title="Kỷ luật" hint="Đặt SL, cắt lỗ đúng kế hoạch, lot đều tay." s={a.discipline} />
+                <ScoreCard title="Kiểm soát FOMO" hint="Điểm cao là ít FOMO: ít lệnh gỡ, không vào dồn dập." s={a.fomo} />
+              </div>
+
+              <div className="metric-grid">
+                <div><span>Tỷ lệ thắng</span><strong>{Math.round(m.winRate * 100)}%</strong><small>{m.wins} thắng · {m.losses} thua</small></div>
+                <div><span>Lãi/lỗ ròng</span><strong className={m.net > 0 ? 'pos' : m.net < 0 ? 'neg' : ''}>{signed(m.net)} {ccy}</strong><small>{pc(m.growthPct)} so với vốn đầu kỳ</small></div>
+                <div><span>Lãi trung bình / lệnh thắng</span><strong className="pos">{money(m.avgWin, ccy)}</strong><small>Lỗ trung bình / lệnh thua: <b className="neg">{money(m.avgLoss, ccy)}</b></small></div>
+                <div><span>Lệnh lãi lớn nhất</span><strong className="pos">{money(m.bestWin, ccy)}</strong><small>Nhỏ nhất: {money(m.smallestWin, ccy)}</small></div>
+                <div><span>Lệnh lỗ lớn nhất</span><strong className="neg">{money(m.worstLoss, ccy)}</strong><small>{(m.worstLossPct * 100).toFixed(1)}% vốn · nhỏ nhất: {money(m.smallestLoss, ccy)}</small></div>
+                <div><span>Profit factor</span><strong>{Number.isFinite(m.profitFactor) ? m.profitFactor.toFixed(2) : '∞'}</strong><small>Kỳ vọng {signed(m.expectancy)} {ccy} / lệnh</small></div>
+                <div><span>Sụt giảm lớn nhất</span><strong className="neg">{(m.maxDrawdownPct * 100).toFixed(1)}%</strong><small>{money(m.maxDrawdown, ccy)} · chuỗi thua dài nhất {m.maxLosingStreak}</small></div>
+                <div><span>Lệnh có stop loss</span><strong>{Math.round(m.slShare * 100)}%</strong><small>{m.tradesPerDay.toFixed(1)} lệnh mỗi ngày giao dịch</small></div>
+              </div>
+
+              {s && <EquityChart points={s.equity} ccy={ccy} />}
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Đóng lúc</th><th>Cặp</th><th>Chiều</th><th className="num">Lot</th><th className="num">Lãi/lỗ</th></tr></thead>
+                  <tbody>{recent.map((t) => { const n = netOf(t); return <tr key={t.id}><td className="nowrap">{fmtServerTime(t.closeTime).slice(0, 16)}</td><td>{t.symbol}</td><td>{t.side === 'buy' ? 'Buy' : 'Sell'}</td><td className="num">{t.volume.toFixed(2)}</td><td className="num strong"><span className={n > 0 ? 'pip pos' : n < 0 ? 'pip neg' : 'pip'} />{signed(n)}</td></tr> })}</tbody>
+                </table>
+              </div>
+            </>
+          )}
+          <p className="muted small">Đánh giá tự động theo quy tắc cố định, dựa trên lịch sử {days >= 365 ? '1 năm' : `${days} ngày`} gần nhất đọc trực tiếp từ MT5; không lưu vào Nhật ký hay Thống kê của bạn. Vốn đầu kỳ ước tính từ số dư hiện tại trừ lãi/lỗ và nạp/rút trong kỳ. Kết quả quá khứ không bảo đảm kết quả sau này; đây không phải lời khuyên đầu tư.</p>
         </>
       )}
     </section>
@@ -662,7 +714,7 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
         {notice}
       </section>
       {a && <PositionsTable rows={positionsOf([a])} infos={infos} busy={busy} onClose={closePosition} showAccount={false} />}
-      {view && a && <Performance id={id} currency={a.currency} serverOffset={settings.serverOffset} />}
+      {view && a && <Performance id={id} acc={a} serverOffset={settings.serverOffset} />}
       {view && info && <CopyGuide id={id} info={info} links={links} onCopyFrom={onCopyFrom} />}
       <section className="card">
         <h3>Nhãn tài khoản</h3>

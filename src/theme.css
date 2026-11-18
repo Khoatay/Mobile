@@ -510,3 +510,34 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 .copy-way ul { padding-left: 18px; }
 .copy-way > :last-child { margin-top: auto; }
 .notice-card { border-left: 3px solid var(--accent); }
+
+/* Đánh giá tài khoản Only view */
+.verdict { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-radius: 12px; margin: 6px 0 14px; border: 1px solid var(--border); background: var(--raised); border-left: 4px solid var(--muted); }
+.verdict > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 320px; }
+.verdict strong { font-family: var(--font-num); font-size: 20px; }
+.verdict p { margin: 2px 0 0; color: var(--ink-2); font-size: 13.5px; line-height: 1.5; }
+.verdict.consider { border-left-color: var(--pos); background: color-mix(in srgb, var(--pos) 8%, var(--surface)); }
+.verdict.consider strong { color: var(--pos); }
+.verdict.avoid { border-left-color: var(--neg); background: color-mix(in srgb, var(--neg) 7%, var(--surface)); }
+.verdict.avoid strong { color: var(--neg); }
+.verdict.watch { border-left-color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, var(--surface)); }
+.score-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+@media (max-width: 1100px) { .score-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .score-grid { grid-template-columns: minmax(0, 1fr); } }
+.score-card { --tone: var(--muted); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; background: var(--surface); }
+.score-card.pos { --tone: var(--pos); } .score-card.ok { --tone: #2a9d8f; } .score-card.warn { --tone: #d98a1c; } .score-card.neg { --tone: var(--neg); }
+.score-head { display: flex; justify-content: space-between; align-items: baseline; }
+.score-head strong { font-family: var(--font-num); font-size: 24px; color: var(--tone); font-variant-numeric: tabular-nums; }
+.score-head strong small { font-size: 12px; color: var(--muted); font-weight: 500; }
+.score-bar { height: 6px; border-radius: 99px; background: var(--raised); overflow: hidden; }
+.score-bar i { display: block; height: 100%; background: var(--tone); border-radius: 99px; }
+.score-label { font-weight: 600; color: var(--tone); }
+.score-card ul { margin: 0; padding-left: 16px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+.score-card p { margin: auto 0 0; }
+.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+@media (max-width: 1100px) { .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.metric-grid > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--page); border: 1px solid var(--border); min-width: 0; }
+.metric-grid span { font-size: 12px; color: var(--muted); }
+.metric-grid strong { font-family: var(--font-num); font-size: 19px; font-variant-numeric: tabular-nums; }
+.metric-grid small { font-size: 12px; color: var(--ink-2); }
+.metric-grid .pos { color: var(--pos); } .metric-grid .neg { color: var(--neg); }
