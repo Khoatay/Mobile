@@ -22,6 +22,21 @@ HERE = Path(__file__).resolve().parent
 KB_DIR = HERE / "knowledge"
 INDEX = KB_DIR / "index.json"
 DEFAULT_MODEL = "claude-opus-5-5"
+USAGE_FILE = HERE / "knowledge" / "usage.json"
+
+# Model chọn được trong app và giá (USD / 1 triệu token, bảng giá 11/2026): vào, ra, đọc cache, ghi cache.
+# Chi phí trong app là ước tính theo bảng này; số chính xác xem ở console.anthropic.com.
+MODELS = {
+    "claude-opus-5-5": {"name": "Opus 5.5 (thông minh nhất)", "in": 4.0, "out": 20.0, "cache_read": 0.20, "cache_write": 5.0},
+    "claude-sonnet-5-5": {"name": "Sonnet 5.5 (cân bằng)", "in": 2.0, "out": 10.0, "cache_read": 0.10, "cache_write": 2.5},
+    "claude-haiku-5-5": {"name": "Haiku 5.5 (rẻ nhất)", "in": 0.10, "out": 0.50, "cache_read": 0.01, "cache_write": 0.125},
+}
+FEATURES = {"chat": "Golden Duck Talk", "learn": "AI học trade", "analyze": "AI phân tích", "rate": "Đánh giá tài khoản"}
+
+
+def fallback_args(model):
+    """Dự phòng phía máy chủ khi bị từ chối: có ở Opus và Sonnet; Haiku 5.5 không có."""
+    return {} if "haiku" in model else {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}
 MAX_SOURCE_BYTES = 25_000_000  # tổng tài liệu gửi đi một lần; giới hạn của API là 32 MB mỗi yêu cầu
 MAX_CHAT = 40  # số lượt trò chuyện gần nhất gửi lại cho Claude
 
@@ -325,6 +340,8 @@ class Brain:
         self.kb = kb
         self.model = str(self.cfg.get("ai_model") or DEFAULT_MODEL)
         self._client = None
+        self.save_cfg = None  # bridge.py gắn hàm ghi config.json
+        self.usage_lock = threading.Lock()
 
     def client(self):
         if self._client is None:
@@ -336,27 +353,103 @@ class Brain:
             self._client = anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
         return self._client
 
-    def status(self):
-        has_key = bool(self.cfg.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY"))
-        return {"configured": has_key, "model": self.model}
+    def model_for(self, feature):
+        """Model riêng của từng tính năng (chọn trong app), không có thì dùng model chung."""
+        m = (self.cfg.get("ai_models") or {}).get(feature)
+        return m if m in MODELS else self.model
 
-    def _ask(self, system, content, schema, effort):
-        """Một lệnh gọi Claude trả về JSON theo schema. Bật dự phòng phía máy chủ khi bị từ chối."""
+    def status(self):
+        key = str(self.cfg.get("anthropic_api_key") or "")
+        has_key = bool(key or os.environ.get("ANTHROPIC_API_KEY"))
+        return {
+            "configured": has_key, "model": self.model, "key_hint": f"…{key[-4:]}" if len(key) > 8 else "",
+            "models": {f: self.model_for(f) for f in FEATURES},
+            "choices": [{"id": k, "name": v["name"], "in": v["in"], "out": v["out"]} for k, v in MODELS.items()],
+            "features": FEATURES,
+        }
+
+    def set_key(self, body):
+        """Lưu khoá API nhập trong app vào config.json (chỉ trên máy này), sau khi thử gọi một lần cho chắc."""
+        key = str(body.get("key") or "").strip()
+        if not key.startswith("sk-ant-"):
+            raise ValueError("Khoá API của Anthropic bắt đầu bằng sk-ant-. Tạo ở console.anthropic.com → API Keys")
         import anthropic
         try:
+            anthropic.Anthropic(api_key=key).models.list(limit=1)
+        except anthropic.AuthenticationError:
+            raise ValueError("Khoá API không hợp lệ hoặc đã bị xoá")
+        except anthropic.PermissionDeniedError:
+            raise ValueError("Khoá API không có quyền dùng API. Kiểm tra lại ở console.anthropic.com")
+        except anthropic.APIConnectionError:
+            raise RuntimeError("Không kết nối được tới máy chủ Anthropic. Kiểm tra internet")
+        self.cfg["anthropic_api_key"] = key
+        self._client = None
+        if self.save_cfg:
+            self.save_cfg()
+        return self.status()
+
+    def set_models(self, body):
+        chosen = body.get("models") or {}
+        cur = dict(self.cfg.get("ai_models") or {})
+        for f, m in chosen.items():
+            if f in FEATURES and m in MODELS:
+                cur[f] = m
+        self.cfg["ai_models"] = cur
+        if self.save_cfg:
+            self.save_cfg()
+        return self.status()
+
+    # ------------------------------------------------------------- chi phí
+    def record(self, feature, res):
+        """Ghi số token và chi phí ước tính của một lần gọi, theo ngày và theo tính năng."""
+        u = res.usage
+        price = MODELS.get(res.model) or MODELS.get(self.model_for(feature)) or MODELS[DEFAULT_MODEL]
+        tok = {"input": u.input_tokens or 0, "output": u.output_tokens or 0,
+               "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0, "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0}
+        cost = (tok["input"] * price["in"] + tok["output"] * price["out"] + tok["cache_read"] * price["cache_read"] + tok["cache_write"] * price["cache_write"]) / 1e6
+        day = time.strftime("%Y-%m-%d")
+        with self.usage_lock:
+            data = self._usage_data()
+            row = data.setdefault(day, {}).setdefault(feature, {"calls": 0, "input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "cost": 0.0})
+            row["calls"] += 1
+            for k, v in tok.items():
+                row[k] += v
+            row["cost"] = round(row["cost"] + cost, 6)
+            for old in sorted(data)[:-120]:  # giữ 120 ngày gần nhất
+                del data[old]
+            USAGE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            tmp = USAGE_FILE.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp, USAGE_FILE)
+        return {**tok, "cost": round(cost, 6), "model": res.model}
+
+    def _usage_data(self):
+        try:
+            return json.loads(USAGE_FILE.read_text(encoding="utf-8")) if USAGE_FILE.exists() else {}
+        except ValueError:
+            return {}
+
+    def usage(self):
+        with self.usage_lock:
+            return {"days": self._usage_data(), "features": FEATURES}
+
+    def _ask(self, system, content, schema, effort, feature):
+        """Một lệnh gọi Claude trả về JSON theo schema, bằng model của tính năng. Bật dự phòng phía máy chủ khi bị từ chối (trừ Haiku)."""
+        import anthropic
+        model = self.model_for(feature)
+        try:
             res = self.client().beta.messages.create(
-                model=self.model,
+                model=model,
                 max_tokens=16000,
                 system=system,
                 messages=content,
                 output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
+                **fallback_args(model),
             )
         except anthropic.AuthenticationError:
             raise RuntimeError("Khoá API không hợp lệ. Kiểm tra anthropic_api_key trong config.json")
         except anthropic.PermissionDeniedError as e:
-            raise RuntimeError(f"Khoá API không có quyền dùng model {self.model}: {e.message}")
+            raise RuntimeError(f"Khoá API không có quyền dùng model {model}: {e.message}")
         except anthropic.RateLimitError:
             raise RuntimeError("Đang bị giới hạn số lần gọi API. Thử lại sau ít phút")
         except anthropic.BadRequestError as e:
@@ -370,7 +463,7 @@ class Brain:
         if res.stop_reason == "max_tokens":
             raise RuntimeError("Câu trả lời bị cắt vì quá dài. Thử tách tài liệu hoặc hỏi ngắn hơn")
         text = next((b.text for b in res.content if b.type == "text"), "")
-        usage = {"input": res.usage.input_tokens, "output": res.usage.output_tokens}
+        usage = self.record(feature, res)
         return json.loads(text), usage
 
     def learn(self, body):
@@ -391,7 +484,7 @@ class Brain:
         for turn in pb["chat"][-MAX_CHAT:]:
             messages.append({"role": "user" if turn["role"] == "user" else "assistant", "content": turn["text"]})
         messages.append({"role": "user", "content": message})
-        out, usage = self._ask(LEARN_SYSTEM, messages, LEARN_SCHEMA, "medium")
+        out, usage = self._ask(LEARN_SYSTEM, messages, LEARN_SCHEMA, "medium", "learn")
         reply = out["reply"] + ("\n\nCâu hỏi cần bạn xác nhận:\n" + "\n".join(f"- {q}" for q in out["open_questions"]) if out["open_questions"] else "")
         self.kb.append_chat(pid, "user", message)
         self.kb.append_chat(pid, "assistant", reply)
@@ -406,10 +499,10 @@ class Brain:
         data = {k: body.get(k) for k in ("account", "perspective", "currency", "days", "balance", "equity", "metrics", "open_positions", "trades_total")}
         data["trades"] = trades[-400:]  # lệnh gần nhất; trades_total cho biết tổng số lệnh thật
         content = [{"type": "text", "text": "Dữ liệu tài khoản (JSON):\n" + json.dumps(data, ensure_ascii=False)}]
-        out, usage = self._ask(RATE_SYSTEM, [{"role": "user", "content": content}], RATE_SCHEMA, "high")
+        out, usage = self._ask(RATE_SYSTEM, [{"role": "user", "content": content}], RATE_SCHEMA, "high", "rate")
         for k in ("safety", "growth", "discipline", "fomo"):
             out[k]["score"] = max(0, min(100, int(out[k]["score"])))
-        return {"rating": out, "usage": usage, "model": self.model}
+        return {"rating": out, "usage": usage, "model": usage["model"]}
 
     def analyze(self, body):
         pid = str(body.get("playbook"))
@@ -428,8 +521,8 @@ class Brain:
         note = str(body.get("note") or "").strip()
         if note:
             content.append({"type": "text", "text": f"Ghi chú thêm của người dùng: {note}"})
-        out, usage = self._ask(ANALYZE_SYSTEM, [{"role": "user", "content": content}], ANALYZE_SCHEMA, "high")
-        return {"analysis": out, "usage": usage, "model": self.model}
+        out, usage = self._ask(ANALYZE_SYSTEM, [{"role": "user", "content": content}], ANALYZE_SCHEMA, "high", "analyze")
+        return {"analysis": out, "usage": usage, "model": usage["model"]}
 
 
 def strip_subtitles(text):
@@ -565,12 +658,16 @@ def chat(brain, personas, body):
         messages[-1]["content"] += "\n\n" + user_text
     else:
         messages.append({"role": "user", "content": user_text})
+    model = brain.model_for("chat")
     try:
+        # Hai điểm cache: nhân cách + kiến thức (system), và toàn bộ lịch sử tới tin này (cache tự động ở khối cuối),
+        # nên tin sau chỉ trả giá đầy đủ cho phần mới; lịch sử cũ tính giá đọc cache (rẻ hơn khoảng 20 lần).
         res = brain.client().beta.messages.create(
-            model=brain.model, max_tokens=8000,
+            model=model, max_tokens=8000,
             system=[{"type": "text", "text": personas.system_prompt(p), "cache_control": {"type": "ephemeral"}}],
             messages=messages, output_config={"effort": "medium"},
-            betas=["server-side-fallback-2026-07-01"], fallbacks="default",
+            cache_control={"type": "ephemeral"},
+            **fallback_args(model),
         )
     except anthropic.AuthenticationError:
         raise RuntimeError("Khoá API không hợp lệ. Kiểm tra anthropic_api_key trong config.json")
@@ -584,6 +681,7 @@ def chat(brain, personas, body):
         reply = "Mình không thể trả lời câu này."
     else:
         reply = "".join(b.text for b in res.content if b.type == "text").strip() or "…"
+    usage = brain.record("chat", res)
     personas.append(pid, "user", message)
     personas.append(pid, "assistant", reply)
-    return {"reply": reply, **personas.list()}
+    return {"reply": reply, "usage": usage, **personas.list()}

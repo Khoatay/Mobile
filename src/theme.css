@@ -634,3 +634,4 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 /* Website riêng */
 .brand-site { display: block; font-family: var(--font-ui); font-size: 11.5px; font-weight: 500; color: var(--gold); text-decoration: none; margin-top: 2px; }
 .brand-site:hover { text-decoration: underline; }
+.ai-models { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }

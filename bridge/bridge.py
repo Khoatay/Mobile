@@ -862,6 +862,7 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot):
                 "/automation": auto.snapshot,
                 "/news/watch": auto.news_snapshot,
                 "/tgbot": bot.status,
+                "/ai/usage": brain.usage,
                 "/personas": personas.list,
             }
             if url.path not in routes:
@@ -932,6 +933,10 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot):
                 self.answer(lambda: brain.analyze(body))
             elif url.path == "/ai/rate":
                 self.answer(lambda: brain.rate(body))
+            elif url.path == "/ai/key":
+                self.answer(lambda: brain.set_key(body))
+            elif url.path == "/ai/models":
+                self.answer(lambda: brain.set_models(body))
             elif url.path == "/accounts/add":
                 self.answer(lambda: registry.add(body))
             elif url.path == "/accounts/remove":
@@ -954,6 +959,7 @@ def main():
     registry = Registry(cfg)
     kb = Knowledge()
     brain = Brain(cfg, kb)
+    brain.save_cfg = lambda: save_config(cfg)
     personas = Personas(kb)
     calendar = Calendar()
     auto = Automation(registry, tg, calendar)

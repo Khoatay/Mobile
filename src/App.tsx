@@ -188,7 +188,7 @@ export default function App() {
         {tab === 'chat' && <Chat bridge={ownBridge} trades={trades} infos={infos} />}
         {tab === 'track' && <Track trades={trades} infos={infos} profile={profile} links={links} currency={settings.accountCcy} />}
         {tab === 'guides' && <Guides links={links} />}
-        {tab === 'me' && <Personalize profile={profile} setProfile={setProfile} canEdit={canEdit} />}
+        {tab === 'me' && <Personalize profile={profile} setProfile={setProfile} canEdit={canEdit} online={bridge.online} />}
         {tab === 'pro' && <ProPage pack={pack} setPack={canEdit ? setPack : null} profile={profile} setProfile={setProfile} isPro={isPro} goTab={(t) => setTab(t as Tab)} />}
       </main>
     </div>

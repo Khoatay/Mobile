@@ -1,3 +1,4 @@
+import AiSettings from '../components/AiSettings'
 import { useEffect, useRef, useState } from 'react'
 import { Field } from '../components/Field'
 import RuleText from '../components/RuleText'
@@ -38,6 +39,8 @@ function readFile(f: File, as: 'text' | 'dataurl'): Promise<string> {
 }
 
 export function AiSetup({ online }: { online: boolean }) {
+  // Bridge đang chạy: nhập khoá ngay trong app. Chưa chạy bridge thì hướng dẫn cài bridge.
+  if (online) return <AiSettings compact />
   return (
     <section className="card">
       <h3>{online ? 'Chưa có khoá API cho phần AI' : 'Cần chạy chương trình nền (bridge)'}</h3>

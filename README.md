@@ -45,6 +45,8 @@ Công cụ cho người giao dịch forex, chạy trên trình duyệt máy tín
 
 Tên mặc định **Golden Duck**, logo là icon vịt 3D `public/golden-duck.svg` (vẽ riêng cho app). Logo dùng ở thanh bên, góc trên bản đơn giản, màn hình chào, favicon, icon khi thêm vào màn hình điện thoại (`apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `manifest.webmanifest`), banner chia sẻ và trang thành tích công khai. IB vẫn đổi được tên, khẩu hiệu và màu ở Cá nhân hoá; ai còn tên cũ "FX Desk" sẽ tự hiện Golden Duck.
 
+**AI cho bản IB**: mỗi IB dùng khoá API của mình (hướng dẫn mua khoá có trong app). Chọn model cho từng tính năng (`ai_models` trong `config.json`; chat nên dùng Haiku 5.5, rẻ hơn Opus khoảng 40 lần), xem chi phí ước tính theo ngày và tính năng (`bridge/knowledge/usage.json`). Chat lưu tạm (prompt caching) cả nhân cách lẫn lịch sử nên tin sau chỉ trả đủ giá cho phần mới. Lần đầu dùng, app cài sẵn bốn nhân vật: Golden Duck, Thầy Minh, Gấu Vàng, Alpha. Bản thương mại cho trader sẽ chạy AI qua máy chủ giữ khoá, đếm lượt và thu phí.
+
 **Website riêng**: ô "Website" ở Cá nhân hoá (đi theo gói cấu hình sang bản trader) để sẵn cho tên miền mua sau. Trống thì không hiện gì; điền rồi thì tên miền gọn (ví dụ `goldenduck.vn`) hiện ở góc dưới phải ảnh chia sẻ, cuối bài đăng, đầu và cuối trang thành tích công khai, dưới tên thương hiệu ở thanh bên và trên Trang chủ bản đơn giản.
 
 ## Bản đơn giản và bản đầy đủ
@@ -100,7 +102,7 @@ python bridge.py
 - **Mỗi tài khoản cần một bản MT5 ở thư mục riêng**, vì một bản MT5 chỉ đăng nhập được một tài khoản tại một thời điểm. Cài MT5 thêm lần nữa vào thư mục khác (bộ cài của mỗi quỹ thường đã vào thư mục riêng), hoặc sao chép cả thư mục MT5 và đặt `"portable": true`.
 - **Vào lệnh**: chỉ với tài khoản có `"allow_trading": true` và dùng mật khẩu giao dịch thay cho mật khẩu view. `max_lot` (mặc định 1.0) là trần khối lượng mỗi lệnh. Bridge từ chối lệnh không có stop loss, và luôn để MT5 kiểm tra lệnh trước khi gửi. Hãy thử trên tài khoản demo trước, và kiểm tra điều khoản của quỹ về việc đặt lệnh bằng phần mềm ngoài.
 - **Telegram**: lấy `api_id` và `api_hash` tại my.telegram.org, rồi điền tên các kênh vào `channels`. Bridge đọc bằng tài khoản Telegram của bạn, nên chỉ thấy kênh công khai hoặc kênh bạn đã tham gia.
-- **AI**: thêm `"anthropic_api_key": "sk-ant-…"` vào `config.json` (tạo khoá tại console.anthropic.com). Mặc định dùng model `claude-opus-5-5`; đổi bằng `"ai_model"`. Bộ kiến thức và tài liệu lưu trong `bridge/knowledge/` (không đưa lên git). Mỗi lần dạy hoặc phân tích tốn phí API theo lượng chữ gửi đi; tài liệu nguồn được cache để các lần sau rẻ hơn.
+- **AI**: nhập khoá ngay trong app (Cá nhân hoá → AI của bạn: app thử khoá rồi lưu vào `config.json`), hoặc tự thêm `"anthropic_api_key": "sk-ant-…"` vào `config.json` (tạo khoá tại console.anthropic.com). Mặc định dùng model `claude-opus-5-5`; đổi bằng `"ai_model"`. Bộ kiến thức và tài liệu lưu trong `bridge/knowledge/` (không đưa lên git). Mỗi lần dạy hoặc phân tích tốn phí API theo lượng chữ gửi đi; tài liệu nguồn được cache để các lần sau rẻ hơn.
 - **Gửi bài**: liệt kê tên nhóm được phép gửi trong `post_targets`. Bridge từ chối gửi tới bất kỳ nơi nào khác, kể cả các kênh đang đọc.
 - **Lịch kinh tế**: bridge tải từ nguồn công khai của Forex Factory, cần máy có internet.
 - `config.json` và file phiên Telegram chứa thông tin đăng nhập; chúng đã được loại khỏi git. Đừng gửi cho ai.

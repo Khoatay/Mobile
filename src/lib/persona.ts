@@ -52,6 +52,22 @@ export const PERSONA_TEMPLATES: { id: string; label: string; p: Omit<Persona, 'i
   { id: 'analyst', label: 'Nhà phân tích lạnh lùng', p: { ...BLANK_PERSONA, name: 'Alpha', tagline: 'Phân tích theo dữ liệu, không cảm xúc', personality: 'Chính xác, súc tích, dựa trên số liệu. Luôn nêu giả định và điểm vô hiệu.', values: 'Trung thực với dữ liệu, kể cả khi dữ liệu nói người dùng đang sai.', style: 'Xưng "tôi", gọi người dùng là "bạn". Dùng gạch đầu dòng, số liệu cụ thể.', boundaries: 'Không đoán khi thiếu dữ liệu; nói rõ là thiếu.', greeting: 'Sẵn sàng. Bạn muốn xem cặp nào, hay xem lại kết quả giao dịch?', examples: '' } },
 ]
 
+/**
+ * Lần đầu dùng (chưa có nhân vật nào): cài sẵn mọi nhân vật mẫu, Golden Duck đứng đầu, để dùng được ngay.
+ * IB tự sửa tính cách, dạy kiến thức, hoặc xoá bớt sau.
+ */
+let seeding: Promise<PersonaStore> | null = null
+export function seedPersonas(save: (p: Omit<Persona, 'id'>) => Promise<PersonaStore>): Promise<PersonaStore> {
+  // Gọi nhiều lần cùng lúc (StrictMode, hai trang) vẫn chỉ cài một lần.
+  seeding ??= (async () => {
+    const order = [DUCK_PERSONA, ...PERSONA_TEMPLATES.filter((t) => t.p.name !== DUCK_NAME).map((t) => t.p)]
+    let s: PersonaStore = { items: [], chats: {} }
+    for (const p of order) s = await save(p)
+    return s
+  })()
+  return seeding
+}
+
 /** Bối cảnh tài khoản gửi kèm mỗi tin nhắn (nếu nhân vật được phép xem): thống kê 30 ngày, hôm nay, lệnh đang mở. */
 export function accountContext(trades: Trade[], accounts: LiveAccount[], infos: InfoMap): string {
   const now = Math.max(Date.now(), ...trades.map((t) => t.closeTime))

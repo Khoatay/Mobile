@@ -1,17 +1,20 @@
 import { useRef, useState } from 'react'
 import { Field } from '../components/Field'
+import AiSettings from '../components/AiSettings'
 import { BRAND_LOGO, logoOf } from '../lib/brand'
 import { squareAvatar } from '../lib/user'
 import { EDITION } from '../lib/edition'
 import { ACCENTS, DEFAULT_PROFILE, DISCLAIMER, type Profile } from '../lib/share'
 
 interface Props {
+  /** Bridge đang chạy (để cài AI). */
+  online: boolean
   profile: Profile
   setProfile: (p: Profile) => void
   canEdit: boolean
 }
 
-export default function Personalize({ profile, setProfile, canEdit }: Props) {
+export default function Personalize({ profile, setProfile, canEdit, online }: Props) {
   const set = (p: Partial<Profile>) => setProfile({ ...profile, ...p })
   const file = useRef<HTMLInputElement>(null)
   const [logoErr, setLogoErr] = useState('')
@@ -66,6 +69,8 @@ export default function Personalize({ profile, setProfile, canEdit }: Props) {
         <label className="inline wrap"><input type="checkbox" className="check" checked={profile.hideMoney} onChange={(e) => set({ hideMoney: e.target.checked })} /> Ẩn số tiền khi chia sẻ (chỉ hiện pip, R, tỷ lệ thắng)</label>
         <div className="actions"><button className="ghost" onClick={() => setProfile({ ...DEFAULT_PROFILE, ...(canEdit ? {} : { brand: profile.brand, logo: profile.logo, website: profile.website, tagline: profile.tagline, link: profile.link, disclaimer: profile.disclaimer }) })}>Về mặc định</button></div>
       </section>
+
+      {canEdit && online && <AiSettings />}
 
       {EDITION === 'owner' && !canEdit && <p className="notice">Bạn đang xem như người dùng bản trader. Tắt “Xem như người dùng” ở cuối thanh bên để chỉnh thương hiệu. Link giới thiệu và gói cấu hình nằm ở trang Gói Pro.</p>}
       <p className="muted small">Tiền tệ tài khoản, % rủi ro mặc định và đòn bẩy chỉnh ở trang Tính lot. Múi giờ máy chủ chỉnh ở trang Nhật ký.</p>

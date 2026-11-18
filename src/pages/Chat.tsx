@@ -5,7 +5,7 @@ import { ask } from '../lib/ask'
 import type { InfoMap } from '../lib/accounts'
 import { bridgeGet, bridgePost, type BridgeState } from '../lib/bridge'
 import type { Playbook } from '../lib/kb'
-import { accountContext, BLANK_PERSONA, PERSONA_TEMPLATES, type Persona, type PersonaStore } from '../lib/persona'
+import { accountContext, BLANK_PERSONA, PERSONA_TEMPLATES, seedPersonas, type Persona, type PersonaStore } from '../lib/persona'
 import { usePersistent } from '../lib/store'
 import type { Trade } from '../lib/types'
 import { squareAvatar } from '../lib/user'
@@ -76,7 +76,7 @@ export default function Chat({ bridge, trades, infos }: { bridge: BridgeState; t
 
   useEffect(() => {
     if (!bridge.online) return
-    bridgeGet<PersonaStore>('/personas').then((s) => { setStore(s); if (!s.items.length) setEditing({ ...PERSONA_TEMPLATES[0].p }) }).catch((e) => setErr(errText(e)))
+    bridgeGet<PersonaStore>('/personas').then(async (s) => { setStore(s.items.length ? s : await seedPersonas((p) => bridgePost<PersonaStore>('/personas/save', p))) }).catch((e) => setErr(errText(e)))
     bridgeGet<Playbook[]>('/kb').then(setBooks).catch(() => {})
     bridgeGet<{ configured: boolean }>('/ai/status').then(setAi).catch(() => {})
   }, [bridge.online])

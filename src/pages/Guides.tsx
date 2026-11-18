@@ -89,6 +89,22 @@ const SECTIONS: { title: string; guides: Guide[] }[] = [
         ),
       },
       {
+        title: 'Cài AI (Golden Duck Talk, AI học trade, AI phân tích)',
+        body: (
+          <>
+            <p>Các tính năng AI chạy bằng khoá API của chính bạn, trả tiền theo lượng chữ dùng. Cài một lần:</p>
+            <ol>
+              <li>Vào console.anthropic.com, đăng ký bằng email.</li>
+              <li>Mục Billing: nạp tiền bằng thẻ Visa/Mastercard, 5–10 USD là đủ để bắt đầu. Mục Limits: đặt giới hạn chi mỗi tháng.</li>
+              <li>Mục API Keys → Create Key → chép khoá bắt đầu bằng <code>sk-ant-</code>.</li>
+              <li>Trong app: Cá nhân hoá → AI của bạn → dán khoá → Lưu khoá. App thử khoá trước khi lưu.</li>
+            </ol>
+            <p>Chọn model cho từng tính năng ở cùng chỗ. Gợi ý: Golden Duck Talk dùng <b>Haiku</b> (khoảng 10–25đ mỗi tin, rẻ hơn Opus khoảng 40 lần, đủ tốt để trò chuyện); AI phân tích và AI học trade dùng <b>Opus</b> hoặc <b>Sonnet</b> vì cần suy luận kỹ. Bảng chi phí 30 ngày hiện ngay bên dưới.</p>
+            <p>App có sẵn bốn nhân vật: Golden Duck, Thầy Minh, Gấu Vàng, Alpha. Sửa tính cách hoặc dạy thêm kiến thức ở trang Golden Duck Talk và AI học trade.</p>
+          </>
+        ),
+      },
+      {
         title: 'Kết nối Telegram (đọc kênh và gửi bài)',
         body: (
           <ol>

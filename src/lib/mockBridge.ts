@@ -158,6 +158,21 @@ const calendar: CalEvent[] = [
   { title: 'Bank Holiday', currency: 'CAD', date: at(90), impact: 'Holiday', forecast: '', previous: '' },
 ]
 
+// ---------- AI: khoá, model theo tính năng, chi phí mẫu 7 ngày
+const AI_FEATURES = { chat: 'Golden Duck Talk', learn: 'AI học trade', analyze: 'AI phân tích', rate: 'Đánh giá tài khoản' }
+let aiKey = 'sk-ant-xemtruoc-1234'
+const aiModels: Record<string, string> = { chat: 'claude-opus-5-5', learn: 'claude-opus-5-5', analyze: 'claude-opus-5-5', rate: 'claude-opus-5-5' }
+const aiStatus = () => ({
+  configured: !!aiKey, model: 'claude-opus-5-5', key_hint: `…${aiKey.slice(-4)}`, models: aiModels, features: AI_FEATURES,
+  choices: [{ id: 'claude-opus-5-5', name: 'Opus 5.5 (thông minh nhất)', in: 4, out: 20 }, { id: 'claude-sonnet-5-5', name: 'Sonnet 5.5 (cân bằng)', in: 2, out: 10 }, { id: 'claude-haiku-5-5', name: 'Haiku 5.5 (rẻ nhất)', in: 0.1, out: 0.5 }],
+})
+const aiUsage: Record<string, Record<string, { calls: number; input: number; output: number; cache_read: number; cache_write: number; cost: number }>> = Object.fromEntries(
+  Array.from({ length: 7 }, (_, i) => [new Date(T0 - i * 86_400_000).toISOString().slice(0, 10), {
+    chat: { calls: 20 + i * 3, input: 0, output: 0, cache_read: 0, cache_write: 0, cost: (20 + i * 3) * 0.0006 },
+    ...(i % 2 ? {} : { rate: { calls: 1, input: 0, output: 0, cache_read: 0, cache_write: 0, cost: 0.12 } }),
+    ...(i % 3 ? {} : { analyze: { calls: 2, input: 0, output: 0, cache_read: 0, cache_write: 0, cost: 0.11 } }),
+  }]))
+
 // ---------- bot Telegram (giả lập): dán token bất kỳ đúng dạng, 6 giây sau coi như đã bấm Start
 const bot = { token: '', linked: false, chat_name: '', since: 0 }
 const botStatus = () => ({ configured: !!bot.token, username: bot.token ? 'GoldenDuckCuaBanBot' : '', linked: bot.linked, chat_name: bot.chat_name, code: bot.token ? 'a1b2c3d4' : '', link: bot.token ? 'https://t.me/GoldenDuckCuaBanBot?start=a1b2c3d4' : '', error: '' })
@@ -341,7 +356,8 @@ export async function mockGet(path: string): Promise<unknown> {
     case '/kb': return JSON.parse(JSON.stringify(playbooks))
     case '/automation': return autoSnapshot()
     case '/personas': return personaStore()
-    case '/ai/status': return { configured: true, model: 'bản xem trước (không gọi AI)' }
+    case '/ai/status': return aiStatus()
+    case '/ai/usage': return { days: aiUsage, features: AI_FEATURES }
     case '/terminals': {
       const used = new Map(accounts.map((a) => [a.terminal, a.label]))
       return [...accounts.map((a) => a.terminal), FREE_TERMINAL].map((p) => ({ path: p, usedBy: used.get(p) ?? null }))
@@ -454,6 +470,8 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
     } else delete auto.guards[id]
     return autoSnapshot()
   }
+  if (path === '/ai/key') { await wait(700); if (!String(body.key).startsWith('sk-ant-')) throw new Error('Khoá API của Anthropic bắt đầu bằng sk-ant-. Tạo ở console.anthropic.com → API Keys'); aiKey = String(body.key); return aiStatus() }
+  if (path === '/ai/models') { Object.assign(aiModels, body.models as Record<string, string>); return aiStatus() }
   if (path === '/tgbot/token') { await wait(600); if (!/^\d+:[\w-]{10,}$/.test(String(body.token))) throw new Error('Token không đúng dạng. Token có dạng 123456789:AA... do @BotFather gửi'); Object.assign(bot, { token: String(body.token), linked: false, since: Date.now() }); return botStatus() }
   if (path === '/tgbot/unlink') { Object.assign(bot, { linked: false, chat_name: '', since: Date.now() }); return botStatus() }
   if (path === '/tgbot/remove') { Object.assign(bot, { token: '', linked: false, chat_name: '' }); return botStatus() }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Avatar from '../components/Avatar'
 import type { InfoMap } from '../lib/accounts'
 import { bridgeGet, bridgePost, type BridgeState } from '../lib/bridge'
-import { accountContext, DUCK_AVATAR, DUCK_NAME, DUCK_PERSONA, isDuck, type PersonaStore } from '../lib/persona'
+import { accountContext, DUCK_AVATAR, DUCK_NAME, DUCK_PERSONA, isDuck, seedPersonas, type PersonaStore } from '../lib/persona'
 import { usePersistent } from '../lib/store'
 import type { Trade } from '../lib/types'
 
@@ -46,8 +46,8 @@ export default function LiteChat({ bridge, trades, infos, goFull }: Props) {
       // Lần đầu dùng: tạo sẵn Golden Duck để người mới không phải tự dựng nhân vật.
       if (!s.items.length && !creating.current) {
         creating.current = true
-        s = await bridgePost<PersonaStore>('/personas/save', DUCK_PERSONA)
-        setPicked(s.items[0]?.id ?? '')
+        s = await seedPersonas((p) => bridgePost<PersonaStore>('/personas/save', p))
+        setPicked(s.items.find((x) => isDuck(x.name))?.id ?? s.items[0]?.id ?? '')
       }
       setStore(s)
     }).catch((e) => setErr(errText(e)))
