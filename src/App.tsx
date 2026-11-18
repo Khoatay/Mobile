@@ -37,6 +37,7 @@ import Share from './pages/Share'
 import Signals from './pages/Signals'
 import LiteApp from './lite/LiteApp'
 import ModePicker from './lite/ModePicker'
+import ModeSwitch from './lite/ModeSwitch'
 import type { Mode } from './lite/plain'
 
 const GROUPS = [
@@ -112,6 +113,7 @@ export default function App() {
           <span className="logo" aria-hidden="true">{(profile.brand || 'FX').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase() || 'FX'}</span>
           <span className="brand-text">{profile.brand || 'FX Desk'}{profile.tagline && <small>{profile.tagline}</small>}</span>
         </div>
+        <ModeSwitch mode="full" onChange={(m) => { setMode(m); window.scrollTo(0, 0) }} dark />
         <nav>
           {GROUPS.map((g) => (
             <div key={g.title} className={`nav-group tone-${g.tone}`}>
@@ -129,7 +131,6 @@ export default function App() {
           <Avatar src={user.avatar} name={user.displayName || user.username} size={32} />
           <span className="user-text"><strong>{user.displayName || 'Đặt tên của bạn'}</strong><small>{user.username ? `@${user.username}` : 'Hồ sơ'}</small></span>
         </button>
-        <button className="lite-toggle" onClick={() => setMode('lite')}>Chuyển sang bản đơn giản</button>
         {EDITION === 'owner' && (
           <label className={viewAs ? 'mode-switch on' : 'mode-switch'}>
             <input type="checkbox" checked={viewAs} onChange={(e) => setViewAs(e.target.checked)} />

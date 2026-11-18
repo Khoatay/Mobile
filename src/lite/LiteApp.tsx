@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Icon, { type IconName } from '../components/Icon'
+import ModeSwitch from './ModeSwitch'
 import type { BrandPack } from '../lib/brandpack'
 import type { BridgeState } from '../lib/bridge'
 import type { PartnerLinks } from '../lib/partners'
@@ -45,8 +46,7 @@ export default function LiteApp(props: LiteProps) {
       <header className="lite-top">
         <span className="logo" aria-hidden="true">{(profile.brand || 'FX').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase() || 'FX'}</span>
         <strong className="lite-brand">{profile.brand || 'FX Desk'}</strong>
-        <span className="lite-badge">Đơn giản</span>
-        <button className="lite-switch" onClick={() => goFull()}>Bản đầy đủ</button>
+        <ModeSwitch mode="lite" onChange={() => goFull()} />
       </header>
       <main className="lite-main">
         {tab === 'home' && <LiteHome {...props} go={setTab} />}

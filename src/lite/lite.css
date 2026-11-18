@@ -9,8 +9,6 @@
 }
 .lite-top .logo { width: 32px; height: 32px; font-size: 12px; }
 .lite-brand { font-family: var(--font-num); font-size: 17px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lite-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); white-space: nowrap; }
-.lite-switch { margin-left: auto; font-size: 13px; padding: 6px 12px; border-radius: 99px; white-space: nowrap; }
 .lite-main { padding: 4px 16px 24px; }
 .lite-main h1 { font-size: 24px; margin: 8px 0 6px; }
 .lite-hello { font-size: 22px !important; }
@@ -122,9 +120,14 @@
 .lite-nav button.active { color: var(--accent); font-weight: 600; }
 @media (min-width: 600px) { .lite-nav { border-left: 1px solid var(--border); border-right: 1px solid var(--border); border-radius: 16px 16px 0 0; } }
 
-/* Chuyển chế độ ở thanh bên của bản đầy đủ */
-.lite-toggle { background: var(--nav-hover); color: var(--nav-ink); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 13px; padding: 8px 10px; text-align: left; }
-@media (max-width: 720px) { .lite-toggle { font-size: 12px; padding: 6px 10px; } }
+/* Công tắc Đơn giản | Đầy đủ */
+.mode-switch2 { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 3px; border-radius: 99px; background: var(--raised); border: 1px solid var(--border); flex: none; }
+.mode-switch2 button { border: none; background: transparent; border-radius: 99px; padding: 6px 12px; font-size: 13px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+.mode-switch2 button.active { background: var(--accent); color: #fff; font-weight: 600; box-shadow: 0 1px 4px color-mix(in srgb, var(--accent) 40%, transparent); }
+.lite-top .mode-switch2 { margin-left: auto; }
+.mode-switch2.dark { display: grid; background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.1); margin: 0 4px; }
+.mode-switch2.dark button { color: var(--nav-ink); }
+.mode-switch2.dark button.active { color: #fff; }
 
 /* Màn hình chọn chế độ lần đầu */
 .mode-picker { max-width: 640px; margin: 0 auto; padding: 48px 16px; text-align: center; }

@@ -32,7 +32,7 @@ Công cụ cho người giao dịch forex, chạy trên trình duyệt máy tín
 
 ## Bản đơn giản và bản đầy đủ
 
-Lần đầu mở app sẽ hỏi chọn giao diện; đổi lại bằng nút "Bản đầy đủ" ở góc trên hoặc "Chuyển sang bản đơn giản" ở thanh bên. Hai bản dùng chung dữ liệu.
+Lần đầu mở app sẽ hỏi chọn giao diện; đổi lại bằng công tắc **Đơn giản | Đầy đủ** ngay dưới logo (góc trên ở bản đơn giản, đầu thanh bên ở bản đầy đủ). Hai bản dùng chung dữ liệu.
 
 - **Bản đơn giản** (cho người mới): một cột như app điện thoại, 5 mục ở thanh dưới, không dùng thuật ngữ khi không cần.
   - **Trang chủ**: tổng số dư và lệnh đang mở (nếu có bridge), hoặc lãi/lỗ hôm nay và tuần này; lối tắt và một lời khuyên mỗi ngày.
