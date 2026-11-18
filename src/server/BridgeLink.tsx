@@ -65,8 +65,9 @@ export default function BridgeLink() {
       <details className="small bridge-install" open={!st?.hasToken}>
         <summary><strong>Cài Golden Duck Bridge trên máy Windows</strong></summary>
         <ol className="steps">
-          <li><a className="button" href={DOWNLOAD} rel="noopener">⬇ Tải GoldenDuckBridge.exe</a> và mở file vừa tải.</li>
-          <li>Windows có thể hiện “Windows protected your PC” vì file chưa có chữ ký số: bấm <strong>More info → Run anyway</strong>.</li>
+          <li><a className="button" href={DOWNLOAD} rel="noopener">⬇ Tải GoldenDuckBridge.exe</a></li>
+          <li>Trình duyệt có thể báo file “không thường được tải xuống”: trong danh sách tải xuống, bấm mũi tên ▾ cạnh nút <strong>Delete</strong> → <strong>Keep anyway</strong> (Chrome: <em>Keep</em>).</li>
+          <li>Bấm đúp vào file vừa tải. Hiện bảng xanh “Windows protected your PC” thì bấm dòng chữ nhỏ <strong>More info</strong> → <strong>Run anyway</strong>.</li>
           <li>Trang cài đặt tự mở: dán mã kết nối (bấm <em>Tạo mã kết nối</em> ở trên để có mã).</li>
           <li>Chương trình chạy ngầm, có biểu tượng con vịt ở góc phải thanh Taskbar, và tự chạy lại mỗi khi bật máy.</li>
         </ol>
