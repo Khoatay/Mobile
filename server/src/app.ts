@@ -79,10 +79,11 @@ export function routes(d: AppDeps): Record<string, Handler> {
     'POST /api/relay': (r) => relayed(r, 'POST', String(r.body.path ?? ''), (r.body.body ?? {}) as Record<string, unknown>),
     'POST /api/bridge/anthropic/v1/messages': (r) => {
       const u = bridgeUser(r)
+      // Dùng ô "mạnh" ở trang Quản trị, nhà cung cấp nào cũng được (Claude, OpenRouter, ChatGPT, Gemini…).
       const strong = ai.systemAi(d.db, d.ai).strong
       return relay.proxyMessages({
-        db: d.db, key: ai.systemKey(d.db, d.ai, 'anthropic'), model: strong.provider === 'anthropic' && strong.model ? strong.model : 'claude-sonnet-5-5',
-        perDay: d.bridgeAiPerDay, pro: relay.proFeatures(d.webDir), fetch: d.ai.fetch,
+        db: d.db, perDay: d.bridgeAiPerDay, pro: relay.proFeatures(d.webDir), fetch: d.ai.fetch,
+        slot: { ...strong, key: ai.systemKey(d.db, d.ai, strong.provider) },
       }, u, r.headers, r.body, r.query.toString() ? `?${r.query.toString()}` : '')
     },
 

@@ -10,7 +10,7 @@ import { openDb } from '../src/db'
 import { createHandler } from '../src/http'
 import { initSecrets, open as openSecret, seal } from '../src/secrets'
 import { complete, listModels } from '../src/llm'
-import { Relay } from '../src/relay'
+import { Relay, toOpenAi, fromOpenAi } from '../src/relay'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -372,5 +372,41 @@ describe('nối bridge trên máy khách', () => {
     expect(over.status).toBe(403)
     expect(over.body).toMatchObject({ type: 'error', error: { type: 'permission_error' } })
     expect(over.body.error.message).toMatch(/hết 1 lượt/)
+  })
+  it('chủ app chọn OpenRouter (hay hãng khác) ở ô mạnh: bridge vẫn dùng được, tự đổi định dạng', async () => {
+    db.prepare("insert or replace into settings (key, value) values ('ai.system', ?)").run(JSON.stringify({ strong: { provider: 'openrouter', model: 'anthropic/claude-opus-5.5', base: '', priceIn: 4, priceOut: 20 } }))
+    db.prepare("insert or replace into settings (key, value) values ('ai.key.openrouter', ?)").run(JSON.stringify(seal('sk-or-chu-app')))
+    db.prepare('delete from ai_usage').run()
+    const calls: { url: string; headers: Record<string, string>; body: Record<string, unknown> }[] = []
+    deps.ai.fetch = (async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), headers: init?.headers as Record<string, string>, body: JSON.parse(String(init?.body)) })
+      return new Response(JSON.stringify({ id: 'x', model: 'anthropic/claude-opus-5.5', choices: [{ message: { content: '```json\n{"rules":"FVG"}\n```' }, finish_reason: 'stop' }], usage: { prompt_tokens: 500, completion_tokens: 50 } }))
+    }) as typeof fetch
+    const t = (await user('POST', '/api/bridge/token')).body.token
+    const r = await asBridge(t, '/api/bridge/anthropic/v1/messages?beta=true', {
+      model: 'claude-opus-5-5', max_tokens: 16000, system: [{ type: 'text', text: 'Bạn là trợ lý' }],
+      messages: [{ role: 'user', content: [{ type: 'document', title: 'sach', source: { type: 'base64', media_type: 'application/pdf', data: 'QUJD' } }, { type: 'text', text: 'Học đi' }] }],
+      output_config: { effort: 'high', format: { type: 'json_schema', schema: { type: 'object' } } },
+    }, { 'x-api-key': t, authorization: '', 'x-gd-feature': 'learn' })
+    expect(r.status).toBe(200)
+    expect(r.body).toMatchObject({ type: 'message', stop_reason: 'end_turn', content: [{ type: 'text', text: '{"rules":"FVG"}' }], usage: { input_tokens: 500, output_tokens: 50 } })
+    expect(calls[0].url).toBe('https://openrouter.ai/api/v1/chat/completions')
+    expect(calls[0].headers.authorization).toBe('Bearer sk-or-chu-app')
+    expect(calls[0].body.model).toBe('anthropic/claude-opus-5.5')
+    expect(calls[0].body.response_format).toEqual({ type: 'json_schema', json_schema: { name: 'ket_qua', schema: { type: 'object' } } })
+    const msgs = calls[0].body.messages as { role: string; content: unknown }[]
+    expect(msgs[0].role).toBe('system')
+    expect(msgs[1].content).toEqual([{ type: 'file', file: { filename: 'sach.pdf', file_data: 'data:application/pdf;base64,QUJD' } }, { type: 'text', text: 'Học đi' }])
+  })
+})
+
+describe('đổi định dạng Claude ↔ OpenAI', () => {
+  it('ChatGPT dùng developer và max_completion_tokens; tin chỉ có chữ gộp thành một chuỗi', () => {
+    const o = toOpenAi({ system: 'S', max_tokens: 10, messages: [{ role: 'user', content: [{ type: 'text', text: 'a' }, { type: 'text', text: 'b' }] }] }, 'gpt-x', true) as Record<string, unknown>
+    expect(o).toMatchObject({ model: 'gpt-x', max_completion_tokens: 10, messages: [{ role: 'developer', content: 'S' }, { role: 'user', content: 'a\n\nb' }] })
+  })
+  it('cắt lời, từ chối', () => {
+    expect(fromOpenAi({ choices: [{ message: { content: 'x' }, finish_reason: 'length' }] }, 'm', false).stop_reason).toBe('max_tokens')
+    expect(fromOpenAi({ choices: [{ message: { content: '', refusal: 'no' }, finish_reason: 'stop' }] }, 'm', false).stop_reason).toBe('refusal')
   })
 })

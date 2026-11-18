@@ -152,54 +152,111 @@ const day = () => new Date().toISOString().slice(0, 10)
 /** Tính năng AI của bridge → tính năng Pro tương ứng. */
 const AI_FEATURE: Record<string, string> = { analyze: 'ai', learn: 'learn' }
 
-export interface ProxyDeps { db: DB; key: string; model: string; perDay: Record<string, number>; pro: string[]; fetch?: typeof fetch }
+export interface ProxyDeps {
+  db: DB; perDay: Record<string, number>; pro: string[]; fetch?: typeof fetch
+  /** Ô model "mạnh" ở trang Quản trị: nhà cung cấp, model, khoá, địa chỉ, giá (USD mỗi triệu token). */
+  slot: { provider: string; model: string; key: string; base: string; priceIn: number; priceOut: number }
+}
 
 function aiError(status: number, type: string, message: string) {
   return new Raw(status, { type: 'error', error: { type, message } })
 }
 
+type Block = { type: string; text?: string; source?: { type: string; media_type?: string; data?: string }; title?: string }
+const OPENAI_BASE: Record<string, string> = {
+  openai: 'https://api.openai.com/v1', gemini: 'https://generativelanguage.googleapis.com/v1beta/openai', deepseek: 'https://api.deepseek.com/v1',
+  xai: 'https://api.x.ai/v1', openrouter: 'https://openrouter.ai/api/v1', qwen: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', groq: 'https://api.groq.com/openai/v1',
+}
+
+/** Đổi yêu cầu dạng Claude (Messages) sang dạng OpenAI (chat/completions) mà OpenRouter, ChatGPT, Gemini, DeepSeek… đều hiểu. */
+export function toOpenAi(body: Record<string, unknown>, model: string, official: boolean) {
+  const sys = typeof body.system === 'string' ? body.system : ((body.system as Block[] | undefined) ?? []).map((b) => b.text ?? '').join('\n\n')
+  const fmt = (body.output_config as { format?: { type?: string; schema?: unknown } } | undefined)?.format
+  const part = (b: Block) => {
+    if (b.type === 'text') return { type: 'text', text: b.text ?? '' }
+    if (b.type === 'document' && b.source?.type === 'base64') return { type: 'file', file: { filename: `${b.title || 'tai-lieu'}.pdf`, file_data: `data:${b.source.media_type ?? 'application/pdf'};base64,${b.source.data}` } }
+    if (b.type === 'document' && b.source?.type === 'text') return { type: 'text', text: String(b.source.data ?? '') }
+    if (b.type === 'image' && b.source?.type === 'base64') return { type: 'image_url', image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` } }
+    return null
+  }
+  const messages = ((body.messages ?? []) as { role: string; content: string | Block[] }[]).map((m) => {
+    if (typeof m.content === 'string') return { role: m.role, content: m.content }
+    const parts = m.content.map(part).filter(Boolean) as { type: string; text?: string }[]
+    return { role: m.role, content: parts.every((x) => x.type === 'text') ? parts.map((x) => x.text).join('\n\n') : parts }
+  })
+  const jsonNote = fmt?.type === 'json_schema' ? `\n\nChỉ trả lời bằng đúng một đối tượng JSON theo schema sau, không thêm chữ nào khác:\n${JSON.stringify(fmt.schema)}` : ''
+  return {
+    model,
+    messages: [{ role: official ? 'developer' : 'system', content: sys + jsonNote }, ...messages],
+    ...(official ? { max_completion_tokens: body.max_tokens } : { max_tokens: body.max_tokens }),
+    ...(fmt?.type === 'json_schema' ? { response_format: { type: 'json_schema', json_schema: { name: 'ket_qua', schema: fmt.schema } } } : {}),
+  }
+}
+
+/** Đổi câu trả lời dạng OpenAI về dạng Claude để thư viện trên bridge đọc như bình thường. */
+export function fromOpenAi(r: Record<string, unknown>, model: string, json: boolean) {
+  const ch = ((r.choices ?? []) as { message?: { content?: string; refusal?: string }; finish_reason?: string }[])[0]
+  let text = String(ch?.message?.content ?? '').trim()
+  if (json) text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')  // nhiều model bọc JSON trong ```
+  const u = (r.usage ?? {}) as { prompt_tokens?: number; completion_tokens?: number }
+  const stop = ch?.message?.refusal || ch?.finish_reason === 'content_filter' ? 'refusal' : ch?.finish_reason === 'length' ? 'max_tokens' : 'end_turn'
+  return {
+    id: String(r.id ?? 'msg'), type: 'message', role: 'assistant', model: String(r.model ?? model), content: [{ type: 'text', text }],
+    stop_reason: stop, stop_sequence: null, usage: { input_tokens: u.prompt_tokens ?? 0, output_tokens: u.completion_tokens ?? 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+  }
+}
+
 /**
- * Nhận yêu cầu dạng API Messages của Anthropic từ bridge, kiểm tra gói và lượt, đổi sang khoá và model của chủ app rồi gửi đi.
- * Lỗi trả theo đúng dạng của Anthropic để thư viện trên bridge đọc được thông báo.
+ * Nhận yêu cầu dạng API Messages của Claude từ bridge, kiểm tra gói và lượt, rồi gửi bằng khoá và model của chủ app
+ * (ô "mạnh" ở trang Quản trị: Claude, OpenRouter, ChatGPT, Gemini…). Lỗi trả theo dạng của Claude để bridge đọc được thông báo.
  */
 export async function proxyMessages(d: ProxyDeps, u: User, headers: Record<string, string | string[] | undefined>, body: Record<string, unknown>, query: string): Promise<Raw> {
   const feature = String(headers['x-gd-feature'] ?? '')
   const proId = AI_FEATURE[feature]
   if (proId && d.pro.includes(proId) && planOf(u) !== 'pro') return aiError(403, 'permission_error', `${FEATURE_NAME[proId]} là tính năng Pro. Nâng cấp ở trang Gói Pro`)
-  if (!d.key) return aiError(403, 'permission_error', 'Chủ app chưa bật AI cho AI học trade và AI phân tích (cần khoá Claude ở trang Quản trị)')
+  const { slot } = d
+  if (!slot.key || !slot.model) return aiError(403, 'permission_error', 'Chủ app chưa bật AI cho AI học trade và AI phân tích (chọn nhà cung cấp, model và dán khoá ở ô "mạnh" trong trang Quản trị)')
   const used = (d.db.prepare('select bridge_calls from ai_usage where user_id = ? and day = ?').get(u.id, day()) as { bridge_calls: number } | undefined)?.bridge_calls ?? 0
   const limit = d.perDay[planOf(u)] ?? 0
   if (used >= limit) return aiError(403, 'permission_error', `Bạn đã dùng hết ${limit} lượt AI phân tích và AI học trade hôm nay${planOf(u) === 'free' ? '. Nâng cấp Pro để có thêm lượt' : '. Mai dùng tiếp'}`)
 
-  const model = d.model || String(body.model ?? '')
-  const out: Record<string, unknown> = { ...body, model }
-  const beta = String(headers['anthropic-beta'] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
-  // Haiku không có dự phòng phía máy chủ: bỏ tham số đó nếu chủ app chọn Haiku.
-  const keepBeta = /haiku/.test(model) ? beta.filter((b) => !b.startsWith('server-side-fallback')) : beta
-  if (/haiku/.test(model)) delete out.fallbacks
+  const claude = slot.provider === 'anthropic'
+  const json = (body.output_config as { format?: { type?: string } } | undefined)?.format?.type === 'json_schema'
+  let req: { url: string; headers: Record<string, string>; body: unknown }
+  if (claude) {
+    const out: Record<string, unknown> = { ...body, model: slot.model }
+    const beta = String(headers['anthropic-beta'] ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+    // Haiku không có dự phòng phía máy chủ: bỏ tham số đó nếu chủ app chọn Haiku.
+    const keepBeta = /haiku/.test(slot.model) ? beta.filter((b) => !b.startsWith('server-side-fallback')) : beta
+    if (/haiku/.test(slot.model)) delete out.fallbacks
+    req = { url: `https://api.anthropic.com/v1/messages${query}`, headers: { 'x-api-key': slot.key, 'anthropic-version': String(headers['anthropic-version'] ?? '2023-06-01'), ...(keepBeta.length ? { 'anthropic-beta': keepBeta.join(',') } : {}) }, body: out }
+  } else {
+    const base = (slot.base || OPENAI_BASE[slot.provider] || '').replace(/\/+$/, '')
+    if (!/^https:\/\//.test(base)) return aiError(403, 'permission_error', 'Địa chỉ API của ô "mạnh" phải bắt đầu bằng https://')
+    req = { url: `${base}/chat/completions`, headers: { authorization: `Bearer ${slot.key}` }, body: toOpenAi(body, slot.model, slot.provider === 'openai') }
+  }
   let res: Response
   try {
-    res = await (d.fetch ?? fetch)(`https://api.anthropic.com/v1/messages${query}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': d.key, 'anthropic-version': String(headers['anthropic-version'] ?? '2023-06-01'), ...(keepBeta.length ? { 'anthropic-beta': keepBeta.join(',') } : {}) },
-      body: JSON.stringify(out),
-      signal: AbortSignal.timeout(600_000),
-    })
+    res = await (d.fetch ?? fetch)(req.url, { method: 'POST', headers: { 'content-type': 'application/json', ...req.headers }, body: JSON.stringify(req.body), signal: AbortSignal.timeout(600_000) })
   } catch {
     return aiError(529, 'overloaded_error', 'Máy chủ không gọi được AI. Thử lại sau ít phút')
   }
-  const j = (await res.json().catch(() => ({}))) as { usage?: Record<string, number>; model?: string; error?: { type?: string; message?: string } }
+  const j = (await res.json().catch(() => ({}))) as Record<string, unknown> & { error?: { message?: string } | string }
   if (!res.ok) {
-    console.error('[ai bridge]', res.status, j.error?.message)
-    // Lỗi khoá của chủ app thì không nói chi tiết cho khách.
-    if (res.status === 401 || res.status === 403) return aiError(403, 'permission_error', 'AI của Golden Duck đang gặp lỗi. Báo chủ app kiểm tra khoá ở trang Quản trị')
-    return new Raw(res.status, j)
+    const msg = typeof j.error === 'string' ? j.error : j.error?.message ?? ''
+    console.error('[ai bridge]', slot.provider, res.status, msg)
+    // Lỗi khoá hay hết tiền của chủ app thì không nói chi tiết cho khách.
+    if (res.status === 401 || res.status === 402 || res.status === 403) return aiError(403, 'permission_error', 'AI của Golden Duck đang gặp lỗi. Báo chủ app kiểm tra khoá và số dư ở trang Quản trị')
+    if (res.status === 404) return aiError(400, 'invalid_request_error', `Model ${slot.model} không dùng được (hoặc không đọc được tài liệu PDF). Chủ app chọn model khác ở trang Quản trị`)
+    if (res.status === 429) return aiError(529, 'overloaded_error', 'AI đang quá tải. Thử lại sau ít phút')
+    return aiError(res.status >= 500 ? 529 : 400, res.status >= 500 ? 'overloaded_error' : 'invalid_request_error', `AI báo lỗi: ${msg.slice(0, 300) || res.status}`)
   }
-  const us = j.usage ?? {}
-  const pr = KNOWN_PRICES[String(j.model)] ?? KNOWN_PRICES[model] ?? [0, 0, 0, 0]
+  const reply = claude ? j : fromOpenAi(j, slot.model, json)
+  const us = (reply.usage ?? {}) as Record<string, number>
+  const pr = KNOWN_PRICES[String(reply.model)] ?? KNOWN_PRICES[slot.model] ?? [slot.priceIn, slot.priceOut, slot.priceIn / 10, slot.priceIn * 1.25]
   const cost = ((us.input_tokens ?? 0) * pr[0] + (us.output_tokens ?? 0) * pr[1] + (us.cache_read_input_tokens ?? 0) * pr[2] + (us.cache_creation_input_tokens ?? 0) * pr[3]) / 1e6
   d.db.prepare(`insert into ai_usage (user_id, day, cost, tokens_in, tokens_out, bridge_calls) values (?, ?, ?, ?, ?, 1)
     on conflict(user_id, day) do update set cost = cost + excluded.cost, tokens_in = tokens_in + excluded.tokens_in, tokens_out = tokens_out + excluded.tokens_out, bridge_calls = bridge_calls + 1`)
     .run(u.id, day(), cost, (us.input_tokens ?? 0) + (us.cache_read_input_tokens ?? 0) + (us.cache_creation_input_tokens ?? 0), us.output_tokens ?? 0)
-  return new Raw(200, j)
+  return new Raw(200, reply)
 }
