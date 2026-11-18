@@ -3,18 +3,35 @@ import { DUCK_NAME, PERSONA_TEMPLATES, type Persona, type PersonaStore } from '.
 import { demoMessages } from './signals'
 import { ApiError, type ChannelRow, type Me } from './server'
 
-const items: Persona[] = PERSONA_TEMPLATES.map((t) => ({ id: t.id, ...t.p, playbooks: [] })).sort((a) => (a.name === DUCK_NAME ? -1 : 0))
+let items: (Persona & { knowledge?: string; preset?: boolean })[] = PERSONA_TEMPLATES.map((t) => ({ id: t.id, ...t.p, playbooks: [], preset: true })).sort((a) => (a.name === DUCK_NAME ? -1 : 0))
 const st = {
   me: null as Me | null,
   channels: [] as ChannelRow[],
   chats: {} as PersonaStore['chats'],
   next: 1,
+  ai: { mode: 'system' as 'system' | 'own', provider: 'anthropic', model: '', key: '' },
+  sys: { provider: 'anthropic', model: 'claude-haiku-5-5', base: '', priceIn: 0, priceOut: 0, keys: { anthropic: '…demo' } as Record<string, string> },
 }
+const PROVIDERS = [
+  { id: 'anthropic', label: 'Claude (Anthropic)', keyUrl: 'console.anthropic.com', hint: 'Khoá bắt đầu bằng sk-ant-' },
+  { id: 'openai', label: 'ChatGPT (OpenAI)', keyUrl: 'platform.openai.com/api-keys', hint: 'Khoá bắt đầu bằng sk-' },
+  { id: 'gemini', label: 'Gemini (Google)', keyUrl: 'aistudio.google.com/apikey', hint: 'Khoá bắt đầu bằng AIza' },
+  { id: 'deepseek', label: 'DeepSeek', keyUrl: 'platform.deepseek.com', hint: '' },
+  { id: 'xai', label: 'Grok (xAI)', keyUrl: 'console.x.ai', hint: '' },
+  { id: 'openrouter', label: 'OpenRouter (hàng trăm model)', keyUrl: 'openrouter.ai/keys', hint: 'Một khoá dùng được model của nhiều hãng' },
+  { id: 'qwen', label: 'Qwen (Alibaba)', keyUrl: 'dashscope.console.aliyun.com', hint: '' },
+  { id: 'groq', label: 'Groq', keyUrl: 'console.groq.com/keys', hint: '' },
+]
+const DEMO_MODELS: Record<string, string[]> = {
+  anthropic: ['claude-haiku-5-5', 'claude-opus-5-5', 'claude-sonnet-5-5'], openai: ['mô-hình-mẫu-1', 'mô-hình-mẫu-2'], gemini: ['mô-hình-mẫu-flash', 'mô-hình-mẫu-pro'],
+}
+const myAi = () => ({ ...st.ai, key: st.ai.key ? '…' + st.ai.key.slice(-4) : '', system: { provider: st.sys.provider, label: PROVIDERS.find((p) => p.id === st.sys.provider)?.label ?? st.sys.provider, model: st.sys.model, ready: true }, providers: PROVIDERS })
+const adminAi = () => ({ ...st.sys, ready: true, today: { calls: 12, cost: 0.0042, tin: 9000, tout: 2100, own: 3 }, month: { calls: 340, cost: 0.12 } })
 const DEMO_CHANNELS = ['Vàng Signal VIP', 'Gold Sniper', 'FX Daily']
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function user(email: string): Me {
-  return { id: 1, email, name: '', plan: 'free', planUntil: null, telegram: { linked: false, name: '', link: 'https://t.me/goldenduck_bot?start=demo' }, limits: { channels: 3, chatPerDay: 15 }, chatToday: 0 }
+  return { id: 1, admin: true, email, name: '', plan: 'free', planUntil: null, telegram: { linked: false, name: '', link: 'https://t.me/goldenduck_bot?start=demo' }, limits: { channels: 3, chatPerDay: 15 }, chatToday: 0 }
 }
 const need = () => { if (!st.me) throw new ApiError(401, 'Bạn cần đăng nhập'); return st.me }
 
@@ -61,15 +78,42 @@ export async function mockApi(path: string, body?: unknown): Promise<unknown> {
     case '/personas': need(); return { items, chats: st.chats }
     case '/chat': {
       const me = need()
-      if (me.chatToday >= me.limits.chatPerDay) throw new ApiError(429, `Bạn đã dùng hết ${me.limits.chatPerDay} tin hôm nay.`)
+      if (st.ai.mode !== 'own' && me.chatToday >= me.limits.chatPerDay) throw new ApiError(429, `Bạn đã dùng hết ${me.limits.chatPerDay} tin hôm nay.`)
       await wait(600)
       const id = String(b.persona)
       const now = Date.now()
       const reply = 'Đây là bản xem thử nên mình chưa trả lời thật. Khi chạy trên máy chủ, câu trả lời đến từ AI của Golden Duck.'
       st.chats = { ...st.chats, [id]: [...(st.chats[id] ?? []), { role: 'user', text: String(b.message), at: now }, { role: 'assistant', text: reply, at: now + 1 }] }
-      me.chatToday++
-      return { items, chats: st.chats, reply, remaining: me.limits.chatPerDay - me.chatToday }
+      if (st.ai.mode !== 'own') me.chatToday++
+      return { items, chats: st.chats, reply, remaining: st.ai.mode === 'own' ? null : me.limits.chatPerDay - me.chatToday, own: st.ai.mode === 'own' }
     }
+    case '/personas/save': {
+      need()
+      const name = String(b.name ?? '').trim()
+      if (!name) throw new ApiError(400, 'Đặt tên cho nhân vật')
+      const id = typeof b.id === 'string' && b.id ? b.id : `u-${Date.now()}`
+      const p = { ...PERSONA_TEMPLATES[0].p, ...(b as object), id, name, avatar: '', playbooks: [], use_account: false, preset: false } as (typeof items)[number]
+      items = items.some((x) => x.id === id) ? items.map((x) => (x.id === id ? p : x)) : [...items, p]
+      return { items, chats: st.chats, saved: id }
+    }
+    case '/personas/delete': items = items.filter((x) => x.id !== b.id || x.preset); return { items, chats: st.chats }
+    case '/ai/me':
+      need()
+      if (body !== undefined) {
+        if (b.mode === 'own' && !(b.key || st.ai.key)) throw new ApiError(400, 'Dán khoá AI của bạn trước')
+        if (b.provider && b.provider !== st.ai.provider) st.ai.key = ''
+        st.ai = { mode: b.mode === 'own' ? 'own' : 'system', provider: String(b.provider ?? st.ai.provider), model: String(b.model ?? st.ai.model), key: String(b.key || st.ai.key) }
+      }
+      return myAi()
+    case '/ai/models': await wait(500); return { models: DEMO_MODELS[String(b.provider)] ?? ['mô-hình-mẫu'] }
+    case '/ai/test': await wait(500); return { ok: true, reply: 'OK', model: b.scope === 'system' ? st.sys.model : st.ai.model }
+    case '/admin/ai':
+      need()
+      if (body !== undefined) {
+        st.sys = { ...st.sys, ...(b.provider ? { provider: String(b.provider) } : {}), ...(b.model ? { model: String(b.model) } : {}), ...(b.priceIn != null ? { priceIn: Number(b.priceIn), priceOut: Number(b.priceOut) } : {}) }
+        if (b.key) st.sys.keys = { ...st.sys.keys, [st.sys.provider]: '…' + String(b.key).slice(-4) }
+      }
+      return adminAi()
     case '/chat/clear': st.chats = { ...st.chats, [String(b.persona)]: [] }; return { items, chats: st.chats }
   }
   throw new ApiError(404, 'Không có đường dẫn này')

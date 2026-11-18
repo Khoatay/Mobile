@@ -8,6 +8,10 @@ import { Bot } from '../src/bot'
 import { parseChannelRef, type Reader } from '../src/channels'
 import { openDb } from '../src/db'
 import { createHandler } from '../src/http'
+import { initSecrets, open as openSecret, seal } from '../src/secrets'
+import { complete, listModels } from '../src/llm'
+
+initSecrets('', Buffer.alloc(32, 7))
 
 describe('mật khẩu', () => {
   it('băm và kiểm tra', () => {
@@ -51,7 +55,17 @@ describe('API', () => {
   const bot = { username: 'goldenduck_bot', configured: () => true, send: async (chat: number, text: string) => { sent.push([chat, text]); return true } }
   const deps: AppDeps = {
     db, reader, bot,
-    ai: { key: '', model: 'claude-haiku-5-5', perDay: { free: 2, pro: 200 }, client: { messages: { create: async () => ({ model: 'claude-haiku-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Chào bạn' }], usage: { input_tokens: 1000, output_tokens: 100 } }) } } as never },
+    ai: {
+      envKey: '', envModel: 'claude-haiku-5-5', perDay: { free: 2, pro: 200 },
+      anthropic: { messages: { create: async () => ({ model: 'claude-haiku-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Chào bạn' }], usage: { input_tokens: 1000, output_tokens: 100 } }) } } as never,
+      // Giả lập OpenAI cho khách dùng khoá riêng.
+      fetch: (async (url: string, init?: RequestInit) => {
+        if (String(url).endsWith('/models')) return new Response(JSON.stringify({ data: [{ id: 'gpt-x' }, { id: 'text-embedding-3' }] }))
+        const body = JSON.parse(String(init?.body))
+        if ((init?.headers as Record<string, string>).authorization !== 'Bearer sk-dung') return new Response('{"error":{"message":"Incorrect API key"}}', { status: 401 })
+        return new Response(JSON.stringify({ model: body.model, choices: [{ message: { content: 'Trả lời từ GPT' }, finish_reason: 'stop' }], usage: { prompt_tokens: 50, completion_tokens: 5 } }))
+      }) as typeof fetch,
+    },
     channelsMax: { free: 2, pro: 20 }, secure: false,
   }
   let server: Server
@@ -147,9 +161,77 @@ describe('API', () => {
     expect(cost.cost).toBeCloseTo(2 * (1000 * 0.1 + 100 * 0.5) / 1e6)
   })
 
+  it('khách tự mang khoá: chọn nhà cung cấp, lấy danh sách model, chat không tính vào lượt', async () => {
+    const duck = 'duck'
+    expect((await call('a', 'POST', '/api/ai/me', { mode: 'own', provider: 'openai', model: 'gpt-x' })).status).toBe(400) // chưa có khoá
+    const m = await call('a', 'POST', '/api/ai/models', { provider: 'openai', key: 'sk-dung' })
+    expect(m.body.models).toEqual(['gpt-x'])
+    const saved = await call('a', 'POST', '/api/ai/me', { mode: 'own', provider: 'openai', model: 'gpt-x', key: 'sk-dung' })
+    expect(saved.body).toMatchObject({ mode: 'own', provider: 'openai', model: 'gpt-x', key: '…dung' })
+    expect(JSON.stringify(saved.body)).not.toContain('sk-dung')
+    const raw = db.prepare('select key_enc from user_ai').get() as { key_enc: string }
+    expect(raw.key_enc).not.toContain('sk-dung')
+    expect(openSecret(raw.key_enc)).toBe('sk-dung')
+    // Đã hết lượt AI của hệ thống nhưng khoá riêng vẫn chat được.
+    const r = await call('a', 'POST', '/api/chat', { persona: duck, message: 'Chào' })
+    expect(r.body.reply).toBe('Trả lời từ GPT')
+    expect(r.body.own).toBe(true)
+    await call('a', 'POST', '/api/ai/me', { mode: 'own', provider: 'openai', key: 'sk-sai' })
+    expect((await call('a', 'POST', '/api/chat', { persona: duck, message: 'Chào' })).body.error).toMatch(/Khoá AI không đúng/)
+    expect((await call('a', 'POST', '/api/ai/me', { mode: 'own', provider: 'custom', model: 'x', key: 'k' })).status).toBe(400)
+    await call('a', 'POST', '/api/ai/me', { mode: 'system' })
+  })
+
+  it('nhân vật tự tạo có kiến thức riêng', async () => {
+    const r = await call('a', 'POST', '/api/personas/save', { name: 'Thầy Scalp', knowledge: 'Chỉ vào lệnh phiên Âu, SL 30 pip.' })
+    expect(r.body.items.find((p: { id: string }) => p.id === r.body.saved)).toMatchObject({ name: 'Thầy Scalp', knowledge: 'Chỉ vào lệnh phiên Âu, SL 30 pip.' })
+    // Người khác không thấy.
+    expect((await call('b', 'GET', '/api/personas')).body.items.some((p: { name: string }) => p.name === 'Thầy Scalp')).toBe(false)
+    expect((await call('b', 'POST', '/api/personas/save', { id: r.body.saved, name: 'Cướp' })).status).toBe(404)
+    const del = await call('a', 'POST', '/api/personas/delete', { id: r.body.saved })
+    expect(del.body.items.some((p: { name: string }) => p.name === 'Thầy Scalp')).toBe(false)
+  })
+
+  it('trang quản trị chỉ cho chủ app (tài khoản đầu tiên)', async () => {
+    expect((await call('a', 'GET', '/api/me')).body.admin).toBe(true)
+    expect((await call('b', 'GET', '/api/admin/ai')).status).toBe(403)
+    const r = await call('a', 'POST', '/api/admin/ai', { provider: 'openai', model: 'gpt-x', key: 'sk-dung', priceIn: 1, priceOut: 4 })
+    expect(r.body).toMatchObject({ provider: 'openai', model: 'gpt-x', ready: true })
+    expect(r.body.keys.openai).toBe('…dung')
+    const c = await call('b', 'POST', '/api/chat', { persona: 'duck', message: 'Hi' })
+    expect(c.body.reply).toBe('Trả lời từ GPT')
+    const cost = db.prepare('select cost from ai_usage where user_id = 2').get() as { cost: number }
+    expect(cost.cost).toBeCloseTo((50 * 1 + 5 * 4) / 1e6)
+    await call('a', 'POST', '/api/admin/ai', { provider: 'anthropic', model: 'claude-haiku-5-5' })
+  })
+
   it('đăng xuất', async () => {
     await call('a', 'POST', '/api/auth/logout', {})
     expect((await call('a', 'GET', '/api/me')).status).toBe(401)
+  })
+})
+
+describe('các nhà cung cấp AI', () => {
+  it('Gemini: đổi vai, đọc kết quả', async () => {
+    let sent: { url: string; body: Record<string, unknown> } | null = null
+    const f = (async (url: string, init: RequestInit) => { sent = { url, body: JSON.parse(String(init.body)) }; return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Xin chào' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 3 } })) }) as typeof fetch
+    const r = await complete({ provider: 'gemini', model: 'gemini-x', key: 'AIza' }, 'sys', [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }, { role: 'user', content: 'c' }], 100, f)
+    expect(r).toMatchObject({ text: 'Xin chào', refused: false, usage: { in: 10, out: 3 } })
+    expect(sent!.url).toContain('/models/gemini-x:generateContent')
+    expect((sent!.body.contents as { role: string }[]).map((c) => c.role)).toEqual(['user', 'model', 'user'])
+  })
+  it('DeepSeek dùng địa chỉ riêng, lỗi hết tiền nói rõ', async () => {
+    const f = (async (url: string) => { expect(url).toBe('https://api.deepseek.com/v1/chat/completions'); return new Response('{"error":{"message":"Insufficient Balance"}}', { status: 402 }) }) as typeof fetch
+    await expect(complete({ provider: 'deepseek', model: 'deepseek-chat', key: 'k' }, 's', [{ role: 'user', content: 'x' }], 10, f)).rejects.toThrow(/hết tiền/)
+  })
+  it('lọc model không dùng để chat', async () => {
+    const f = (async () => new Response(JSON.stringify({ models: [{ name: 'models/gemini-a', supportedGenerationMethods: ['generateContent'] }, { name: 'models/embedding-1', supportedGenerationMethods: ['embedContent'] }] }))) as typeof fetch
+    expect(await listModels({ provider: 'gemini', key: 'k' }, f)).toEqual(['gemini-a'])
+  })
+  it('mã hoá khoá', () => {
+    const s = seal('bi-mat')
+    expect(s).not.toContain('bi-mat')
+    expect(openSecret(s)).toBe('bi-mat')
   })
 })
 

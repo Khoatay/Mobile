@@ -50,7 +50,7 @@ export default function ServerSignals({ me, goCalc, goMe }: { me: Me; goCalc: ()
               <small className="muted">{c.kind === 'invite' ? 'Kênh riêng' : `@${c.ref}`}{c.last_at ? ` · tin mới nhất ${ago(c.last_at)}` : ''}</small>
             </div>
             {manage ? (
-              <button className="lite-link mini danger" onClick={() => confirm(`Bỏ theo dõi ${c.title || c.ref}?`) && act('/channels/remove', { id: c.id })}>Bỏ</button>
+              <button className="lite-link mini danger" onClick={() => act('/channels/remove', { id: c.id })}>Bỏ</button>
             ) : (
               <button className={`srv-bell${c.notify ? ' on' : ''}`} aria-pressed={!!c.notify} title={c.notify ? 'Đang báo qua Telegram' : 'Không báo'} onClick={() => act('/channels/notify', { id: c.id, on: !c.notify })}>{c.notify ? '🔔' : '🔕'}</button>
             )}

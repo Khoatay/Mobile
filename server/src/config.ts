@@ -12,6 +12,8 @@ export const config = {
   /** Thư mục bản build web app (npm run build:server ở thư mục gốc). */
   webDir: path.resolve(env('WEB_DIR', '../dist-server')),
   anthropicKey: env('ANTHROPIC_API_KEY'),
+  /** Email chủ app (cách nhau dấu phẩy). Tài khoản đăng ký đầu tiên luôn là chủ app. */
+  adminEmails: env('ADMIN_EMAILS').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean),
   chatModel: env('CHAT_MODEL', 'claude-haiku-5-5'),
   botToken: env('TELEGRAM_BOT_TOKEN'),
   tgApiId: num('TG_API_ID', 0),

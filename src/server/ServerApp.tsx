@@ -42,7 +42,7 @@ export default function ServerApp() {
       <main className="lite-main">
         {tab === 'signals' && <ServerSignals me={me} goCalc={() => go('calc')} goMe={() => go('me')} />}
         {tab === 'calc' && <LiteCalc settings={settings} patch={patch} />}
-        {tab === 'chat' && <ServerChat me={me} onUsed={(left) => setMe({ ...me, chatToday: me.limits.chatPerDay - left })} />}
+        {tab === 'chat' && <ServerChat me={me} onUsed={(left) => setMe({ ...me, chatToday: me.limits.chatPerDay - left })} goMe={() => go('me')} />}
         {tab === 'learn' && <LiteLearn />}
         {tab === 'me' && <ServerMe me={me} setMe={setMe} />}
       </main>

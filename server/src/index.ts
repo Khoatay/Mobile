@@ -6,14 +6,17 @@ import { Bot } from './bot'
 import { config, secureCookies } from './config'
 import { openDb } from './db'
 import { createHandler } from './http'
+import { initSecrets } from './secrets'
 import { TgReader } from './tg'
 
 const db = openDb(config.dataDir)
+initSecrets(config.dataDir)
 const bot = new Bot(config.botToken, db)
 const deps: AppDeps = {
   db, bot,
   reader: undefined as unknown as AppDeps['reader'],
-  ai: { key: config.anthropicKey, model: config.chatModel, perDay: config.chatPerDay },
+  ai: { envKey: config.anthropicKey, envModel: config.chatModel, perDay: config.chatPerDay },
+  adminEmails: config.adminEmails,
   channelsMax: config.channelsMax,
   secure: secureCookies(),
 }
@@ -29,7 +32,7 @@ createServer(createHandler(routes(deps), config.webDir)).listen(config.port, '12
 reader.start().catch((e) => { reader.error = (e as Error).message; console.error('[telegram]', e) })
 if (!reader.ok && reader.error) console.warn('[telegram]', reader.error)
 void bot.start()
-if (!config.anthropicKey) console.warn('[ai] Chưa có ANTHROPIC_API_KEY: chat AI tắt')
+
 
 // Dọn tin cũ hơn 90 ngày mỗi ngày một lần để file dữ liệu không phình mãi.
 setInterval(() => db.prepare('delete from messages where date < ?').run(Math.floor(Date.now() / 1000) - 90 * 86_400), 86_400_000).unref()

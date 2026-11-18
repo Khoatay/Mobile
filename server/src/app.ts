@@ -12,6 +12,7 @@ export interface AppDeps {
   reader: ch.Reader & { error?: string }
   bot: Pick<Bot, 'username' | 'send' | 'configured'> & { error?: string }
   ai: ai.AiDeps
+  adminEmails?: string[]
   channelsMax: Record<string, number>
   secure: boolean
 }
@@ -34,8 +35,10 @@ export function routes(d: AppDeps): Record<string, Handler> {
     if (!u) throw new HttpError(401, 'Bạn cần đăng nhập')
     return u
   }
+  const isAdmin = (u: User) => u.id === 1 || (d.adminEmails ?? []).includes(u.email)
+  const admin = (r: Req) => { const u = me(r); if (!isAdmin(u)) throw new HttpError(403, 'Chỉ chủ app làm được việc này'); return u }
   const view = (u: User) => ({
-    id: u.id, email: u.email, name: u.name, plan: auth.planOf(u), planUntil: u.plan_until,
+    id: u.id, email: u.email, name: u.name, plan: auth.planOf(u), planUntil: u.plan_until, admin: isAdmin(u),
     telegram: { linked: !!u.tg_chat, name: u.tg_name, link: d.bot.username ? `https://t.me/${d.bot.username}?start=${u.link_code}` : '' },
     limits: { channels: d.channelsMax[auth.planOf(u)] ?? 0, chatPerDay: ai.limitFor(u, d.ai.perDay) },
     chatToday: ai.usageToday(d.db, u.id).calls,
@@ -47,7 +50,7 @@ export function routes(d: AppDeps): Record<string, Handler> {
   const channelId = (r: Req) => { const n = Number(r.body.id); if (!Number.isInteger(n)) throw new HttpError(400, 'Thiếu kênh'); return n }
 
   return {
-    'GET /api/health': () => ({ ok: true, telegram: d.reader.ready(), telegramError: d.reader.ready() ? '' : d.reader.error ?? '', bot: d.bot.username || '', ai: !!(d.ai.key || d.ai.client) }),
+    'GET /api/health': () => ({ ok: true, telegram: d.reader.ready(), telegramError: d.reader.ready() ? '' : d.reader.error ?? '', bot: d.bot.username || '', ai: ai.systemReady(d.db, d.ai) }),
 
     'POST /api/auth/register': (r) => { auth.checkRate(r.ip); return start(r, auth.register(d.db, r.body)) },
     'POST /api/auth/login': (r) => {
@@ -68,6 +71,14 @@ export function routes(d: AppDeps): Record<string, Handler> {
     'GET /api/messages': (r) => ch.feed(d.db, me(r).id, Number(r.query.get('after')) || 0),
 
     'GET /api/personas': (r) => ai.store(d.db, me(r).id),
+    'POST /api/personas/save': (r) => ai.savePersona(d.db, me(r).id, r.body),
+    'POST /api/personas/delete': (r) => ai.deletePersona(d.db, me(r).id, String(r.body.id ?? '')),
+    'GET /api/ai/me': (r) => ai.myAi(d.db, d.ai, me(r)),
+    'POST /api/ai/me': (r) => ai.saveMyAi(d.db, d.ai, me(r), r.body),
+    'POST /api/ai/models': (r) => { const u = me(r); return ai.models(d.db, d.ai, u, r.body, isAdmin(u)) },
+    'POST /api/ai/test': (r) => { const u = me(r); return ai.testAi(d.db, d.ai, u, r.body.scope === 'system' && isAdmin(u) ? 'system' : 'me') },
+    'GET /api/admin/ai': (r) => { admin(r); return ai.adminView(d.db, d.ai) },
+    'POST /api/admin/ai': (r) => { admin(r); return ai.adminSave(d.db, d.ai, r.body) },
     'POST /api/chat': (r) => ai.chat(d.db, me(r), d.ai, r.body),
     'POST /api/chat/clear': (r) => {
       const u = me(r)

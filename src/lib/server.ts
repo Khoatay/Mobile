@@ -9,14 +9,28 @@ import type { PersonaStore } from './persona'
 export const SERVER = import.meta.env.VITE_SERVER === '1'
 
 export interface Me {
-  id: number; email: string; name: string; plan: 'free' | 'pro'; planUntil: number | null
+  id: number; email: string; name: string; plan: 'free' | 'pro'; planUntil: number | null; admin?: boolean
   telegram: { linked: boolean; name: string; link: string }
   limits: { channels: number; chatPerDay: number }
   chatToday: number
 }
 export interface ChannelRow { id: number; ref: string; kind: 'public' | 'invite'; title: string; status: string; error: string; last_at: number | null; notify: 0 | 1; messages: number }
 export interface Health { ok: boolean; telegram: boolean; telegramError: string; bot: string; ai: boolean }
-export type ChatReply = PersonaStore & { reply: string; remaining: number }
+export type ChatReply = PersonaStore & { reply: string; remaining: number | null; own?: boolean }
+export interface ProviderOpt { id: string; label: string; keyUrl: string; hint: string }
+export interface MyAi {
+  mode: 'system' | 'own'; provider: string; model: string; key: string
+  system: { provider: string; label: string; model: string; ready: boolean }
+  providers: ProviderOpt[]
+}
+export interface AdminAi {
+  provider: string; model: string; base: string; priceIn: number; priceOut: number; ready: boolean
+  keys: Record<string, string>
+  today: { calls: number; cost: number; tin: number; tout: number; own: number }
+  month: { calls: number; cost: number }
+}
+/** Nhà cung cấp cho trang quản trị, gồm cả địa chỉ tự nhập. */
+export const ADMIN_EXTRA: ProviderOpt = { id: 'custom', label: 'Địa chỉ khác (tương thích OpenAI)', keyUrl: '', hint: 'Nhập địa chỉ API, ví dụ https://…/v1' }
 
 export class ApiError extends Error { constructor(public status: number, message: string) { super(message) } }
 

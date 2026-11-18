@@ -36,3 +36,29 @@
 .srv-badge.pro { background: #f5c542; color: #3a2a00; }
 .srv-limits { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
 .srv-logout { background: var(--surface); border: 1px solid var(--border); color: var(--neg, #d64545); }
+.srv-ai-form { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.srv-ai-form label, .srv-price label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 500; }
+.srv-ai-form input, .srv-ai-form select, .srv-price input { font-size: 16px; padding: 10px 12px; border-radius: 10px; min-width: 0; }
+.srv-model-row { display: flex; gap: 8px; }
+.srv-model-row > :first-child { flex: 1; min-width: 0; }
+.srv-model-row button { white-space: nowrap; border-radius: 10px; padding: 0 12px; }
+.srv-ai-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.srv-ai-actions button { padding: 10px 16px; border-radius: 10px; }
+.srv-ai-actions .danger { color: var(--neg, #d64545); }
+.notice.good { border-color: var(--pos, #1f9d63); }
+.srv-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--bg, rgba(0,0,0,.04)); border-radius: 12px; padding: 4px; margin: 6px 0 8px; }
+.srv-seg button { border: none; background: none; padding: 9px 6px; border-radius: 9px; font-weight: 600; color: var(--muted); }
+.srv-seg button.active { background: var(--surface); color: var(--text, inherit); box-shadow: var(--shadow); }
+.srv-admin { border: 1px dashed var(--accent); }
+.srv-price { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }
+.srv-price .lite-label { grid-column: 1 / -1; margin: 0; }
+.srv-price button { padding: 10px 14px; border-radius: 10px; }
+.srv-usage { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.srv-usage div { background: var(--bg, rgba(0,0,0,.03)); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; min-width: 0; }
+.srv-usage span { font-size: 12px; color: var(--muted); }
+.srv-usage small { color: var(--muted); }
+.srv-chat-tools { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 4px 0 6px; }
+.srv-ai-chip { margin-left: auto; color: var(--muted) !important; font-weight: 500 !important; max-width: 60%; overflow: hidden; text-overflow: ellipsis; }
+.srv-persona textarea { font-size: 15px; padding: 10px 12px; border-radius: 10px; font-family: inherit; resize: vertical; }
+.srv-persona input { font-size: 16px; padding: 10px 12px; border-radius: 10px; }
+.srv-persona h1 { margin: 8px 0 0; }
