@@ -8,6 +8,10 @@ import { CSV_TEMPLATE, decodeFile, fmtServerTime, parseReport, parseTime, toCsv 
 import { rMultiple } from '../lib/stats'
 import { download, mergeTrades } from '../lib/store'
 import { netOf, type Settings, type Side, type Trade } from '../lib/types'
+import RatingPanel from '../components/RatingPanel'
+import { CATEGORIES, categoryOf, type Category, type InfoMap } from '../lib/accounts'
+import type { BridgeState, LiveAccount } from '../lib/bridge'
+import type { SyncStatus } from '../lib/journalSync'
 
 interface Props {
   trades: Trade[]
@@ -15,14 +19,22 @@ interface Props {
   settings: Settings
   patch: (p: Partial<Settings>) => void
   labels: Record<string, string>
+  infos: InfoMap
+  /** Bridge chỉ gồm tài khoản của bạn (không có Only view). */
+  bridge: BridgeState
+  sync: { status: SyncStatus; sync: () => void }
 }
+
+/** Phạm vi xem: 'all', 'cat:real' (gộp cả nhóm), 'acc:<số tài khoản>', 'none' (lệnh nhập file/tay không có tài khoản). */
+type Scope = string
+const DAY = 86_400_000
 
 const FORMAT_NAME = { mt5: 'MT5', mt4: 'MT4', csv: 'CSV', unknown: 'không rõ' }
 const PAGE = 100
 
 const blank = { symbol: 'EURUSD', side: 'buy' as Side, volume: 0.1, openTime: '', closeTime: '', openPrice: NaN, closePrice: NaN, sl: NaN, profit: NaN }
 
-export default function Journal({ trades, setTrades, settings, patch, labels }: Props) {
+export default function Journal({ trades, setTrades, settings, patch, labels, infos, bridge, sync }: Props) {
   const hasAccounts = trades.some((t) => t.account)
   const [messages, setMessages] = useState<{ ok: boolean; text: string }[]>([])
   const [dragging, setDragging] = useState(false)
@@ -75,17 +87,83 @@ export default function Journal({ trades, setTrades, settings, patch, labels }: 
 
   const update = (id: string, p: Partial<Trade>) => setTrades(trades.map((t) => (t.id === id ? { ...t, ...p } : t)))
 
+  // ---- Phạm vi: tất cả, một nhóm (gộp các tài khoản cùng nhóm), một tài khoản, hoặc lệnh không có tài khoản.
+  const [scope, setScope] = useState<Scope>('all')
+  const [days, setDays] = useState(90)
+  const accountIds = useMemo(() => [...new Set(trades.map((t) => t.account).filter((a): a is string => !!a))].sort((a, b) => (labels[a] ?? a).localeCompare(labels[b] ?? b, 'vi')), [trades, labels])
+  const catOf = (id: string): Category => categoryOf(infos[id])
+  const inScope = (t: Trade) => scope === 'all' ? true : scope === 'none' ? !t.account : scope.startsWith('cat:') ? !!t.account && catOf(t.account) === scope.slice(4) : t.account === scope.slice(4)
+  const scoped = useMemo(() => trades.filter(inScope), [trades, scope, infos])
+  const groupCount = (c: Category) => trades.filter((t) => t.account && catOf(t.account) === c).length
+  const noAccount = trades.filter((t) => !t.account).length
+  const scopeAccounts = scope === 'all' ? accountIds : scope.startsWith('cat:') ? accountIds.filter((id) => catOf(id) === scope.slice(4)) : scope.startsWith('acc:') ? [scope.slice(4)] : []
+  const live = scopeAccounts.map((id) => bridge.accounts.find((a) => a.id === id)).filter((a): a is LiveAccount => !!a)
+  const ccys = [...new Set(live.map((a) => a.currency))]
+  const nowServer = Date.now() + settings.serverOffset * 3_600_000
+  const rated = useMemo(() => scoped.filter((t) => days >= 3650 || t.closeTime >= nowServer - days * DAY), [scoped, days, Math.floor(nowServer / 60_000)])
+  const scopeName = scope === 'all' ? 'Tất cả tài khoản' : scope === 'none' ? 'Lệnh nhập từ file hoặc tay' : scope.startsWith('cat:') ? `Nhóm ${CATEGORIES.find((c) => c.id === scope.slice(4))?.label}` : labels[scope.slice(4)] ?? scope.slice(4)
+
   const rows = useMemo(() => {
     const f = filter.trim().toUpperCase()
-    return trades
+    return scoped
       .filter((t) => !f || t.symbol.includes(f) || (t.setup ?? '').toUpperCase().includes(f) || (t.note ?? '').toUpperCase().includes(f) || (t.account ? (labels[t.account] ?? t.account).toUpperCase().includes(f) : false))
       .sort((a, b) => b.closeTime - a.closeTime)
-  }, [trades, filter, labels])
+  }, [scoped, filter, labels])
 
   return (
     <>
       <h1>Nhật ký lệnh</h1>
 
+      {bridge.online && bridge.accounts.length > 0 ? (
+        <section className="card sync-card">
+          <div>
+            <strong>{sync.status.busy ? <><span className="spinner" aria-hidden="true" /> Đang đọc lệnh từ {bridge.accounts.length} tài khoản…</> : `Tự đọc lệnh từ ${bridge.accounts.length} tài khoản đã kết nối`}</strong>
+            <p className="muted small">{sync.status.at ? `Lần cuối ${new Date(sync.status.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}${sync.status.added ? ` · thêm ${sync.status.added} lệnh mới` : ' · không có lệnh mới'}. ` : ''}Tự cập nhật mỗi 5 phút. Tài khoản Only view không đưa vào đây.</p>
+            {sync.status.errors.length > 0 && <p className="notice bad">⚠ {sync.status.errors.join(' · ')}</p>}
+          </div>
+          <button disabled={sync.status.busy} onClick={sync.sync}>Đọc ngay</button>
+        </section>
+      ) : (
+        <p className="muted small">Nối bridge với MT5 thì Nhật ký tự đọc lệnh từ mọi tài khoản. Chưa nối thì kéo thả file lịch sử bên dưới.</p>
+      )}
+
+      {trades.length > 0 && (
+        <div className="journal-scope">
+          <div className="tabs" role="tablist" aria-label="Nhóm tài khoản">
+            <button role="tab" aria-selected={scope === 'all'} className={scope === 'all' ? 'tab active' : 'tab'} onClick={() => setScope('all')}>Tất cả <small>{trades.length}</small></button>
+            {CATEGORIES.filter((c) => c.id !== 'view' && groupCount(c.id) > 0).map((c) => (
+              <button key={c.id} role="tab" aria-selected={scope === `cat:${c.id}`} className={scope === `cat:${c.id}` ? 'tab active' : 'tab'} onClick={() => setScope(`cat:${c.id}`)}>{c.label} <small>{groupCount(c.id)}</small></button>
+            ))}
+            {noAccount > 0 && <button role="tab" aria-selected={scope === 'none'} className={scope === 'none' ? 'tab active' : 'tab'} onClick={() => setScope('none')}>Nhập file/tay <small>{noAccount}</small></button>}
+          </div>
+          {accountIds.length > 0 && scope !== 'none' && (
+            <div className="subtabs" role="tablist" aria-label="Tài khoản">
+              {accountIds.filter((id) => scope === 'all' || scope.startsWith('acc:') || catOf(id) === scope.slice(4)).map((id) => (
+                <button key={id} role="tab" aria-selected={scope === `acc:${id}`} className={scope === `acc:${id}` ? 'chip-tab active' : 'chip-tab'} onClick={() => setScope(scope === `acc:${id}` ? `cat:${catOf(id)}` : `acc:${id}`)}>
+                  <span className={bridge.accounts.some((a) => a.id === id) ? 'led on' : 'led'} /> {labels[id] ?? id}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {scoped.length > 0 && (
+        <RatingPanel
+          cacheKey={`journal:${scope}`}
+          title={`Đánh giá: ${scopeName}`}
+          trades={rated}
+          account={{ id: scope, currency: ccys.length === 1 ? ccys[0] : settings.accountCcy, balance: live.length ? live.reduce((s, a) => s + a.balance, 0) : settings.balance, equity: live.length ? live.reduce((s, a) => s + a.equity, 0) : settings.balance, positions: live.flatMap((a) => a.positions) }}
+          serverOffset={settings.serverOffset}
+          days={days}
+          setDays={setDays}
+          perspective="self"
+          source={`trong Nhật ký${live.length ? '' : '; chưa có số dư thật từ MT5 nên vốn lấy theo số dư ở trang Tính lot'}${ccys.length > 1 ? `; các tài khoản dùng nhiều loại tiền (${ccys.join(', ')}) nên số tiền đang cộng thẳng` : ''}`}
+        />
+      )}
+
+      <details className="card import-box" open={!bridge.online || trades.length === 0}>
+        <summary>Nhập lệnh từ file hoặc nhập tay</summary>
       <section
         className={dragging ? 'card drop dragging' : 'card drop'}
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
@@ -131,10 +209,11 @@ export default function Journal({ trades, setTrades, settings, patch, labels }: 
           <button className="primary" onClick={addManual}>Thêm lệnh</button>
         </div>
       </details>
+      </details>
 
       <section className="card">
         <div className="card-head">
-          <h3>{rows.length} lệnh đã đóng</h3>
+          <h3>{rows.length} lệnh đã đóng{scope !== 'all' && <span className="muted small"> · {scopeName}</span>}</h3>
           <div className="actions">
             <input className="search" placeholder="Lọc theo cặp, tài khoản, setup, ghi chú" value={filter} onChange={(e) => { setFilter(e.target.value); setShown(PAGE) }} />
             <label className="inline">Múi giờ máy chủ: UTC+

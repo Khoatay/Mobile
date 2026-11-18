@@ -584,3 +584,12 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 .guard-simple .prop-form { width: 100%; }
 .guard-toggles { display: grid; gap: 6px; margin-top: 10px; }
 .meter.gain > div { background: var(--pos); }
+
+/* Nhật ký: trạng thái tự đồng bộ, phạm vi */
+.sync-card { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sync-card p { margin: 2px 0 0; }
+.journal-scope { margin: 4px 0 12px; display: grid; gap: 8px; }
+.journal-scope .subtabs { margin-bottom: 0; }
+.import-box > summary { cursor: pointer; font-weight: 600; }
+.import-box[open] > summary { margin-bottom: 10px; }
+.import-box > .card { box-shadow: none; }

@@ -3,7 +3,7 @@
  * App gửi chỉ số đã tính sẵn (chính xác) và danh sách lệnh rút gọn; AI đọc và chấm bốn điểm, kết luận có đáng theo không.
  * Kết quả lưu trong trình duyệt theo tài khoản và khoảng thời gian, chỉ chấm lại khi có lệnh mới hoặc người dùng bấm.
  */
-import type { LiveAccount } from './bridge'
+import type { LivePosition } from './bridge'
 import { rMultiple } from './stats'
 import type { Grade, Metrics, Verdict } from './traderScore'
 import { netOf, type Trade } from './types'
@@ -19,6 +19,9 @@ export interface AiRating {
   red_flags: string[]
   confidence: 'low' | 'medium' | 'high'
 }
+/** Thông tin tài khoản (hoặc nhóm tài khoản) gửi kèm khi chấm. */
+export interface RateAccount { id: string; currency: string; balance: number; equity: number; positions: LivePosition[] }
+
 export interface StoredRating { rating: AiRating; signature: string; at: number; model: string }
 
 export const gradeOf = (score: number): Grade => (score >= 75 ? 'good' : score >= 55 ? 'ok' : score >= 35 ? 'weak' : 'bad')
@@ -33,10 +36,11 @@ export function signature(trades: Trade[], days: number): string {
 }
 
 /** Dữ liệu gửi cho AI: chỉ số chính xác + lệnh rút gọn + lệnh đang mở. Không gửi mật khẩu hay thông tin đăng nhập. */
-export function ratePayload(trades: Trade[], acc: LiveAccount, metrics: Metrics, days: number) {
+export function ratePayload(trades: Trade[], acc: RateAccount, metrics: Metrics, days: number, perspective: 'follow' | 'self' = 'follow') {
   const sorted = [...trades].sort((a, b) => a.closeTime - b.closeTime)
   return {
     account: acc.id,
+    perspective,
     currency: acc.currency,
     days,
     balance: acc.balance,

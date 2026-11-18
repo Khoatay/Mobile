@@ -210,7 +210,9 @@ Nguyên tắc:
 - Chỉ dựa trên dữ liệu được đưa. Không bịa con số, không đoán chiến lược ngoài những gì thấy trong lệnh.
 - Mẫu nhỏ thì nói rõ và hạ confidence; không kết luận mạnh từ ít lệnh.
 - Kết quả quá khứ không bảo đảm tương lai. Không hứa lợi nhuận, không cổ vũ đặt nhiều tiền.
-- strengths và red_flags: mỗi mục một câu, có con số; để trống nếu không có."""
+- strengths và red_flags: mỗi mục một câu, có con số; để trống nếu không có.
+
+Nếu perspective là "self", đây là tài khoản của chính người dùng, không phải người để theo. Khi đó verdict là nhận xét chung cho chính họ: "consider" = đang giao dịch tốt, "watch" = cần cải thiện, "avoid" = rủi ro cao cần điều chỉnh ngay, "unknown" = chưa đủ dữ liệu. title và detail viết như lời góp ý để tự cải thiện (nên giữ gì, nên sửa gì trước), không nói về việc copy hay theo; red_flags là những điều cần sửa."""
 
 RATE_SCORE = {
     "type": "object",
@@ -401,7 +403,7 @@ class Brain:
         trades = body.get("trades")
         if not isinstance(trades, list):
             raise ValueError("Thiếu danh sách lệnh")
-        data = {k: body.get(k) for k in ("account", "currency", "days", "balance", "equity", "metrics", "open_positions", "trades_total")}
+        data = {k: body.get(k) for k in ("account", "perspective", "currency", "days", "balance", "equity", "metrics", "open_positions", "trades_total")}
         data["trades"] = trades[-400:]  # lệnh gần nhất; trades_total cho biết tổng số lệnh thật
         content = [{"type": "text", "text": "Dữ liệu tài khoản (JSON):\n" + json.dumps(data, ensure_ascii=False)}]
         out, usage = self._ask(RATE_SYSTEM, [{"role": "user", "content": content}], RATE_SCHEMA, "high")

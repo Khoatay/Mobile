@@ -486,6 +486,20 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
       [`${Math.round(m.revengeShare * 100)}% lệnh mở ngay sau một lệnh thua.`, `Trung bình ${Number(m.tradesPerDay).toFixed(1)} lệnh mỗi ngày giao dịch.`])
     const few = m.n < 30
     const ok = [safety, growth, discipline, fomo].every((x) => x.score >= 65)
+    if (body.perspective === 'self') {
+      return {
+        model: 'bản xem trước (câu trả lời mẫu, không gọi AI)',
+        rating: {
+          safety, growth, discipline, fomo,
+          verdict: ok ? { level: 'consider', title: 'Đang giao dịch tốt', detail: 'Rủi ro mỗi lệnh nhỏ và có lãi đều. Giữ nguyên mức rủi ro; đừng tăng lot chỉ vì vừa thắng vài lệnh.' }
+            : { level: 'watch', title: 'Cần cải thiện', detail: `Ưu tiên sửa điểm thấp nhất trước. ${m.slShare < 0.9 ? 'Đặt stop loss cho mọi lệnh.' : 'Giữ kỷ luật cắt lỗ như hiện tại.'}` },
+          strengths: [`Profit factor ${m.profitFactor}.`],
+          red_flags: m.slShare < 0.9 ? [`${Math.round((1 - m.slShare) * 100)}% số lệnh không có stop loss.`] : [`Lệnh thua lớn nhất mất ${m.worstLossPct}% vốn: giữ dưới 1%.`],
+          confidence: few ? 'low' : m.n >= 60 ? 'high' : 'medium',
+        },
+        usage: { input: 0, output: 0 },
+      }
+    }
     return {
       model: 'bản xem trước (câu trả lời mẫu, không gọi AI)',
       rating: {

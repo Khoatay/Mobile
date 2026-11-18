@@ -31,6 +31,7 @@ import { ProLockPage } from './components/ProGate'
 import { lockedTabs, PRO_FEATURES } from './lib/pro'
 import { useAutopost } from './lib/useAutopost'
 import { useAutoQuotes } from './lib/quotes'
+import { useJournalSync } from './lib/journalSync'
 import type { SignalDraft } from './lib/share'
 import ProfilePage from './pages/Profile'
 import Personalize from './pages/Personalize'
@@ -96,6 +97,8 @@ export default function App() {
   const labels = useMemo(() => Object.fromEntries(Object.entries(infos).map(([id, i]) => [id, i.label])), [infos])
   // Tài khoản Only view là của người khác: các trang về tiền, bảo vệ, chia sẻ và AI chỉ thấy tài khoản của bạn.
   const ownBridge = useMemo(() => ({ ...bridge, accounts: bridge.accounts.filter((a) => !isView(infos[a.id])), metas: bridge.metas.filter((m) => !isView(infos[m.id])) }), [bridge, infos])
+  // Nhật ký tự đọc lịch sử lệnh của các tài khoản đã kết nối (không gồm Only view).
+  const journalSync = useJournalSync(ownBridge, trades, setTrades)
   // Bấm "Copy lệnh của người này" ở trang Tài khoản: mở trang Copy lệnh với tài khoản đó làm nguồn.
   const [copyFrom, setCopyFrom] = useState('')
 
@@ -159,7 +162,7 @@ export default function App() {
         {EDITION === 'trader' && packLoading && <p className="muted small">Đang tải cấu hình của cộng đồng…</p>}
         {EDITION === 'trader' && packError && <p className="notice bad">⚠ {packError} Ưu đãi, cửa hàng và nhóm cộng đồng sẽ trống cho tới khi tải được.</p>}
         {tab === 'calc' && <Calculator settings={settings} patch={patchSettings} auto={autoQuotes} />}
-        {tab === 'journal' && <Journal trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} labels={labels} />}
+        {tab === 'journal' && <Journal trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} labels={labels} infos={infos} bridge={ownBridge} sync={journalSync} />}
         {tab === 'stats' && <Dashboard trades={trades} settings={settings} infos={infos} goJournal={() => setTab('journal')} />}
         {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={ownBridge} infos={infos} goAccounts={() => setTab('account')} links={links} />}
         {tab === 'account' && <Account onCopyFrom={(id) => { setCopyFrom(id); setTab('copier') }} bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} infos={infos} setInfo={setInfo} links={links} />}
