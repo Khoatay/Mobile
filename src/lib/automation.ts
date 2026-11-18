@@ -33,10 +33,13 @@ export interface GuardState {
 export interface AutoEvent { at: number; kind: 'warn' | 'lock' | 'unlock' | 'news' | 'copy' | 'copy-error' | 'stop'; account: string; label: string; text: string }
 export interface CopyFollower { account: string; mode: 'fixed' | 'multiplier' | 'balance'; value: number; reverse: boolean }
 export interface CopierConfig { enabled: boolean; master: string; followers: CopyFollower[]; copy_sltp: boolean }
+export interface DayRule { day: number; set_loss: boolean; set_profit: boolean; active: boolean; active_at: number; continued: boolean; protect: number | null; continued_from: number }
 export interface AutomationSnapshot {
   guards: Record<string, GuardConfig>
   states: Record<string, GuardState>
-  locks: Record<string, { until: number; reason: string; at: number; unlock_at?: number; kind?: 'limit' | 'behavior' }>
+  locks: Record<string, { until: number; reason: string; at: number; unlock_at?: number; kind?: 'limit' | 'behavior' | 'profit' }>
+  /** Luật trong ngày (bridge giữ): đã đặt giới hạn hôm nay chưa, đã có lệnh chưa, đã trade tiếp sau chốt lời chưa. */
+  rules?: Record<string, DayRule>
   events: AutoEvent[]
   alerts: { news: boolean; minutes: number; notify: boolean }
   copier: CopierConfig

@@ -52,6 +52,8 @@ class Automation:
         self.alerts = {"news": True, "minutes": 30, "notify": True, **data.get("alerts", {})}
         self.copier = data.get("copier", {"enabled": False, "master": "", "followers": [], "copy_sltp": True})
         self.day_refs = data.get("day_refs", {})
+        # Luật trong ngày của từng tài khoản: đã đặt giới hạn hôm nay chưa, đã có lệnh chưa (từ đó không nới được), đã "trade tiếp" sau chốt lời chưa.
+        self.day_rules = data.get("day_rules", {})
         # Cảnh báo tin kiểu Investing: tin được đánh dấu, hoặc mọi tin từ một mức độ của các đồng tiền đã chọn.
         self.news_watch = {**NEWS_WATCH_DEFAULT, **data.get("news_watch", {})}
         self.news_acks = set(data.get("news_acks", []))  # tin người dùng đã bấm "Tắt"
@@ -61,7 +63,7 @@ class Automation:
     # ------------------------------------------------------------ lưu trạng thái
     def _save(self):
         tmp = STATE_FILE.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"guards": self.guards, "locks": self.locks, "alerts": self.alerts, "copier": self.copier, "day_refs": self.day_refs, "news_watch": self.news_watch, "news_acks": sorted(self.news_acks)[-500:]}, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.write_text(json.dumps({"guards": self.guards, "locks": self.locks, "alerts": self.alerts, "copier": self.copier, "day_refs": self.day_refs, "day_rules": self.day_rules, "news_watch": self.news_watch, "news_acks": sorted(self.news_acks)[-500:]}, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, STATE_FILE)
 
     def event(self, kind, account, text, notify=True):
@@ -82,18 +84,110 @@ class Automation:
     def snapshot(self):
         with self.lock:
             return {
-                "guards": self.guards, "states": self.states, "locks": self.locks, "events": list(reversed(self.events[-100:])),
+                "guards": self.guards, "states": self.states, "locks": self.locks, "rules": self.day_rules, "events": list(reversed(self.events[-100:])),
                 "alerts": self.alerts, "copier": self.copier,
                 "copyState": {"started": self.copy_state["started"], "last": self.copy_state["last"], "error": self.copy_state["error"]},
                 "telegram": self.telegram_ready(),
             }
+
+    # Trường nào "nới" khi đổi từ cũ sang mới (nới = rủi ro hơn). Sau lệnh đầu tiên trong ngày chỉ siết được, không nới.
+    LOOSER = {
+        "enabled": lambda o, n: bool(o) and not n,
+        "daily_limit": lambda o, n: (o > 0 and n <= 0) or n > o + 0.009,
+        "profit_limit": lambda o, n: (o > 0 and n <= 0) or n > o + 0.009,
+        "floor": lambda o, n: n < o - 0.009,
+        "max_loss": lambda o, n: (o > 0 and n <= 0) or n > o + 0.009,
+        "act_at": lambda o, n: n > o + 1e-9,
+        "max_consec_losses": lambda o, n: (o > 0 and n <= 0) or n > o,
+        "max_trades": lambda o, n: (o > 0 and n <= 0) or n > o,
+        "close_on_breach": lambda o, n: bool(o) and not n,
+        "close_new_when_locked": lambda o, n: bool(o) and not n,
+        "hard_stop": lambda o, n: bool(o) and not n,
+        "hard_lock": lambda o, n: bool(o) and not n,
+    }
+    NAMES = {"enabled": "tắt bảo vệ", "daily_limit": "giới hạn lỗ ngày", "profit_limit": "mục tiêu lãi ngày", "floor": "sàn lỗ tổng", "max_loss": "lỗ tổng",
+             "act_at": "mức hành động", "max_consec_losses": "số lệnh thua liên tiếp", "max_trades": "số lệnh tối đa", "close_on_breach": "đóng lệnh khi chạm",
+             "close_new_when_locked": "tự đóng lệnh mới khi khoá", "hard_stop": "SL khẩn cấp", "hard_lock": "khoá cứng"}
+
+    def server_day(self, offset):
+        return int((now() + float(offset) * 3600) // 86400 * 86400)
+
+    def rule(self, account, day):
+        """Luật của hôm nay; sang ngày mới thì làm lại từ đầu (giới hạn giữ nguyên số của hôm trước)."""
+        r = self.day_rules.get(account)
+        if not r or r.get("day") != day:
+            r = {"day": day, "set_loss": False, "set_profit": False, "active": False, "active_at": 0, "continued": False, "protect": None, "continued_from": 0}
+            self.day_rules[account] = r
+        return r
+
+    def _check_change(self, account, old, new, auto):
+        """Áp luật trong ngày lên cấu hình mới. Trả về cấu hình được phép lưu, hoặc báo lỗi rõ lý do.
+        - Trước lệnh đầu tiên trong ngày: đặt giới hạn lỗ và mục tiêu lãi được MỘT lần (mỗi thứ), sau đó chỉ siết được.
+        - Từ lệnh đầu tiên trong ngày (hoặc khi còn lệnh mở từ hôm trước): mọi thứ chỉ siết được, không nới, không tắt.
+        - Không đặt gì thì dùng số của hôm trước.
+        auto=True (app tự gửi lại khi số dư đổi): phần nới bị bỏ qua lặng lẽ, giữ số cũ."""
+        if not old or not old.get("enabled"):
+            return new  # bật mới: chưa có luật nào để giữ
+        r = self.rule(account, self.server_day(old.get("server_offset", 0)))
+        out = dict(new)
+        for k, looser in self.LOOSER.items():
+            if k not in old or k not in new or not looser(old[k], new[k]):
+                continue
+            once = k in ("daily_limit", "profit_limit") and not r["active"] and not r["set_loss" if k == "daily_limit" else "set_profit"]
+            if once:
+                continue  # lần đặt duy nhất trong ngày, trước lệnh đầu tiên
+            if auto:
+                out[k] = old[k]
+                continue
+            if k == "enabled":
+                raise ValueError("Hôm nay đã có lệnh: không tắt được bảo vệ. Ngày mai trước lệnh đầu tiên bạn tắt được.")
+            if r["active"]:
+                raise ValueError(f"Hôm nay đã có lệnh: không nới được {self.NAMES[k]}, chỉ siết chặt hơn. Ngày mai, trước lệnh đầu tiên, bạn đổi lại được.")
+            raise ValueError(f"Hôm nay bạn đã đặt {self.NAMES[k]} một lần: không nới thêm được, chỉ siết chặt hơn. Ngày mai trước lệnh đầu tiên đổi lại được.")
+        if not r["active"] and not auto:
+            if abs(out.get("daily_limit", 0) - old.get("daily_limit", 0)) > 0.009:
+                r["set_loss"] = True
+            if abs(out.get("profit_limit", 0) - old.get("profit_limit", 0)) > 0.009:
+                r["set_profit"] = True
+        return out
+
+    def continue_after_profit(self, body):
+        """Đạt mục tiêu lãi rồi vẫn muốn trade tiếp: một lần mỗi ngày, chọn số tiền được phép trả lại (không quá số đã lãi).
+        Lãi trong ngày tụt về (lãi lúc này − số đó) thì đóng hết lệnh và khoá cứng tới hết ngày, không có lựa chọn nào nữa."""
+        account = str(body.get("account"))
+        with self.lock:
+            lk = self.locks.get(account)
+            g = self.guards.get(account)
+            st = self.states.get(account, {})
+            if not lk or lk.get("kind") != "profit" or not g:
+                raise ValueError("Tài khoản không ở trạng thái khoá vì đạt mục tiêu lãi")
+            r = self.rule(account, self.server_day(g.get("server_offset", 0)))
+            if r["continued"]:
+                raise ValueError("Hôm nay bạn đã dùng lượt trade tiếp sau khi chốt lời rồi")
+            profit = float(st.get("day_profit") or 0)
+            giveback = float(body.get("giveback") or 0)
+            if profit <= 0:
+                raise ValueError("Chưa thấy lãi hôm nay, không có gì để giữ")
+            if giveback <= 0 or giveback > profit + 0.009:
+                raise ValueError(f"Số tiền được trả lại phải lớn hơn 0 và không quá số đã lãi ({profit:.2f})")
+            r.update(continued=True, protect=round(profit - giveback, 2), continued_from=round(profit, 2))
+            self.locks.pop(account, None)
+            self._save()
+        self.event("unlock", account, f"Trade tiếp sau khi đạt mục tiêu lãi (+{profit:.2f}). Được trả lại tối đa {giveback:.2f}: lãi trong ngày tụt về {profit - giveback:.2f} thì đóng hết lệnh và khoá cứng tới hết ngày.")
+        return self.snapshot()
 
     def set_guard(self, body):
         account = str(body.get("account"))
         if not self.registry.get(account):
             raise ValueError(f"Không có tài khoản {account}")
         cfg = body.get("config")
+        auto = bool(body.get("auto"))
         with self.lock:
+            old_cfg = self.guards.get(account)
+            if not cfg and old_cfg and old_cfg.get("enabled"):
+                r = self.rule(account, self.server_day(old_cfg.get("server_offset", 0)))
+                if r["active"]:
+                    raise ValueError("Hôm nay đã có lệnh: không tắt được bảo vệ. Ngày mai trước lệnh đầu tiên bạn tắt được.")
             lk = self.locked(account)
             if lk and lk.get("unlock_at", 0) > now():
                 old = self.guards.get(account, {})
@@ -105,7 +199,7 @@ class Automation:
                 self.guards.pop(account, None)
             else:
                 num = lambda k, d=0.0: max(0.0, float(cfg.get(k) or d))
-                self.guards[account] = {
+                new = {
                     "enabled": bool(cfg.get("enabled", True)),
                     "daily_limit": num("daily_limit"), "floor": num("floor"), "max_loss": num("max_loss"),
                     # Chốt lãi trong ngày: lãi (đã chốt + đang treo) chạm mức này thì đóng hết lệnh và khoá tới hết ngày. 0 = tắt.
@@ -118,6 +212,7 @@ class Automation:
                     "hard_stop": bool(cfg.get("hard_stop", True)), "hard_lock": bool(cfg.get("hard_lock", True)),
                     "day_ref": "higher" if cfg.get("day_ref") == "higher" else "balance",
                 }
+                self.guards[account] = self._check_change(account, old_cfg, new, auto)  # báo lỗi thì giữ nguyên cấu hình cũ
             self._save()
         return self.snapshot()
 
@@ -125,8 +220,10 @@ class Automation:
         with self.lock:
             lk = self.locks.get(str(account))
             if lk and lk.get("unlock_at", 0) > now():
+                if lk.get("kind") == "profit":
+                    raise ValueError("Đạt mục tiêu lãi: muốn trade tiếp thì dùng nút Trade tiếp (một lần mỗi ngày, chọn số tiền được trả lại).")
                 if lk.get("unlock_at", 0) >= lk.get("until", 0):
-                    raise ValueError("Khoá cứng vì chạm giới hạn lỗ: tự mở lúc hết ngày máy chủ, không mở tay được.")
+                    raise ValueError("Khoá vì chạm giới hạn: tự mở lúc hết ngày máy chủ, không mở tay được.")
                 mins = int((lk["unlock_at"] - now()) // 60) + 1
                 raise ValueError(f"Khoá cứng: còn {mins} phút nữa mới mở khoá được. Đi uống nước đã.")
             self.locks.pop(str(account), None)
@@ -334,13 +431,22 @@ class Automation:
         day_loss = max(0.0, ref - live["equity"])
         day_profit = max(0.0, live["equity"] - ref)
         profit_limit = g.get("profit_limit", 0)
-        hit_profit = profit_limit > 0 and day_profit >= profit_limit
+        day = today["day_start"]
+        r = self.rule(acc.id, day)
+        # Lệnh đầu tiên trong ngày (hoặc còn lệnh mở từ hôm trước): từ giờ các giới hạn chỉ siết được, không nới.
+        if not r["active"] and (today["trades"] > 0 or live["positions"]):
+            with self.lock:
+                r.update(active=True, active_at=int(now() * 1000))
+                self._save()
+        # Đã chọn trade tiếp sau chốt lời: không chốt lời lần nữa, nhưng giữ phần lãi đã hứa giữ lại.
+        hit_profit = profit_limit > 0 and day_profit >= profit_limit and not r["continued"]
+        day_pl = live["equity"] - ref
+        hit_keep = r["continued"] and r["protect"] is not None and day_pl <= r["protect"]
         used = day_loss / g["daily_limit"] if g["daily_limit"] > 0 else 0.0
         floor_used = 0.0
         if g["floor"] > 0 and g["max_loss"] > 0:
             floor_used = max(0.0, (g["max_loss"] - (live["equity"] - g["floor"])) / g["max_loss"])
         level = max(used, floor_used)
-        day = today["day_start"]
         st = self.states.get(acc.id, {})
         warned = st.get("warned", []) if st.get("day") == day else []
         next_day = day + 86400 - g["server_offset"] * 3600  # giờ máy chủ → epoch thật
@@ -352,7 +458,9 @@ class Automation:
             self.event("warn", acc.id, f"Đã dùng {level * 100:.0f}% giới hạn {what}. Lỗ hôm nay {day_loss:.2f} {live['currency']}, equity {live['equity']:.2f}.")
 
         reason = ""
-        if hit_profit:
+        if hit_keep:
+            reason = f"Lãi trong ngày tụt về {day_pl:.2f} {live['currency']} (mức giữ lại {r['protect']:.2f} sau khi trade tiếp)"
+        elif hit_profit:
             reason = f"Đạt mục tiêu lãi ngày (+{day_profit:.2f} {live['currency']})"
         elif level >= g["act_at"]:
             reason = f"Chạm {level * 100:.0f}% giới hạn {'lỗ trong ngày' if used >= floor_used else 'lỗ tổng'}"
@@ -363,28 +471,31 @@ class Automation:
 
         lock = self.locked(acc.id)
         if reason and not lock:
-            hit_limit = level >= g["act_at"] or hit_profit
-            unlock_at = (next_day if hit_limit else now() + 1800) if g.get("hard_lock", True) else 0
+            hit_limit = level >= g["act_at"] or hit_profit or hit_keep
+            # Chạm giới hạn (lỗ, lãi, mức giữ lại): luôn khoá tới hết ngày, không mở tay được. Đạt mục tiêu lãi có một lượt "trade tiếp".
+            unlock_at = next_day if hit_limit else (now() + 1800 if g.get("hard_lock", True) else 0)
+            kind = "profit" if hit_profit else "limit" if hit_limit else "behavior"
             with self.lock:
-                self.locks[acc.id] = {"until": next_day, "reason": reason, "at": now(), "unlock_at": unlock_at, "kind": "limit" if hit_limit else "behavior"}
+                self.locks[acc.id] = {"until": next_day, "reason": reason, "at": now(), "unlock_at": unlock_at, "kind": kind}
                 self._save()
             lock = self.locks[acc.id]
             closed = ""
-            if (level >= g["act_at"] or hit_profit) and g["close_on_breach"] and live["positions"]:
+            if hit_limit and (g["close_on_breach"] or hit_keep) and live["positions"]:
                 if acc.tradable:
-                    r = acc.call("close_all", timeout=60)
-                    closed = f" Đã đóng {r['closed']} lệnh." + (f" Lỗi: {'; '.join(r['errors'])}" if r["errors"] else "")
+                    res = acc.call("close_all", timeout=60)
+                    closed = f" Đã đóng {res['closed']} lệnh." + (f" Lỗi: {'; '.join(res['errors'])}" if res["errors"] else "")
                 else:
                     closed = " Không đóng được lệnh vì tài khoản chỉ có mật khẩu view: hãy tự đóng ngay."
-            hard = " Khoá cứng: không mở tay được." if unlock_at >= next_day else (" Mở tay được sau 30 phút." if unlock_at else "")
+            hard = (" Muốn trade tiếp: vào trang Bảo vệ, chọn số tiền được trả lại (một lần mỗi ngày)." if kind == "profit" and not r["continued"]
+                    else " Không mở tay được." if unlock_at >= next_day else (" Mở tay được sau 30 phút." if unlock_at else ""))
             self.event("lock", acc.id, f"{reason}. Khoá vào lệnh tới hết ngày máy chủ.{hard}{closed}")
         elif lock and g["close_new_when_locked"] and acc.tradable:
             fresh = [p for p in live["positions"] if p["time"] - g["server_offset"] * 3600 > lock["at"]]
             if fresh:
-                r = acc.call("close_all", timeout=60)
-                self.event("lock", acc.id, f"Đang khoá ({lock['reason']}) nhưng có {len(fresh)} lệnh mới mở. Đã đóng {r['closed']} lệnh.")
+                res = acc.call("close_all", timeout=60)
+                self.event("lock", acc.id, f"Đang khoá ({lock['reason']}) nhưng có {len(fresh)} lệnh mới mở. Đã đóng {res['closed']} lệnh.")
 
-        stops = self._stops(acc, g, live, ref, level)
+        stops = self._stops(acc, g, live, ref, level, r)
 
         self.states[acc.id] = {
             "stops": stops, "day_ref": round(ref, 2), "ref_ok": ref_ok,
@@ -394,7 +505,7 @@ class Automation:
             "trades": today["trades"], "positions": len(live["positions"]), "tradable": acc.tradable, "error": "", "updated": int(now() * 1000),
         }
 
-    def _stops(self, acc, g, live, ref, level):
+    def _stops(self, acc, g, live, ref, level, r=None):
         """Gắn/siết SL khẩn cấp trên sàn. Ngân sách = phần lỗ còn được phép trước ngưỡng hành động, tính cho cả hai giới hạn:
         nếu mọi lệnh cùng chạm SL thì lỗ ngày ≤ act_at × giới hạn ngày và equity ≥ sàn + (1 − act_at) × lỗ tổng."""
         prev = self.states.get(acc.id, {}).get("stops") or {"on": False, "protected": 0, "over": [], "budget": 0, "at": 0}
@@ -405,6 +516,9 @@ class Automation:
             budgets.append(g["act_at"] * g["daily_limit"] - (ref - live["balance"]))
         if g["floor"] > 0 and g["max_loss"] > 0:
             budgets.append(live["balance"] - g["floor"] - (1 - g["act_at"]) * g["max_loss"])
+        if r and r.get("continued") and r.get("protect") is not None:
+            # Trade tiếp sau chốt lời: mọi lệnh cùng chạm SL thì lãi trong ngày vẫn còn ít nhất mức giữ lại.
+            budgets.append(live["balance"] - ref - r["protect"])
         if not budgets:
             return {"on": False, "protected": 0, "over": [], "budget": 0, "at": 0}
         budget = min(budgets)

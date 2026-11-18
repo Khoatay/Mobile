@@ -62,6 +62,8 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
   const [open, setOpen] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const nowServer = Date.now() + settings.serverOffset * 3_600_000
+  const serverDay = Math.floor(nowServer / 86_400_000) * 86_400
+  const [giveback, setGiveback] = useState<Record<string, number>>({})
 
   // Giới hạn hôm nay theo luật quỹ của từng tài khoản quỹ (cùng cách tính với trang Quỹ).
   const propLimits = useMemo(() => Object.fromEntries(bridge.accounts.filter((a) => infos[a.id]?.role === 'prop').map((a) => {
@@ -84,8 +86,16 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
 
   const push = async (id: string, enabled?: boolean) => {
     const ui = { ...uiFor(id), ...(enabled != null ? { enabled } : {}) }
-    setUis({ ...uis, [id]: ui })
     const a = bridge.accounts.find((x) => x.id === id)
+    const rule = snap?.rules?.[id]
+    const today = rule && rule.day === serverDay
+    // Cảnh báo trước khi lưu: đây là lần đặt duy nhất trong ngày.
+    if (ui.enabled && snap?.guards[id]?.enabled && !(today && rule.active)) {
+      if (!(await ask('Lưu giới hạn cho hôm nay? Mỗi ngày giới hạn lỗ và mục tiêu lãi chỉ đặt được MỘT lần, trước lệnh đầu tiên. Sau khi lưu, hoặc từ lệnh đầu tiên trong ngày, bạn chỉ siết chặt hơn được, không nới ra và không tắt bảo vệ tới hết ngày.', 'Lưu, tôi hiểu', true))) return
+    } else if (ui.enabled && !snap?.guards[id]?.enabled) {
+      if (!(await ask('Bật bảo vệ? Từ lệnh đầu tiên trong ngày, giới hạn lỗ và mục tiêu lãi chỉ siết chặt hơn được, không nới ra và không tắt bảo vệ tới hết ngày. Ngày nào không đặt lại thì dùng số của hôm trước.', 'Bật, tôi hiểu', true))) return
+    }
+    setUis({ ...uis, [id]: ui })
     try {
       setSnap(await bridgePost<AutomationSnapshot>('/automation/guard', { account: id, config: buildGuard(ui, settings.serverOffset, a?.balance ?? 0, propLimits[id]) }))
       setMsg({ ok: true, text: `Đã cập nhật bảo vệ cho ${infos[id]?.label ?? id}.` })
@@ -101,13 +111,20 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
       const follows = (u.source === 'prop' && propLimits[id]) || (u.source === 'simple' && (u.lossMode === 'pct' || u.profitMode === 'pct'))
       if (!follows || !snap.guards[id].enabled) continue
       const next = configFor(id)
-      if (guardChanged(snap.guards[id], next)) bridgePost<AutomationSnapshot>('/automation/guard', { account: id, config: next }).then(setSnap).catch(() => {})
+      // auto: bridge giữ số cũ nếu lần gửi này làm nới giới hạn sau lệnh đầu tiên trong ngày.
+      if (guardChanged(snap.guards[id], next)) bridgePost<AutomationSnapshot>('/automation/guard', { account: id, config: next, auto: true }).then(setSnap).catch(() => {})
     }
   }, [snap?.guards, propLimits, bridge.accounts])
 
   const unlock = async (id: string) => {
     if (!(await ask(`Mở khoá vào lệnh cho ${infos[id]?.label ?? id}? Khoá được đặt ra để bảo vệ bạn khỏi chính mình trong lúc nóng đầu.`, 'Vẫn mở khoá', true))) return
     try { setSnap(await bridgePost<AutomationSnapshot>('/automation/unlock', { account: id })) } catch (e) { setMsg({ ok: false, text: errText(e) }) }
+  }
+  const keepGoing = async (id: string, profit: number, ccy: string) => {
+    const g = giveback[id] ?? 0
+    if (!(g > 0 && g <= profit)) { setMsg({ ok: false, text: `Số tiền được trả lại phải lớn hơn 0 và không quá số đã lãi (${money(profit, ccy)}).` }); return }
+    if (!(await ask(`Trade tiếp? Đây là lượt duy nhất hôm nay. Lãi trong ngày tụt từ ${money(profit, ccy)} về ${money(profit - g, ccy)} thì app đóng hết lệnh và khoá tới hết ngày, không mở lại được nữa.`, 'Trade tiếp', true))) return
+    try { setSnap(await bridgePost<AutomationSnapshot>('/automation/continue', { account: id, giveback: g })) } catch (e) { setMsg({ ok: false, text: errText(e) }) }
   }
   const saveAlerts = async (p: Partial<AutomationSnapshot['alerts']>) => {
     if (!snap) return
@@ -129,6 +146,9 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
     const cfg = configFor(a.id)
     const set = (p: Partial<GuardUi>) => setUis({ ...uis, [a.id]: { ...ui, ...p } })
     const ccy = a.currency
+    const rule = snap?.rules?.[a.id]
+    const ruleToday = rule && rule.day === serverDay ? rule : null
+    const frozen = on && !!ruleToday?.active
     return (
       <section key={a.id} className={`card guard${lock ? ' locked' : on ? ' on' : ''}`}>
         <div className="guard-head">
@@ -137,7 +157,7 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
             <div className="chips">{infos[a.id] && badges(infos[a.id]).map((b) => <span key={b} className="chip">{b}</span>)}{!a.tradable && <span className="chip">Chỉ cảnh báo (mật khẩu view)</span>}</div>
           </div>
           <label className="switch">
-            <input type="checkbox" checked={on} disabled={on && !!hardUntil} title={on && hardUntil ? 'Đang khoá cứng: chưa tắt được' : undefined} onChange={(e) => push(a.id, e.target.checked)} />
+            <input type="checkbox" checked={on} disabled={on && (!!hardUntil || frozen)} title={on && (hardUntil || frozen) ? 'Hôm nay đã có lệnh: không tắt được tới hết ngày' : undefined} onChange={(e) => push(a.id, e.target.checked)} />
             <span>{on ? 'Đang bảo vệ' : 'Tắt'}</span>
           </label>
         </div>
@@ -147,7 +167,28 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
             <strong>⛔ Đang khoá</strong>
             <span>{lock.reason}. Tự mở lúc {hm(lock.until)}.{hardUntil >= lock.until ? ' Không mở tay được.' : hardUntil ? ` Mở tay được sau ${hm(hardUntil).split(' ')[0]}.` : ''}</span>
             {!hardUntil && <button className="ghost mini" onClick={() => unlock(a.id)}>Mở khoá</button>}
+            {lock.kind === 'profit' && !ruleToday?.continued && (st?.day_profit ?? 0) > 0 && (
+              <div className="keep-going">
+                <p className="small">Muốn trade tiếp? Được <strong>một lần</strong> hôm nay. Chọn số tiền bạn chấp nhận trả lại, tối đa bằng số đã lãi ({money(st!.day_profit!, ccy)}). Lãi tụt quá mức đó thì app đóng hết lệnh và khoá tới hết ngày.</p>
+                <div className="actions">
+                  <Num value={giveback[a.id] ?? 0} onChange={(v) => setGiveback({ ...giveback, [a.id]: v })} min={0} step={1} />
+                  <button className="mini" onClick={() => keepGoing(a.id, st!.day_profit!, ccy)}>Trade tiếp</button>
+                </div>
+              </div>
+            )}
           </div>
+        )}
+        {ruleToday?.continued && ruleToday.protect != null && !lock && (
+          <p className="notice">🔒 Đang trade tiếp sau chốt lời: lãi hôm nay phải giữ ít nhất <strong>{money(ruleToday.protect, ccy)}</strong> (đã lãi {money(ruleToday.continued_from, ccy)}). Tụt xuống dưới là đóng hết lệnh, khoá tới hết ngày.</p>
+        )}
+        {on && (
+          <p className={frozen ? 'rule-line frozen' : 'rule-line'}>
+            {frozen
+              ? `🔐 Đã có lệnh hôm nay${ruleToday?.active_at ? ` (từ ${new Date(ruleToday.active_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })})` : ''}: giới hạn chỉ siết chặt hơn được, không nới, không tắt tới hết ngày.`
+              : ruleToday?.set_loss || ruleToday?.set_profit
+                ? '✏️ Hôm nay đã đặt giới hạn: từ giờ chỉ siết chặt hơn được. Từ lệnh đầu tiên sẽ khoá luôn tới hết ngày.'
+                : '✏️ Chưa có lệnh hôm nay: còn đặt giới hạn được một lần. Không đặt thì dùng số của hôm trước.'}
+          </p>
         )}
 
         {on && st && (
@@ -229,6 +270,7 @@ export default function Guard({ bridge, trades, settings, infos }: { bridge: Bri
         <div>
           <h1>Bảo vệ tài khoản</h1>
           <p className="muted">Bridge canh tài khoản 24/7, kể cả khi app đóng. Chạm giới hạn: báo Telegram, đóng hết lệnh, khoá tới hết ngày.</p>
+          <p className="warn small">⚠ Luật khoá trong ngày: giới hạn lỗ và mục tiêu lãi chỉ đặt <strong>một lần mỗi ngày</strong>, trước lệnh đầu tiên. Từ lệnh đầu tiên, chỉ siết chặt hơn được: không nới, không tắt bảo vệ tới hết ngày. Không đặt thì dùng số của hôm trước. Đạt mục tiêu lãi được <strong>trade tiếp một lần</strong>, với số tiền chấp nhận trả lại không quá số đã lãi.</p>
         </div>
         <div className="actions">
           <span className={snap?.telegram ? 'chip ok-chip' : 'chip'}>{snap?.telegram ? '● Telegram đã nối' : '○ Telegram chưa nối'}</span>

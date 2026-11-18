@@ -12,6 +12,9 @@ import RatingPanel from '../components/RatingPanel'
 import { CATEGORIES, categoryOf, type Category, type InfoMap } from '../lib/accounts'
 import type { BridgeState, LiveAccount } from '../lib/bridge'
 import type { SyncStatus } from '../lib/journalSync'
+import PeriodPicker from '../components/PeriodPicker'
+import { inPeriod, periodLabel, type Period } from '../lib/period'
+import { usePersistent } from '../lib/store'
 
 interface Props {
   trades: Trade[]
@@ -39,6 +42,7 @@ export default function Journal({ trades, setTrades, settings, patch, labels, in
   const [messages, setMessages] = useState<{ ok: boolean; text: string }[]>([])
   const [dragging, setDragging] = useState(false)
   const [filter, setFilter] = useState('')
+  const [period, setPeriod] = usePersistent<Period>('fx.journal.period', { kind: 'days', days: 0 })
   const [shown, setShown] = useState(PAGE)
   const [form, setForm] = useState(blank)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -105,10 +109,12 @@ export default function Journal({ trades, setTrades, settings, patch, labels, in
 
   const rows = useMemo(() => {
     const f = filter.trim().toUpperCase()
+    const within = inPeriod(period, nowServer)
     return scoped
+      .filter(within)
       .filter((t) => !f || t.symbol.includes(f) || (t.setup ?? '').toUpperCase().includes(f) || (t.note ?? '').toUpperCase().includes(f) || (t.account ? (labels[t.account] ?? t.account).toUpperCase().includes(f) : false))
       .sort((a, b) => b.closeTime - a.closeTime)
-  }, [scoped, filter, labels])
+  }, [scoped, filter, labels, period, Math.floor(nowServer / 60_000)])
 
   return (
     <>
@@ -213,8 +219,9 @@ export default function Journal({ trades, setTrades, settings, patch, labels, in
 
       <section className="card">
         <div className="card-head">
-          <h3>{rows.length} lệnh đã đóng{scope !== 'all' && <span className="muted small"> · {scopeName}</span>}</h3>
+          <h3>{rows.length} lệnh đã đóng{scope !== 'all' && <span className="muted small"> · {scopeName}</span>}{!(period.kind === 'days' && period.days === 0) && <span className="muted small"> · {periodLabel(period)}</span>}</h3>
           <div className="actions">
+            <PeriodPicker value={period} onChange={(p) => { setPeriod(p); setShown(PAGE) }} nowServer={nowServer} />
             <input className="search" placeholder="Lọc theo cặp, tài khoản, setup, ghi chú" value={filter} onChange={(e) => { setFilter(e.target.value); setShown(PAGE) }} />
             <label className="inline">Múi giờ máy chủ: UTC+
               <input className="tiny" type="number" value={settings.serverOffset} onChange={(e) => patch({ serverOffset: e.target.valueAsNumber || 0 })} />

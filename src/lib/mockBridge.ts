@@ -479,6 +479,7 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
   if (path === '/news/watch') { newsWatch = { ...newsWatch, ...(body.config as NewsWatchConfig) }; newsTick(); return newsSnapshot() }
   if (path === '/news/ack') { for (const k of body.all ? Object.keys(newsActive) : [String(body.key)]) { newsAcks.add(k); delete newsActive[k] } return newsSnapshot() }
   if (path === '/automation/unlock') { const id = String(body.account); const lk = auto.locks[id]; if (lk?.unlock_at && lk.unlock_at > Date.now() / 1000) throw new Error(lk.unlock_at >= lk.until ? 'Khoá cứng vì chạm giới hạn lỗ: tự mở lúc hết ngày máy chủ, không mở tay được.' : 'Khoá cứng: chưa hết 30 phút chờ.'); delete auto.locks[id]; auto.events.unshift({ at: Date.now(), kind: 'unlock', account: id, label: find(id).label, text: 'Đã mở khoá bằng tay.' }); closedToday[id] = 0; return autoSnapshot() }
+  if (path === '/automation/continue') throw new Error('Bản xem trước: tài khoản không ở trạng thái khoá vì đạt mục tiêu lãi')
   if (path === '/automation/alerts') { auto.alerts = { news: !!body.news, minutes: Number(body.minutes) || 30, notify: !!body.notify }; return autoSnapshot() }
   if (path === '/automation/copier') {
     const c = body.config as CopierConfig

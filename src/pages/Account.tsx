@@ -16,6 +16,8 @@ import { FundPanel } from './Prop'
 import { mergeTrades, usePersistent } from '../lib/store'
 import { SERVER } from '../lib/server'
 import BridgeLink from '../server/BridgeLink'
+import PeriodPicker from '../components/PeriodPicker'
+import { inPeriod, periodDays, type Period } from '../lib/period'
 import type { Settings, Side, Trade } from '../lib/types'
 
 interface Props {
@@ -368,7 +370,7 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
   // tab: 'overview' hoặc một nhóm; sel: '' (danh sách của nhóm), 'add', hoặc số tài khoản.
   const [tab, setTab] = useState<'overview' | Category>('overview')
   const [sel, setSel] = useState('')
-  const [days, setDays] = useState(90)
+  const [period, setPeriod] = usePersistent<Period>('fx.sync.period', { kind: 'days', days: 90 })
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg>(null)
   const { accounts, metas } = bridge
@@ -405,8 +407,9 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
     const parts: string[] = []
     for (const a of list) {
       try {
-        const h = await bridgeGet<{ deals: Mt5Deal[]; orders: Mt5Order[] }>(`/history?days=${days}&account=${a.id}`)
-        const merged = mergeTrades(all, dealsToTrades(h.deals, h.orders, a.id))
+        const nowServer = Date.now() + settings.serverOffset * 3_600_000
+        const h = await bridgeGet<{ deals: Mt5Deal[]; orders: Mt5Order[] }>(`/history?days=${periodDays(period, nowServer)}&account=${a.id}`)
+        const merged = mergeTrades(all, dealsToTrades(h.deals, h.orders, a.id).filter(inPeriod(period, nowServer)))
         all = merged.trades
         parts.push(`${name(a.id)}: thêm ${merged.added} lệnh`)
       } catch (e) { parts.push(`${name(a.id)}: lỗi (${errText(e)})`) }
@@ -447,9 +450,7 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
 
   const syncControls = (list: LiveAccount[], label: string) => (
     <div className="actions">
-      <select aria-label="Khoảng thời gian" value={days} onChange={(e) => setDays(Number(e.target.value))} style={{ width: 'auto' }}>
-        <option value={30}>30 ngày</option><option value={90}>90 ngày</option><option value={365}>1 năm</option><option value={3650}>Toàn bộ</option>
-      </select>
+      <PeriodPicker value={period} onChange={setPeriod} nowServer={Date.now() + settings.serverOffset * 3_600_000} label="Lấy lịch sử trong khoảng" />
       <button className="primary" disabled={busy || !list.length} onClick={() => syncHistory(list)}>{label}</button>
       <button disabled={busy || !accounts.length} onClick={syncQuotes}>Cập nhật tỷ giá</button>
     </div>

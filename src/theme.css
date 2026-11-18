@@ -637,3 +637,10 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 .ai-models { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
 .bridge-link .bridge-status { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .bridge-link .code-line { white-space: pre-wrap; word-break: break-all; background: var(--page); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; margin: 6px 0; }
+.rule-line { font-size: 13px; margin: 8px 0 0; padding: 7px 12px; border-radius: 10px; background: var(--page); border: 1px solid var(--border); }
+.rule-line.frozen { background: color-mix(in srgb, var(--accent) 7%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.keep-going { flex-basis: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px dashed color-mix(in srgb, var(--neg) 30%, transparent); }
+.keep-going .actions { align-items: center; }
+.keep-going input { max-width: 140px; }
+.period-picker { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.period-picker input[type=date] { width: auto; }

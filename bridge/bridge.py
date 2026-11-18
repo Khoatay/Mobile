@@ -900,6 +900,8 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot):
                 self.answer(lambda: personas.clear(str(body["persona"])))
             elif url.path == "/automation/guard":
                 self.answer(lambda: auto.set_guard(body))
+            elif url.path == "/automation/continue":
+                self.answer(lambda: auto.continue_after_profit(body))
             elif url.path == "/automation/unlock":
                 self.answer(lambda: auto.unlock(str(body["account"])))
             elif url.path == "/automation/alerts":
