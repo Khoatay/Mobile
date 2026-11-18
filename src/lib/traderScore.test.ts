@@ -71,9 +71,10 @@ describe('đánh giá tài khoản theo dõi', () => {
     expect(a.confidence).toBe('low')
   })
 
-  it('số dư đầu kỳ trừ cả tiền nạp trong kỳ', () => {
-    const m = computeMetrics([trade(1, { day: 0, win: true })], 2_030, 1_000)
-    expect(m.startBalance).toBeCloseTo(1_000)
-    expect(m.growthPct).toBeCloseTo(0.03)
+  it('vốn là số dư trừ lãi/lỗ trong kỳ (đã gồm tiền nạp), nên toàn bộ lịch sử cũng tính đúng', () => {
+    // Nạp 1.000 rồi nạp thêm 1.000, lãi 30: vốn 2.000, tăng 1.5%.
+    const m = computeMetrics([trade(1, { day: 0, win: true })], 2_030)
+    expect(m.startBalance).toBeCloseTo(2_000)
+    expect(m.growthPct).toBeCloseTo(0.015)
   })
 })

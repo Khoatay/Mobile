@@ -304,6 +304,10 @@ function AddAccount({ bridge, groups, onAdded, role }: { bridge: BridgeState; gr
   )
 }
 
+/** "Tất cả": 10 năm, như nút Toàn bộ khi đồng bộ Nhật ký. */
+const ALL = 3650
+const periodText = (d: number) => (d === ALL ? 'Tất cả' : d === 365 ? '1 năm' : d === 180 ? '6 tháng' : `${d} ngày`)
+
 const GRADE_TONE = { good: 'pos', ok: 'ok', weak: 'warn', bad: 'neg' } as const
 const CONF_TEXT = { low: 'thấp', medium: 'trung bình', high: 'cao' }
 
@@ -328,18 +332,18 @@ function ScoreCard({ title, hint, s }: { title: string; hint: string; s: Score }
  */
 function Performance({ id, acc, serverOffset }: { id: string; acc: LiveAccount; serverOffset: number }) {
   const [days, setDays] = useState(90)
-  const [data, setData] = useState<{ trades: Trade[]; deposits: number } | null>(null)
+  const [data, setData] = useState<{ trades: Trade[] } | null>(null)
   const [err, setErr] = useState('')
   useEffect(() => {
     let stop = false
     setData(null); setErr('')
     bridgeGet<{ deals: Mt5Deal[]; orders: Mt5Order[] }>(`/history?days=${days}&account=${id}`)
-      .then((h) => { if (!stop) setData({ trades: dealsToTrades(h.deals, h.orders, id), deposits: h.deals.filter((d) => d.type === 2).reduce((s, d) => s + d.profit, 0) }) })
+      .then((h) => { if (!stop) setData({ trades: dealsToTrades(h.deals, h.orders, id) }) })
       .catch((e) => { if (!stop) setErr(errText(e)) })
     return () => { stop = true }
   }, [id, days])
   const ccy = acc.currency
-  const a = useMemo(() => (data ? assess(data.trades, acc.balance, data.deposits, acc.balance > 0 ? acc.profit / acc.balance : 0, acc.positions.filter((p) => !p.sl).length) : null),
+  const a = useMemo(() => (data ? assess(data.trades, acc.balance, acc.balance > 0 ? acc.profit / acc.balance : 0, acc.positions.filter((p) => !p.sl).length) : null),
     // Số dư và lệnh mở đổi liên tục; chỉ chấm lại khi tải lịch sử mới để điểm không nhảy theo từng tick.
     [data])
   const s = useMemo(() => (data ? computeStats(data.trades, serverOffset) : null), [data, serverOffset])
@@ -387,7 +391,7 @@ function Performance({ id, acc, serverOffset }: { id: string; acc: LiveAccount; 
       <div className="card-head">
         <h3>Đánh giá tài khoản</h3>
         <div className="seg">
-          {[30, 90, 180, 365].map((d) => <button key={d} className={days === d ? 'active' : ''} aria-pressed={days === d} onClick={() => setDays(d)}>{d === 365 ? '1 năm' : d === 180 ? '6 tháng' : `${d} ngày`}</button>)}
+          {[30, 90, 180, 365, ALL].map((d) => <button key={d} className={days === d ? 'active' : ''} aria-pressed={days === d} onClick={() => setDays(d)}>{periodText(d)}</button>)}
         </div>
       </div>
       {err && <p className="notice bad">⚠ {err}</p>}
@@ -427,7 +431,7 @@ function Performance({ id, acc, serverOffset }: { id: string; acc: LiveAccount; 
 
               <div className="metric-grid">
                 <div><span>Tỷ lệ thắng</span><strong>{Math.round(m.winRate * 100)}%</strong><small>{m.wins} thắng · {m.losses} thua</small></div>
-                <div><span>Lãi/lỗ ròng</span><strong className={m.net > 0 ? 'pos' : m.net < 0 ? 'neg' : ''}>{signed(m.net)} {ccy}</strong><small>{pc(m.growthPct)} so với vốn đầu kỳ</small></div>
+                <div><span>Lãi/lỗ ròng</span><strong className={m.net > 0 ? 'pos' : m.net < 0 ? 'neg' : ''}>{signed(m.net)} {ccy}</strong><small>{pc(m.growthPct)} so với vốn</small></div>
                 <div><span>Lãi trung bình / lệnh thắng</span><strong className="pos">{money(m.avgWin, ccy)}</strong><small>Lỗ trung bình / lệnh thua: <b className="neg">{money(m.avgLoss, ccy)}</b></small></div>
                 <div><span>Lệnh lãi lớn nhất</span><strong className="pos">{money(m.bestWin, ccy)}</strong><small>Nhỏ nhất: {money(m.smallestWin, ccy)}</small></div>
                 <div><span>Lệnh lỗ lớn nhất</span><strong className="neg">{money(m.worstLoss, ccy)}</strong><small>{(m.worstLossPct * 100).toFixed(1)}% vốn · nhỏ nhất: {money(m.smallestLoss, ccy)}</small></div>
@@ -445,7 +449,7 @@ function Performance({ id, acc, serverOffset }: { id: string; acc: LiveAccount; 
               </div>
             </>
           )}
-          <p className="muted small">{r ? 'Điểm và kết luận do AI chấm từ các con số trên và danh sách lệnh; các con số do app tự tính nên luôn chính xác. AI có thể nhận định sai: đọc kỹ lý do trước khi quyết định.' : 'Đánh giá tự động theo quy tắc cố định.'} Dựa trên lịch sử {days >= 365 ? '1 năm' : `${days} ngày`} gần nhất đọc trực tiếp từ MT5; không lưu vào Nhật ký hay Thống kê của bạn. Vốn đầu kỳ ước tính từ số dư hiện tại trừ lãi/lỗ và nạp/rút trong kỳ. Kết quả quá khứ không bảo đảm kết quả sau này; đây không phải lời khuyên đầu tư.</p>
+          <p className="muted small">{r ? 'Điểm và kết luận do AI chấm từ các con số trên và danh sách lệnh; các con số do app tự tính nên luôn chính xác. AI có thể nhận định sai: đọc kỹ lý do trước khi quyết định.' : 'Đánh giá tự động theo quy tắc cố định.'} Dựa trên {days === ALL ? 'toàn bộ lịch sử' : `lịch sử ${periodText(days)} gần nhất`} đọc trực tiếp từ MT5; không lưu vào Nhật ký hay Thống kê của bạn. Vốn tính bằng số dư hiện tại trừ lãi/lỗ trong kỳ (đã gồm tiền nạp và rút). Kết quả quá khứ không bảo đảm kết quả sau này; đây không phải lời khuyên đầu tư.</p>
         </>
       )}
     </section>

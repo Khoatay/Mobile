@@ -60,7 +60,8 @@ export function ratePayload(trades: Trade[], acc: LiveAccount, metrics: Metrics,
   }
 }
 
-const KEY = 'fx.aiRate'
+// Đổi tên khi cách tính chỉ số thay đổi, để không dùng lại kết quả chấm theo cách cũ.
+const KEY = 'fx.aiRate.v2'
 export function loadRating(account: string, days: number): StoredRating | null {
   try { return (JSON.parse(localStorage.getItem(KEY) || '{}') as Record<string, StoredRating>)[`${account}:${days}`] ?? null } catch { return null }
 }

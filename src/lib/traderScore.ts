@@ -21,7 +21,7 @@ export interface Metrics {
   smallestLoss: number
   profitFactor: number
   expectancy: number
-  /** Số dư đầu kỳ ước tính: số dư hiện tại trừ lãi/lỗ và nạp/rút trong kỳ. */
+  /** Vốn: số dư hiện tại trừ lãi/lỗ trong kỳ, tức tiền đã bỏ vào (gồm nạp/rút). Đúng cả khi xem toàn bộ lịch sử. */
   startBalance: number
   growthPct: number
   maxDrawdown: number
@@ -57,12 +57,12 @@ const pct = (v: number, d = 0) => `${(v * 100).toFixed(d)}%`
 const clamp = (v: number) => Math.max(0, Math.min(100, Math.round(v)))
 const mean = (a: number[]) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0)
 
-export function computeMetrics(input: Trade[], balanceNow: number, depositsInPeriod = 0): Metrics {
+export function computeMetrics(input: Trade[], balanceNow: number): Metrics {
   const trades = [...input].sort((a, b) => a.closeTime - b.closeTime)
   const nets = trades.map(netOf)
   const wins = nets.filter((x) => x > 0), losses = nets.filter((x) => x < 0)
   const net = nets.reduce((s, x) => s + x, 0)
-  const startBalance = Math.max(1, balanceNow - net - depositsInPeriod)
+  const startBalance = Math.max(1, balanceNow - net)
 
   let cum = 0, peak = 0, maxDd = 0, maxDdPct = 0, streak = 0, maxStreak = 0
   for (const x of nets) {
@@ -137,8 +137,8 @@ function grade(score: number, labels: [string, string, string, string]): Pick<Sc
 }
 
 /** Đánh giá đầy đủ. `openRiskPct`: phần lỗ đang treo của lệnh mở so với số dư (số âm là đang lỗ). */
-export function assess(trades: Trade[], balanceNow: number, depositsInPeriod = 0, openFloatingPct = 0, openWithoutSl = 0): Assessment {
-  const m = computeMetrics(trades, balanceNow, depositsInPeriod)
+export function assess(trades: Trade[], balanceNow: number, openFloatingPct = 0, openWithoutSl = 0): Assessment {
+  const m = computeMetrics(trades, balanceNow)
   const holdRatio = m.avgHoldWinMs > 0 ? m.avgHoldLossMs / m.avgHoldWinMs : 1
 
   // ---- An toàn: sụt giảm, lệnh thua lớn nhất, SL, gấp thếp, lỗ đang treo
@@ -162,7 +162,7 @@ export function assess(trades: Trade[], balanceNow: number, depositsInPeriod = 0
   const gr: string[] = []
   const monthly = m.spanDays >= 7 ? m.growthPct / Math.max(1, m.spanDays / 30) : m.growthPct
   g += Math.max(-35, Math.min(30, monthly * 300))
-  gr.push(`Lãi/lỗ ${m.growthPct >= 0 ? '+' : ''}${pct(m.growthPct, 1)} so với số dư đầu kỳ${m.spanDays >= 30 ? `, khoảng ${monthly >= 0 ? '+' : ''}${pct(monthly, 1)} mỗi tháng` : ''}.`)
+  gr.push(`Lãi/lỗ ${m.growthPct >= 0 ? '+' : ''}${pct(m.growthPct, 1)} so với vốn${m.spanDays >= 30 ? `, khoảng ${monthly >= 0 ? '+' : ''}${pct(monthly, 1)} mỗi tháng` : ''}.`)
   if (m.profitFactor >= 1.5) { g += 12; gr.push(`Profit factor ${Number.isFinite(m.profitFactor) ? m.profitFactor.toFixed(2) : '∞'}: lãi gộp lớn hơn hẳn lỗ gộp.`) }
   else if (m.profitFactor < 1) { g -= 12; gr.push(`Profit factor ${m.profitFactor.toFixed(2)}: tổng lỗ lớn hơn tổng lãi.`) }
   if (m.greenWeekShare >= 0.6) { g += 8; gr.push(`${pct(m.greenWeekShare)} số tuần có lãi: tăng trưởng đều.`) }
