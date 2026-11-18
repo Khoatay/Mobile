@@ -93,3 +93,25 @@ def remove_clone(exe_path):
         subprocess.run(["powershell", "-NoProfile", "-Command", f"Get-Process terminal64 -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -eq '{p}' }} | Stop-Process -Force"],
                        capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     shutil.rmtree(Path(exe_path).parent, ignore_errors=True)
+
+
+def known_servers(terminals):
+    """Tên máy chủ MT5 đã từng đăng nhập trên máy này. MT5 tạo thư mục bases\\<tên máy chủ> cho mỗi máy chủ đã nối,
+    nên tên lấy ở đây chắc chắn đúng chính tả. Quét thư mục dữ liệu của các bản cài thường và các bản portable/tự tạo."""
+    roots = []
+    base = Path(os.environ.get("APPDATA") or "") / "MetaQuotes" / "Terminal"
+    if base.is_dir():
+        roots += [d / "bases" for d in base.iterdir() if d.is_dir()]
+    roots += [Path(t).parent / "bases" for t in terminals]
+    if CLONES.is_dir():
+        roots += [d / "bases" for d in CLONES.iterdir() if d.is_dir()]
+    names = set()
+    for r in roots:
+        try:
+            for d in r.iterdir():
+                n = d.name
+                if d.is_dir() and n.lower() not in ("default", "signals", "symbols", "news") and any(c.isalpha() for c in n):
+                    names.add(n)
+        except OSError:
+            continue
+    return sorted(names, key=str.lower)

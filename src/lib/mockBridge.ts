@@ -355,6 +355,7 @@ export async function mockGet(path: string): Promise<unknown> {
     case '/tgbot': { if (bot.token && !bot.linked && Date.now() - bot.since > 6000) { bot.linked = true; bot.chat_name = 'Bạn (xem trước)' } return botStatus() }
     case '/kb': return JSON.parse(JSON.stringify(playbooks))
     case '/automation': return autoSnapshot()
+    case '/servers': return { found: ['Exness-MT5Real8', 'FTMO-Demo'] }
     case '/personas': return personaStore()
     case '/ai/status': return aiStatus()
     case '/ai/usage': return { days: aiUsage, features: AI_FEATURES }

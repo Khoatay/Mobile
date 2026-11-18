@@ -889,6 +889,7 @@ def make_handler(registry, tg, kb, brain, calendar, auto, personas, bot, link=No
                 "/telegram/messages": lambda: tg.since(int(q.get("after", 0))),
                 "/calendar": calendar.get,
                 "/terminals": registry.terminals,
+                "/servers": lambda: {"found": mt5clone.known_servers(find_terminals())},
                 "/kb": kb.list,
                 "/ai/status": brain.status,
                 "/automation": auto.snapshot,

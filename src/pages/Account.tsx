@@ -18,6 +18,7 @@ import { SERVER } from '../lib/server'
 import BridgeLink from '../server/BridgeLink'
 import PeriodPicker from '../components/PeriodPicker'
 import { inPeriod, periodDays, type Period } from '../lib/period'
+import { serverOptions } from '../lib/servers'
 import type { Settings, Side, Trade } from '../lib/types'
 
 interface Props {
@@ -239,6 +240,9 @@ function AddAccount({ bridge, groups, onAdded, role }: { bridge: BridgeState; gr
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<Msg>(null)
 
+  const [found, setFound] = useState<string[]>([])
+  useEffect(() => { if (bridge.online) bridgeGet<{ found: string[] }>('/servers').then((r) => setFound(r.found)).catch(() => {}) }, [bridge.online])
+  const servers = serverOptions(found, info.broker)
   const loadTerminals = () => bridgeGet<{ path: string; usedBy: string | null }[]>('/terminals')
     .then((t) => { setTerminals(t); setPath((cur) => cur || t.find((x) => !x.usedBy)?.path || '') })
     .catch(() => setTerminals([]))
@@ -277,7 +281,10 @@ function AddAccount({ bridge, groups, onAdded, role }: { bridge: BridgeState; gr
         <div className="prop-form">
           <Field label="Số tài khoản"><input inputMode="numeric" value={login} onChange={(e) => setLogin(e.target.value.replace(/\D/g, ''))} /></Field>
           <Field label={view ? 'Mật khẩu view (investor)' : 'Mật khẩu'} hint={view ? 'Người đó lấy trong MT5: Tools → Options → Server → Change (investor). Chỉ xem được, không đặt lệnh được.' : 'Mật khẩu view chỉ xem được; mật khẩu giao dịch mới vào lệnh được'}><input type="password" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
-          <Field label="Máy chủ" hint="Chép đúng như trong MT5: File → Login to Trade Account"><input value={server} placeholder="Exness-MT5Real29" onChange={(e) => setServer(e.target.value.trim())} /></Field>
+          <Field label="Máy chủ" hint={found.length ? `Gõ vài chữ để chọn. ${found.length} máy chủ đã dùng trên máy bạn hiện đầu danh sách` : 'Gõ vài chữ (ví dụ exness) để chọn, hoặc chép đúng tên trong email mở tài khoản của sàn'}>
+            <input list="mt5-servers" value={server} placeholder="Exness-MT5Real8" onChange={(e) => setServer(e.target.value.trim())} />
+            <datalist id="mt5-servers">{servers.map((x) => <option key={x.name} value={x.name}>{x.note}</option>)}</datalist>
+          </Field>
           {auto ? (
             <Field label="Bản MT5 mẫu" hint="Bridge chép bản này thành một bản riêng cho tài khoản. Nên chọn bản MT5 của đúng sàn hoặc quỹ">
               <select value={template} onChange={(e) => setTemplate(e.target.value)}>
