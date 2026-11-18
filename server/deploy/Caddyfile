@@ -1,0 +1,10 @@
+# Caddy tự lấy và gia hạn chứng chỉ HTTPS cho tên miền.
+ten-mien-cua-ban.vn {
+	encode gzip zstd
+	reverse_proxy 127.0.0.1:8080
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}

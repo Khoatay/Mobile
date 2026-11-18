@@ -1,0 +1,21 @@
+[Unit]
+Description=Golden Duck server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=golden-duck
+WorkingDirectory=/opt/golden-duck/app/server
+EnvironmentFile=/opt/golden-duck/.env
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning --import tsx src/index.ts
+Restart=always
+RestartSec=5
+# Giới hạn quyền: chỉ ghi được thư mục dữ liệu.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/golden-duck/data
+
+[Install]
+WantedBy=multi-user.target
