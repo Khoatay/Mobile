@@ -79,7 +79,7 @@ Nhập số điện thoại riêng (dạng `+84…`), mã Telegram gửi về, m
 3. Tài khoản → Nối Telegram → bấm Start trong bot.
 4. Hỏi AI → hỏi thử một câu.
 
-Bản đầy đủ cho máy tính ở `https://ten-mien-cua-ban.com/pc` (mở bằng Chrome hoặc Edge). Các trang cần MT5 (tài khoản, bảo vệ, copy lệnh, AI phân tích) dùng bridge chạy trên máy Windows của người dùng; trong `bridge/config.json` của họ thêm `"web_origins": ["https://ten-mien-cua-ban.com"]`.
+Trang web là bản đầy đủ của Golden Duck: khách đăng nhập rồi dùng mọi trang. Gói Pro, Golden Duck Talk và kênh tín hiệu chạy qua máy chủ. Các trang cần MT5 (tài khoản, bảo vệ, copy lệnh) tạm thời dùng bridge trên máy Windows của khách; trong `bridge/config.json` của họ thêm `"web_origins": ["https://ten-mien-cua-ban.com"]`.
 
 Trên điện thoại, mở trang bằng trình duyệt → Chia sẻ → **Thêm vào màn hình chính** để dùng như app.
 

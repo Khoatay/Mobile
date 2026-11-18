@@ -41,12 +41,6 @@ export default function ServerMe({ me, setMe }: { me: Me; setMe: (m: Me | null) 
       </section>
 
       <section className="lite-card">
-        <div className="lite-label">Bản đầy đủ cho máy tính</div>
-        <p className="muted small">Nhật ký, thống kê, quỹ, bảo vệ tài khoản, copy lệnh, AI phân tích… Mở trên máy tính bằng Chrome hoặc Edge.</p>
-        <a className="primary lite-cta" href="/pc/">Mở bản đầy đủ</a>
-      </section>
-
-      <section className="lite-card">
         <div className="lite-label">Nhận lệnh qua Telegram</div>
         {me.telegram.linked ? (
           <>

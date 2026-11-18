@@ -47,18 +47,16 @@ const TYPES: Record<string, string> = {
 
 /** Phục vụ bản build web app; đường dẫn không có file thì trả index.html (ứng dụng một trang). */
 function serveStatic(webDir: string, urlPath: string, res: ServerResponse) {
-  if (urlPath === '/pc') { res.writeHead(301, { location: '/pc/' }).end(); return }
+  if (urlPath === '/pc' || urlPath.startsWith('/pc/')) { res.writeHead(301, { location: '/' }).end(); return }  // địa chỉ cũ của bản đầy đủ
   const safe = path.normalize(decodeURIComponent(urlPath)).replace(/^(\.\.[/\\])+/, '')
   let file = path.join(webDir, safe)
-  // /pc/… là bản đầy đủ cho máy tính (build riêng trong dist-server/pc), còn lại là bản gọn cho điện thoại.
-  const home = safe.startsWith('/pc/') ? path.join(webDir, 'pc', 'index.html') : path.join(webDir, 'index.html')
-  if (!file.startsWith(webDir) || !existsSync(file) || statSync(file).isDirectory()) file = home
+  if (!file.startsWith(webDir) || !existsSync(file) || statSync(file).isDirectory()) file = path.join(webDir, 'index.html')
   if (!existsSync(file)) { res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' }).end('Chưa có bản build web app. Chạy npm run build:server ở thư mục gốc.'); return }
   const ext = path.extname(file)
   res.writeHead(200, {
     'content-type': TYPES[ext] ?? 'application/octet-stream',
     // File trong assets/ có mã băm trong tên nên cache lâu được; index.html luôn lấy bản mới.
-    'cache-control': /^\/?(pc\/)?assets\//.test(safe) ? 'public, max-age=31536000, immutable' : 'no-cache',
+    'cache-control': /^\/?assets\//.test(safe) ? 'public, max-age=31536000, immutable' : 'no-cache',
     'x-content-type-options': 'nosniff',
   })
   createReadStream(file).pipe(res)

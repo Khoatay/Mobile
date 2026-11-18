@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
+import { SERVER } from './lib/server'
+import { useServer } from './lib/serverCtx'
+import ServerChat from './server/ServerChat'
+import ServerMe from './server/ServerMe'
+import ServerSignals from './server/ServerSignals'
+import { AdminPage } from './server/AiPicker'
 import Avatar from './components/Avatar'
 import Icon, { type IconName } from './components/Icon'
 import { DEFAULT_USER, type UserProfile } from './lib/user'
@@ -42,8 +48,6 @@ import Share from './pages/Share'
 import Signals from './pages/Signals'
 import LiteApp from './lite/LiteApp'
 import ModePicker from './lite/ModePicker'
-/** Bản đầy đủ đặt trên tên miền ở /pc: vào thẳng giao diện đầy đủ, không hỏi chọn. */
-const ON_WEB_PC = typeof location !== 'undefined' && location.pathname.startsWith('/pc/')
 import ModeSwitch from './lite/ModeSwitch'
 import type { Mode } from './lite/plain'
 
@@ -53,12 +57,23 @@ const GROUPS = [
   { title: 'Cộng đồng', tone: 'mint', tabs: [['offers', 'Ưu đãi', 'gift'], ['shop', 'Cửa hàng', 'bag'], ['community', 'Nhóm cộng đồng', 'users'], ['share', 'Chia sẻ cộng đồng', 'megaphone'], ['track', 'Thành tích công khai', 'trophy']] },
   { title: 'Cá nhân', tone: 'lilac', tabs: [['pro', 'Gói Pro', 'crown'], ['ledger', 'Thu chi đầu tư', 'coins'], ['guides', 'Hướng dẫn', 'book'], ['profile', 'Hồ sơ', 'user'], ['me', 'Cá nhân hoá', 'palette']] },
 ] as const
-type Tab = (typeof GROUPS)[number]['tabs'][number][0]
+type Tab = (typeof GROUPS)[number]['tabs'][number][0] | 'membership' | 'admin'
+type NavItem = readonly [Tab, string, string]
+
+/** Bản web trên máy chủ: thêm trang tài khoản đăng nhập (gói, Telegram, đăng xuất) và trang quản trị cho chủ app. */
+function navGroups(admin: boolean) {
+  if (!SERVER) return GROUPS as unknown as { title: string; tone: string; tabs: readonly NavItem[] }[]
+  return GROUPS.map((g) => g.title !== 'Cá nhân' ? g : {
+    ...g, tabs: [['membership', 'Tài khoản & gói', 'user'] as NavItem, ...g.tabs, ...(admin ? [['admin', 'Quản trị', 'crown'] as NavItem] : [])],
+  }) as unknown as { title: string; tone: string; tabs: readonly NavItem[] }[]
+}
 
 export default function App() {
+  const srv = useServer()
+  const groups = useMemo(() => navGroups(!!srv?.me.admin), [srv?.me.admin])
   const [tab, setTab] = useState<Tab>('calc')
   // Bản đơn giản cho người mới hoặc bản đầy đủ; '' = chưa chọn, hỏi ở màn hình chào.
-  const [mode, setMode] = usePersistent<Mode | ''>('fx.mode', ON_WEB_PC ? 'full' : '')
+  const [mode, setMode] = usePersistent<Mode | ''>('fx.mode', SERVER ? 'full' : '')
   const [settings, patchSettings] = useSettings()
   const [trades, setTrades] = useTrades()
   const [stored, setProfile] = usePersistent<Profile>('fx.profile', DEFAULT_PROFILE)
@@ -66,7 +81,8 @@ export default function App() {
   // Bản IB có thể xem thử giao diện của người dùng bản trader.
   const [viewAs, setViewAs] = usePersistent('fx.viewAs', false)
   const canEdit = EDITION === 'owner' && !viewAs
-  const isPro = canEdit || pack.proForAll
+  // Bản web: gói Pro theo tài khoản đăng nhập, máy chủ quyết định.
+  const isPro = canEdit || pack.proForAll || srv?.me.plan === 'pro'
   // Bản trader lấy thương hiệu từ gói cấu hình của IB; màu nhấn và việc ẩn tiền là lựa chọn riêng của người dùng.
   const profile = useMemo(() => {
     const base = { ...DEFAULT_PROFILE, ...stored }
@@ -123,7 +139,7 @@ export default function App() {
         {previewBar}
         {newsBar}
         <LiteApp settings={settings} patch={patchSettings} trades={trades} setTrades={setTrades} bridge={ownBridge} infos={infos} user={user} profile={profile} pack={pack} links={links}
-          goFull={(t) => { if (t && GROUPS.some((g) => g.tabs.some(([id]) => id === t))) setTab(t as Tab); setMode('full'); window.scrollTo(0, 0) }} />
+          goFull={(t) => { if (t && groups.some((g) => g.tabs.some(([id]) => id === t))) setTab(t as Tab); setMode('full'); window.scrollTo(0, 0) }} />
       </>
     )
 
@@ -139,7 +155,7 @@ export default function App() {
         </div>
         <ModeSwitch mode="full" onChange={(m) => { setMode(m); window.scrollTo(0, 0) }} dark />
         <nav>
-          {GROUPS.map((g) => (
+          {groups.map((g) => (
             <div key={g.title} className={`nav-group tone-${g.tone}`}>
               <div className="nav-title">{g.title}</div>
               {g.tabs.map(([id, label, icon]) => (
@@ -165,7 +181,8 @@ export default function App() {
           <span className={bridge.accounts.length ? 'led on' : 'led'} />{' '}
           {!bridge.online ? 'Bridge chưa chạy' : `${bridge.accounts.length}/${bridge.metas.length} tài khoản MT5 đã nối`}
         </p>
-        <p className="side-note plain">Dữ liệu chỉ lưu trên trình duyệt của máy này.</p>
+        {srv && <p className="side-note plain">Đăng nhập: {srv.me.email} · {srv.me.plan === 'pro' ? 'Pro' : 'Miễn phí'}</p>}
+        <p className="side-note plain">Nhật ký và cài đặt lưu trên trình duyệt của máy này.</p>
       </aside>
       <main className="main">
         {EDITION === 'trader' && packLoading && <p className="muted small">Đang tải cấu hình của cộng đồng…</p>}
@@ -175,7 +192,7 @@ export default function App() {
         {tab === 'stats' && <Dashboard trades={trades} settings={settings} infos={infos} goJournal={() => setTab('journal')} />}
         {tab === 'prop' && <Prop trades={trades} settings={settings} bridge={ownBridge} infos={infos} goAccounts={() => setTab('account')} links={links} />}
         {tab === 'account' && <Account onCopyFrom={(id) => { setCopyFrom(id); setTab('copier') }} bridge={bridge} trades={trades} setTrades={setTrades} settings={settings} patch={patchSettings} infos={infos} setInfo={setInfo} links={links} />}
-        {tab === 'signals' && (locked.has('signals') ? <ProLockPage feature={lockOf('signals')} onOpenPro={() => setTab('pro')} /> : <Signals bridge={bridge} settings={settings} messages={messages} />)}
+        {tab === 'signals' && (srv ? <ServerSignals me={srv.me} goCalc={() => setTab('calc')} goMe={() => setTab('membership')} /> : locked.has('signals') ? <ProLockPage feature={lockOf('signals')} onOpenPro={() => setTab('pro')} /> : <Signals bridge={bridge} settings={settings} messages={messages} />)}
         {tab === 'guard' && (locked.has('guard') ? <ProLockPage feature={lockOf('guard')} onOpenPro={() => setTab('pro')} /> : <Guard bridge={ownBridge} trades={trades} settings={settings} infos={infos} />)}
         {tab === 'copier' && (locked.has('copier') ? <ProLockPage feature={lockOf('copier')} onOpenPro={() => setTab('pro')} /> : <Copier bridge={bridge} infos={infos} presetMaster={copyFrom} onPresetUsed={() => setCopyFrom('')} />)}
         {tab === 'learn' && (locked.has('learn') ? <ProLockPage feature={lockOf('learn')} onOpenPro={() => setTab('pro')} /> : <Learn bridge={bridge} />)}
@@ -187,7 +204,9 @@ export default function App() {
         {tab === 'shop' && <Shop pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'community' && <Community pack={pack} setPack={canEdit ? setPack : null} />}
         {tab === 'profile' && <ProfilePage user={user} setUser={setUser} trades={trades} online={bridge.online} />}
-        {tab === 'chat' && <Chat bridge={ownBridge} trades={trades} infos={infos} />}
+        {tab === 'chat' && (srv ? <><h1>Golden Duck Talk</h1><ServerChat me={srv.me} onUsed={(left) => srv.setMe({ ...srv.me, chatToday: srv.me.limits.chatPerDay - left })} /></> : <Chat bridge={ownBridge} trades={trades} infos={infos} />)}
+        {tab === 'membership' && srv && <ServerMe me={srv.me} setMe={srv.setMe} />}
+        {tab === 'admin' && srv?.me.admin && <AdminPage />}
         {tab === 'track' && <Track trades={trades} infos={infos} profile={profile} links={links} currency={settings.accountCcy} />}
         {tab === 'guides' && <Guides links={links} />}
         {tab === 'me' && <Personalize profile={profile} setProfile={setProfile} canEdit={canEdit} online={bridge.online} />}
