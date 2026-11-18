@@ -37,7 +37,7 @@ Lần đầu mở app sẽ hỏi chọn giao diện; đổi lại bằng công t
 - **Bản đơn giản** (cho người mới): một cột như app điện thoại, 6 mục ở thanh dưới, không dùng thuật ngữ khi không cần.
   - **Trang chủ**: tổng số dư và lệnh đang mở (nếu có bridge), hoặc lãi/lỗ hôm nay và tuần này; lối tắt và một lời khuyên mỗi ngày.
   - **Tính lệnh**: 4 bước bấm chọn (cặp, vốn, mức rủi ro An toàn/Vừa phải/Mạo hiểm, khoảng cắt lỗ); kết quả nói bằng tiền: "sai thì mất bao nhiêu, đúng thì được bao nhiêu".
-  - **Hỏi AI** (cần bridge + khoá API, như Golden Duck Talk): một khung chat với nhân vật **Vịt Vàng** giải thích cho người mới, tự tạo khi chưa có nhân vật nào; câu hỏi gợi ý để bấm. Dùng chung nhân vật và lịch sử với Golden Duck Talk; sửa tính cách hoặc tạo nhân vật khác ở bản đầy đủ. Chưa có bridge hoặc khoá thì hiện lời giải thích và nút sang trang cài đặt.
+  - **Hỏi AI** (cần bridge + khoá API, như Golden Duck Talk): một khung chat với nhân vật **Golden Duck** (icon 3D ở `public/golden-duck.svg`) giải thích cho người mới, tự tạo khi chưa có nhân vật nào; câu hỏi gợi ý để bấm. Dùng chung nhân vật và lịch sử với Golden Duck Talk; sửa tính cách hoặc tạo nhân vật khác ở bản đầy đủ. Chưa có bridge hoặc khoá thì hiện lời giải thích và nút sang trang cài đặt.
   - **Kết quả**: hướng dẫn 3 bước lấy file từ MT5, tổng lãi/lỗ, thắng/thua, một câu nhận xét, tối đa 3 điều nên chú ý và 10 lệnh gần nhất.
   - **Học**: 5 điều cần nhớ và từ điển cho người mới (pip, lot, SL, TP, đòn bẩy, ký quỹ, spread, equity, quỹ).
   - **Ưu đãi**: ưu đãi và nhóm cộng đồng của IB, bấm để chép mã.

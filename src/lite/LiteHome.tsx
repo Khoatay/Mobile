@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import Icon, { type IconName } from '../components/Icon'
 import { money, signed } from '../lib/format'
+import { DUCK_AVATAR } from '../lib/persona'
 import type { LiteProps, LiteTab } from './LiteApp'
 import { periodStarts, pnlSince } from './plain'
 
@@ -64,8 +65,8 @@ export default function LiteHome({ user, bridge, trades, settings, go }: LitePro
       )}
 
       <button className="lite-card lite-ask" onClick={() => go('chat')}>
-        <span className="lite-duck" aria-hidden="true">🦆</span>
-        <span><strong>Hỏi Vịt Vàng</strong><small>Không hiểu gì cứ hỏi, AI giải thích dễ hiểu</small></span>
+        <img className="lite-duck" src={DUCK_AVATAR} alt="" />
+        <span><strong>Hỏi Golden Duck</strong><small>Không hiểu gì cứ hỏi, AI giải thích dễ hiểu</small></span>
         <span className="lite-ask-go" aria-hidden="true">›</span>
       </button>
 

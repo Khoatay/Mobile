@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Avatar from '../components/Avatar'
 import type { InfoMap } from '../lib/accounts'
 import { bridgeGet, bridgePost, type BridgeState } from '../lib/bridge'
-import { accountContext, DUCK_NAME, DUCK_PERSONA, type PersonaStore } from '../lib/persona'
+import { accountContext, DUCK_AVATAR, DUCK_NAME, DUCK_PERSONA, isDuck, type PersonaStore } from '../lib/persona'
 import { usePersistent } from '../lib/store'
 import type { Trade } from '../lib/types'
 
@@ -18,17 +18,16 @@ const SUGGESTIONS = [
   'Tài khoản demo khác tài khoản thật chỗ nào?',
 ]
 
-/** Vịt Vàng chưa có ảnh thì dùng hình con vịt thay cho chữ "VV". */
+/** Golden Duck chưa có ảnh (tạo từ bản trước) thì vẫn dùng icon vịt thay cho chữ cái đầu. */
 function Face({ p, size }: { p: { avatar: string; name: string }; size: number }) {
-  if (p.avatar || p.name !== DUCK_NAME) return <Avatar src={p.avatar} name={p.name} size={size} />
-  return <span className="avatar lite-duck-face" aria-hidden="true" style={{ width: size, height: size, fontSize: size * 0.6 }}>🦆</span>
+  return <Avatar src={p.avatar || (isDuck(p.name) ? DUCK_AVATAR : '')} name={p.name} size={size} />
 }
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
 
 /**
  * Golden Duck Talk rút gọn: một khung chat, không có phần tạo/sửa nhân vật.
- * Chưa có nhân vật nào thì tự tạo Vịt Vàng. Dùng chung nhân vật và lịch sử với bản đầy đủ.
+ * Chưa có nhân vật nào thì tự tạo Golden Duck. Dùng chung nhân vật và lịch sử với bản đầy đủ.
  */
 export default function LiteChat({ bridge, trades, infos, goFull }: Props) {
   const [store, setStore] = useState<PersonaStore | null>(null)
@@ -44,7 +43,7 @@ export default function LiteChat({ bridge, trades, infos, goFull }: Props) {
     if (!bridge.online) return
     bridgeGet<{ configured: boolean }>('/ai/status').then(setAi).catch(() => {})
     bridgeGet<PersonaStore>('/personas').then(async (s) => {
-      // Lần đầu dùng: tạo sẵn Vịt Vàng để người mới không phải tự dựng nhân vật.
+      // Lần đầu dùng: tạo sẵn Golden Duck để người mới không phải tự dựng nhân vật.
       if (!s.items.length && !creating.current) {
         creating.current = true
         s = await bridgePost<PersonaStore>('/personas/save', DUCK_PERSONA)
@@ -55,7 +54,7 @@ export default function LiteChat({ bridge, trades, infos, goFull }: Props) {
   }, [bridge.online])
 
   const items = store?.items ?? []
-  const persona = items.find((x) => x.id === picked) ?? items.find((x) => x.name === DUCK_NAME) ?? items[0]
+  const persona = items.find((x) => x.id === picked) ?? items.find((x) => isDuck(x.name)) ?? items[0]
   const chat = persona && store ? store.chats[persona.id] ?? [] : []
   useEffect(() => { end.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }) }, [chat.length, busy])
 
@@ -75,7 +74,7 @@ export default function LiteChat({ bridge, trades, infos, goFull }: Props) {
       const r = await bridgePost<PersonaStore & { reply: string }>('/chat', { persona: persona.id, message: msg, context: persona.use_account ? accountContext(trades, bridge.accounts, infos) : '' })
       setStore({ items: r.items, chats: r.chats })
     } catch (e) {
-      setErr(`Vịt chưa trả lời được: ${errText(e)}`); setText(msg)
+      setErr(`Golden Duck chưa trả lời được: ${errText(e)}`); setText(msg)
       setStore((s) => s && ({ ...s, chats: { ...s.chats, [persona.id]: (s.chats[persona.id] ?? []).slice(0, -1) } }))
     } finally { setBusy(false) }
   }
@@ -86,8 +85,8 @@ export default function LiteChat({ bridge, trades, infos, goFull }: Props) {
       <>
         <h1>Hỏi AI</h1>
         <section className="lite-card lite-duck-intro">
-          <span className="lite-duck" aria-hidden="true">🦆</span>
-          <strong>Vịt Vàng chưa sẵn sàng</strong>
+          <img className="lite-duck" src={DUCK_AVATAR} alt="" />
+          <strong>Golden Duck chưa sẵn sàng</strong>
           <p className="muted">
             {!bridge.online
               ? 'Để trò chuyện với AI, cần bật chương trình kết nối (bridge) trên máy tính của bạn. Việc này chỉ làm một lần.'
@@ -99,7 +98,7 @@ export default function LiteChat({ bridge, trades, infos, goFull }: Props) {
       </>
     )
 
-  if (!store || !persona) return (<><h1>Hỏi AI</h1>{err ? <p className="notice bad">⚠ {err}</p> : <p className="muted">Đang gọi Vịt…</p>}</>)
+  if (!store || !persona) return (<><h1>Hỏi AI</h1>{err ? <p className="notice bad">⚠ {err}</p> : <p className="muted">Đang gọi Golden Duck…</p>}</>)
 
   return (
     <div className="lite-chat">
@@ -110,12 +109,12 @@ export default function LiteChat({ bridge, trades, infos, goFull }: Props) {
           <button className="lite-link mini" onClick={async () => setStore(await bridgePost<PersonaStore>('/chat/clear', { persona: persona.id }))}>Trò chuyện mới</button>
         )}
       </div>
-      {(items.length > 1 || !items.some((x) => x.name === DUCK_NAME)) && (
+      {(items.length > 1 || !items.some((x) => isDuck(x.name))) && (
         <div className="lite-persona-pick" role="radiogroup" aria-label="Chọn nhân vật">
           {items.map((p) => (
             <button key={p.id} role="radio" aria-checked={p.id === persona.id} className={p.id === persona.id ? 'chip mini active' : 'chip mini'} onClick={() => setPicked(p.id)}>{p.name}</button>
           ))}
-          {!items.some((x) => x.name === DUCK_NAME) && <button className="chip mini" onClick={addDuck}>+ {DUCK_NAME}</button>}
+          {!items.some((x) => isDuck(x.name)) && <button className="chip mini" onClick={addDuck}>+ {DUCK_NAME}</button>}
         </div>
       )}
 
@@ -141,7 +140,7 @@ export default function LiteChat({ bridge, trades, infos, goFull }: Props) {
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }} />
         <button type="submit" className="primary" disabled={busy || !text.trim()} aria-label="Gửi">Gửi</button>
       </form>
-      <p className="muted small lite-chat-note">AI có thể sai. Không phải lời khuyên đầu tư.{persona.use_account && ' Vịt xem được kết quả giao dịch của bạn để trả lời sát hơn.'}</p>
+      <p className="muted small lite-chat-note">AI có thể sai. Không phải lời khuyên đầu tư.{persona.use_account && ' Golden Duck xem được kết quả giao dịch của bạn để trả lời sát hơn.'}</p>
     </div>
   )
 }
