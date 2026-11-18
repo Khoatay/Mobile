@@ -45,6 +45,9 @@ export default function Personalize({ profile, setProfile, canEdit }: Props) {
             <Field label="Tên thương hiệu / cộng đồng" hint="Hiện ở góc trên bên trái và trên banner"><input value={profile.brand} maxLength={28} onChange={(e) => set({ brand: e.target.value })} /></Field>
             <Field label="Khẩu hiệu" hint="Không bắt buộc"><input value={profile.tagline} maxLength={48} onChange={(e) => set({ tagline: e.target.value })} /></Field>
           </div>
+          <Field label="Website" hint="Tên miền riêng, ví dụ goldenduck.vn. Để trống cho tới khi có; điền rồi thì hiện trên ảnh chia sẻ, bài đăng, trang thành tích và trong app">
+            <input value={profile.website ?? ''} placeholder="Chưa có (điền khi mua tên miền)" onChange={(e) => set({ website: e.target.value.trim() })} />
+          </Field>
           <Field label="Link chính" hint="Thêm vào cuối bài đăng và chân banner, ví dụ kênh Telegram của bạn"><input value={profile.link} placeholder="https://…" onChange={(e) => set({ link: e.target.value.trim() })} /></Field>
           <label className="inline wrap"><input type="checkbox" className="check" checked={profile.disclaimer} onChange={(e) => set({ disclaimer: e.target.checked })} /> Thêm dòng cảnh báo vào bài đăng và banner: “{DISCLAIMER}”</label>
         </section>
@@ -61,7 +64,7 @@ export default function Personalize({ profile, setProfile, canEdit }: Props) {
           </div>
         </div>
         <label className="inline wrap"><input type="checkbox" className="check" checked={profile.hideMoney} onChange={(e) => set({ hideMoney: e.target.checked })} /> Ẩn số tiền khi chia sẻ (chỉ hiện pip, R, tỷ lệ thắng)</label>
-        <div className="actions"><button className="ghost" onClick={() => setProfile({ ...DEFAULT_PROFILE, ...(canEdit ? {} : { brand: profile.brand, logo: profile.logo, tagline: profile.tagline, link: profile.link, disclaimer: profile.disclaimer }) })}>Về mặc định</button></div>
+        <div className="actions"><button className="ghost" onClick={() => setProfile({ ...DEFAULT_PROFILE, ...(canEdit ? {} : { brand: profile.brand, logo: profile.logo, website: profile.website, tagline: profile.tagline, link: profile.link, disclaimer: profile.disclaimer }) })}>Về mặc định</button></div>
       </section>
 
       {EDITION === 'owner' && !canEdit && <p className="notice">Bạn đang xem như người dùng bản trader. Tắt “Xem như người dùng” ở cuối thanh bên để chỉnh thương hiệu. Link giới thiệu và gói cấu hình nằm ở trang Gói Pro.</p>}

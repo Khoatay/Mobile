@@ -15,6 +15,11 @@ export function brandName(name: string | undefined): string {
   return !n || n === OLD_DEFAULT ? BRAND_NAME : n
 }
 
+/** Tên miền gọn để hiện: bỏ https://, www. và dấu / cuối. "https://www.goldenduck.vn/" -> "goldenduck.vn". */
+export const siteName = (url: string) => url.trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '')
+/** Link đầy đủ để mở: thêm https:// nếu người dùng chỉ gõ tên miền. */
+export const siteUrl = (url: string) => { const u = url.trim(); return !u ? '' : /^https?:\/\//i.test(u) ? u : `https://${u}` }
+
 /** Logo đang dùng: logo riêng của IB nếu có, không thì Golden Duck. */
 export const logoOf = (p: { logo?: string }) => p.logo?.trim() || BRAND_LOGO
 

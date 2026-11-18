@@ -173,3 +173,7 @@
 .lite-chat-input:focus-within { border-color: var(--accent); }
 .lite-chat-input button { border-radius: 12px; padding: 10px 16px; }
 .lite-chat-note { text-align: center; margin: 8px 0 0; }
+.lite-site { display: flex; align-items: center; gap: 14px; text-decoration: none; color: var(--ink); }
+.lite-site > span:first-child { font-size: 28px; }
+.lite-site > span:nth-child(2) { display: flex; flex-direction: column; flex: 1; }
+.lite-site small { color: var(--muted); }

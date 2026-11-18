@@ -15,3 +15,22 @@ describe('thương hiệu Golden Duck', () => {
     expect(trackRecordHtml([], o, 'h')).not.toContain('<img')
   })
 })
+
+describe('website riêng', () => {
+  it('gọn tên miền để hiện, thêm https:// để mở', async () => {
+    const { siteName, siteUrl } = await import('./brand')
+    expect(siteName('https://www.goldenduck.vn/')).toBe('goldenduck.vn')
+    expect(siteName('goldenduck.vn')).toBe('goldenduck.vn')
+    expect(siteUrl('goldenduck.vn')).toBe('https://goldenduck.vn')
+    expect(siteUrl('http://a.b')).toBe('http://a.b')
+    expect(siteUrl('')).toBe('')
+  })
+
+  it('bài đăng và trang thành tích có website khi đã điền', async () => {
+    const { footer, DEFAULT_PROFILE } = await import('./share')
+    expect(footer({ ...DEFAULT_PROFILE, website: 'https://goldenduck.vn' })).toContain('🌐 goldenduck.vn')
+    expect(footer(DEFAULT_PROFILE)).not.toContain('🌐')
+    const o = { title: 'T', subtitle: '', brand: 'Golden Duck', accent: '#2a78d6', hideMoney: true, currency: 'USD', ctaLabel: '', ctaUrl: '', disclaimer: true, recent: 5 }
+    expect(trackRecordHtml([], { ...o, website: 'https://goldenduck.vn' }, 'h')).toContain('🌐 goldenduck.vn')
+  })
+})

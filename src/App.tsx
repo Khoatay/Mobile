@@ -4,7 +4,7 @@ import Icon, { type IconName } from './components/Icon'
 import { DEFAULT_USER, type UserProfile } from './lib/user'
 import { useBrandPack } from './lib/brandpack'
 import { EDITION } from './lib/edition'
-import { brandName, logoOf } from './lib/brand'
+import { brandName, logoOf, siteName, siteUrl } from './lib/brand'
 import { partnerLinks } from './lib/partners'
 import { isView, resolveInfos, type AccountInfo } from './lib/accounts'
 import { PREVIEW, useBridge, useTelegramMessages } from './lib/bridge'
@@ -133,7 +133,7 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand">
           <img className="logo logo-img" src={logoOf(profile)} alt="" />
-          <span className="brand-text">{profile.brand}{profile.tagline && <small>{profile.tagline}</small>}</span>
+          <span className="brand-text">{profile.brand}{profile.tagline && <small>{profile.tagline}</small>}{profile.website && <a className="brand-site" href={siteUrl(profile.website)} target="_blank" rel="noreferrer">🌐 {siteName(profile.website)}</a>}</span>
         </div>
         <ModeSwitch mode="full" onChange={(m) => { setMode(m); window.scrollTo(0, 0) }} dark />
         <nav>

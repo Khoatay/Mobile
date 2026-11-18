@@ -45,6 +45,8 @@ Công cụ cho người giao dịch forex, chạy trên trình duyệt máy tín
 
 Tên mặc định **Golden Duck**, logo là icon vịt 3D `public/golden-duck.svg` (vẽ riêng cho app). Logo dùng ở thanh bên, góc trên bản đơn giản, màn hình chào, favicon, icon khi thêm vào màn hình điện thoại (`apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `manifest.webmanifest`), banner chia sẻ và trang thành tích công khai. IB vẫn đổi được tên, khẩu hiệu và màu ở Cá nhân hoá; ai còn tên cũ "FX Desk" sẽ tự hiện Golden Duck.
 
+**Website riêng**: ô "Website" ở Cá nhân hoá (đi theo gói cấu hình sang bản trader) để sẵn cho tên miền mua sau. Trống thì không hiện gì; điền rồi thì tên miền gọn (ví dụ `goldenduck.vn`) hiện ở góc dưới phải ảnh chia sẻ, cuối bài đăng, đầu và cuối trang thành tích công khai, dưới tên thương hiệu ở thanh bên và trên Trang chủ bản đơn giản.
+
 ## Bản đơn giản và bản đầy đủ
 
 Lần đầu mở app sẽ hỏi chọn giao diện; đổi lại bằng công tắc **Đơn giản | Đầy đủ** ngay dưới logo (góc trên ở bản đơn giản, đầu thanh bên ở bản đầy đủ). Hai bản dùng chung dữ liệu.

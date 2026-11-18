@@ -630,3 +630,7 @@ a.button.big { padding: 11px 22px; font-size: 15px; background: linear-gradient(
 .tg-steps li.done { color: var(--pos); }
 .tg-token { flex: 1; min-width: 220px; }
 .tg-ok { margin: 4px 0; }
+
+/* Website riêng */
+.brand-site { display: block; font-family: var(--font-ui); font-size: 11.5px; font-weight: 500; color: var(--gold); text-decoration: none; margin-top: 2px; }
+.brand-site:hover { text-decoration: underline; }

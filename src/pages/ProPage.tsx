@@ -19,7 +19,7 @@ interface Props {
 
 /** Gói cấu hình xuất ra: thương hiệu lấy từ phần Giao diện của bản IB. */
 export function exportPack(pack: BrandPack, profile: Profile): BrandPack {
-  return { ...pack, brand: { brand: profile.brand, logo: profile.logo ?? '', tagline: profile.tagline, accent: profile.accent, link: profile.link, disclaimer: profile.disclaimer }, updatedAt: Date.now() }
+  return { ...pack, brand: { brand: profile.brand, logo: profile.logo ?? '', website: profile.website ?? '', tagline: profile.tagline, accent: profile.accent, link: profile.link, disclaimer: profile.disclaimer }, updatedAt: Date.now() }
 }
 
 function PartnerRow({ p, onChange, onRemove }: { p: PartnerConfig; onChange: (p: PartnerConfig) => void; onRemove?: () => void }) {

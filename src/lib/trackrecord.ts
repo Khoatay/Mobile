@@ -8,6 +8,8 @@ export interface TrackOptions {
   brand: string
   /** Logo dạng data URL, nhúng thẳng vào trang; trống thì chỉ có chữ. */
   logo?: string
+  /** Website riêng (link đầy đủ); trống thì không hiện. */
+  website?: string
   accent: string
   hideMoney: boolean
   currency: string
@@ -98,7 +100,7 @@ export function trackRecordHtml(trades: Trade[], o: TrackOptions, hash: string):
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
 .wrap{max-width:980px;margin:0 auto;padding:28px max(16px,env(safe-area-inset-left)) 48px}
 header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:18px}
-.brand{display:flex;align-items:center;gap:8px;font-weight:800;color:var(--accent);letter-spacing:.02em;text-transform:uppercase;font-size:13px}.brand img{width:32px;height:32px;border-radius:9px}
+.brand a{color:inherit;text-decoration:none}.brand{display:flex;align-items:center;gap:8px;font-weight:800;color:var(--accent);letter-spacing:.02em;text-transform:uppercase;font-size:13px}.brand img{width:32px;height:32px;border-radius:9px}
 h1{margin:4px 0;font-size:28px;line-height:1.2}p{margin:0}.sub{color:var(--ink2)}
 .badge{display:inline-flex;gap:6px;align-items:center;background:color-mix(in srgb,var(--pos) 14%,transparent);color:var(--pos);font-weight:700;font-size:13px;padding:5px 12px;border-radius:999px}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0}
@@ -114,7 +116,7 @@ th:first-child,td:first-child{text-align:left}.pos{color:var(--pos)}.neg{color:v
 .cta a{background:var(--accent);color:#fff;text-decoration:none;font-weight:700;padding:10px 18px;border-radius:10px}
 footer{color:var(--muted);font-size:12px;margin-top:18px}code{font-size:11.5px;word-break:break-all}
 </style></head><body><div class="wrap">
-<header><div><div class="brand">${o.logo ? `<img src="${esc(o.logo)}" alt="">` : ''}${esc(o.brand)}</div><h1>${esc(o.title)}</h1>${o.subtitle ? `<p class="sub">${esc(o.subtitle)}</p>` : ''}<p class="sub">${d.firstDay} – ${d.lastDay} · ${d.n} lệnh</p></div>
+<header><div><div class="brand">${o.logo ? `<img src="${esc(o.logo)}" alt="">` : ''}${o.website ? `<a href="${esc(o.website)}" target="_blank" rel="noopener noreferrer">${esc(o.brand)}</a>` : esc(o.brand)}</div><h1>${esc(o.title)}</h1>${o.subtitle ? `<p class="sub">${esc(o.subtitle)}</p>` : ''}<p class="sub">${d.firstDay} – ${d.lastDay} · ${d.n} lệnh</p></div>
 <span class="badge">✓ ${Math.round(d.verifiedShare * 100)}% lệnh đọc thẳng từ MT5</span></header>
 <div class="tiles">
 ${tile(o.hideMoney ? 'Tổng pip' : `Lãi/lỗ ròng (${esc(o.currency)})`, o.hideMoney ? sign(d.pips) : sign(d.net, 2), tone(o.hideMoney ? d.pips : d.net))}
@@ -131,7 +133,7 @@ ${o.recent ? `<section class="card"><h2>${recent.length} lệnh gần nhất</h2
 ${recent.map((t) => { const p = pipsOf(t) ?? 0, r = rMultiple(t); return `<tr><td>${new Date(t.closeTime).toISOString().slice(0, 16).replace('T', ' ')}</td><td>${esc(t.symbol)}</td><td>${t.side === 'buy' ? 'Buy' : 'Sell'}</td><td>${t.openPrice}</td><td>${t.closePrice}</td><td class="${tone(p)}">${sign(p, 1)}</td><td class="${r == null ? '' : tone(r)}">${r == null ? '–' : sign(r, 2)}</td>${o.hideMoney ? '' : `<td class="${tone(netOf(t))}">${sign(netOf(t), 2)}</td>`}</tr>` }).join('')}
 </tbody></table></div></section>` : ''}
 ${o.ctaUrl ? `<section class="card cta"><div><strong>${esc(o.ctaLabel || 'Tham gia cộng đồng')}</strong><p class="sub">Giao dịch cùng ${esc(o.brand)}.</p></div><a href="${esc(o.ctaUrl)}" target="_blank" rel="noopener noreferrer">${esc(o.ctaLabel || 'Tham gia')}</a></section>` : ''}
-<footer><p>Tạo bởi ${esc(o.brand)} lúc ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC. Giờ lệnh theo giờ máy chủ broker.</p>
+<footer>${o.website ? `<p><a href="${esc(o.website)}" target="_blank" rel="noopener noreferrer">🌐 ${esc(o.website.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, ''))}</a></p>` : ''}<p>Tạo bởi ${esc(o.brand)} lúc ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC. Giờ lệnh theo giờ máy chủ broker.</p>
 <p>Mã kiểm tra dữ liệu (SHA-256): <code>${hash}</code></p>
 ${o.disclaimer ? '<p>Kết quả quá khứ không đảm bảo kết quả tương lai. Giao dịch có rủi ro mất vốn. Đây không phải khuyến nghị đầu tư.</p>' : ''}</footer>
 </div></body></html>`

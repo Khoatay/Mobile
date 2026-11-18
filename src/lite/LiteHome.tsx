@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import Icon, { type IconName } from '../components/Icon'
 import { money, signed } from '../lib/format'
 import { DUCK_AVATAR } from '../lib/persona'
+import { siteName, siteUrl } from '../lib/brand'
 import type { LiteProps, LiteTab } from './LiteApp'
 import { periodStarts, pnlSince } from './plain'
 
@@ -22,7 +23,7 @@ const ACTIONS: [LiteTab, IconName, string, string][] = [
   ['offers', 'gift', 'Ưu đãi', 'Mã giảm giá sàn, quỹ'],
 ]
 
-export default function LiteHome({ user, bridge, trades, settings, go }: LiteProps & { go: (t: LiteTab) => void }) {
+export default function LiteHome({ user, bridge, trades, settings, profile, go }: LiteProps & { go: (t: LiteTab) => void }) {
   const name = user.displayName.trim().split(/\s+/).pop()
   const hour = new Date().getHours()
   const hello = hour < 11 ? 'Chào buổi sáng' : hour < 18 ? 'Chào buổi chiều' : 'Chào buổi tối'
@@ -79,6 +80,12 @@ export default function LiteHome({ user, bridge, trades, settings, go }: LitePro
           </button>
         ))}
       </div>
+
+      {profile.website && (
+        <a className="lite-card lite-site" href={siteUrl(profile.website)} target="_blank" rel="noreferrer">
+          <span aria-hidden="true">🌐</span><span><strong>{siteName(profile.website)}</strong><small>Website của {profile.brand}</small></span><span className="lite-ask-go" aria-hidden="true">›</span>
+        </a>
+      )}
 
       <section className="lite-card lite-tip">
         <div className="lite-label">💡 Lời khuyên hôm nay</div>

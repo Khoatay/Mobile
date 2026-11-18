@@ -1,4 +1,4 @@
-import { BRAND_NAME, brandName } from './brand'
+import { BRAND_NAME, brandName, siteName } from './brand'
 import type { PartnerLinks } from './partners'
 import { parseSymbol, pipSize } from './forex'
 import { pct, signed } from './format'
@@ -17,13 +17,15 @@ export interface Profile {
   hideMoney: boolean
   /** Link IB, affiliate quỹ và công cụ, kèm mã giảm giá nếu có. */
   partners: PartnerLinks
+  /** Website riêng (tên miền mua sau). Trống = không hiện. Hiện trên ảnh chia sẻ, bài đăng, trang thành tích và trong app. */
+  website?: string
   /** Logo riêng của IB (data URL PNG vuông 256px hoặc link ảnh). Trống = logo Golden Duck. */
   logo?: string
   /** Người dùng bản trader đã tự chọn màu nhấn (thay cho màu của IB). */
   accentCustom?: boolean
 }
 
-export const DEFAULT_PROFILE: Profile = { brand: BRAND_NAME, logo: '', tagline: '', accent: '#2a78d6', link: '', disclaimer: true, hideMoney: true, partners: {} }
+export const DEFAULT_PROFILE: Profile = { brand: BRAND_NAME, logo: '', website: '', tagline: '', accent: '#2a78d6', link: '', disclaimer: true, hideMoney: true, partners: {} }
 export const ACCENTS = ['#2a78d6', '#1baf7a', '#eb6834', '#6250d6', '#d55181', '#c98500']
 export const DISCLAIMER = 'Chia sẻ góc nhìn cá nhân, không phải khuyến nghị đầu tư. Giao dịch có rủi ro mất vốn.'
 
@@ -37,7 +39,7 @@ export interface BannerSpec {
 export interface Post { spec: BannerSpec; caption: string }
 
 export function footer(p: Profile): string {
-  return [p.disclaimer ? `⚠️ ${DISCLAIMER}` : '', p.link ? `🔗 ${p.link}` : '', p.brand ? `— ${p.brand}` : ''].filter(Boolean).join('\n')
+  return [p.disclaimer ? `⚠️ ${DISCLAIMER}` : '', p.link ? `🔗 ${p.link}` : '', p.website ? `🌐 ${siteName(p.website)}` : '', p.brand ? `— ${p.brand}` : ''].filter(Boolean).join('\n')
 }
 const join = (...parts: string[]) => parts.filter(Boolean).join('\n\n')
 
@@ -195,5 +197,7 @@ export function drawBanner(canvas: HTMLCanvasElement, spec: BannerSpec, p: Profi
   g.fillStyle = '#77756e'
   g.font = font(22)
   if (p.disclaimer) g.fillText(DISCLAIMER, 80, W - 76, W - 160)
-  if (p.link) { g.fillStyle = '#b8b6ad'; g.font = font(24, 600); g.fillText(p.link, 80, W - 36, W - 160) }
+  const site = p.website ? siteName(p.website) : ''
+  if (site) { g.fillStyle = p.accent; g.font = font(26, 700); g.textAlign = 'right'; g.fillText(site, W - 80, W - 36, 420); g.textAlign = 'left' }
+  if (p.link) { g.fillStyle = '#b8b6ad'; g.font = font(24, 600); g.fillText(p.link, 80, W - 36, site ? W - 600 : W - 160) }
 }

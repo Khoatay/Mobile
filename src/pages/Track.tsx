@@ -5,7 +5,7 @@ import { inScope, scopeLabel, type InfoMap } from '../lib/accounts'
 import type { PartnerLinks } from '../lib/partners'
 import type { Profile } from '../lib/share'
 import { download } from '../lib/store'
-import { logoDataUrl, logoOf } from '../lib/brand'
+import { logoDataUrl, logoOf, siteUrl } from '../lib/brand'
 import { dataHash, trackRecordHtml } from '../lib/trackrecord'
 import type { Trade } from '../lib/types'
 
@@ -34,7 +34,7 @@ export default function Track({ trades, infos, profile, links, currency }: { tra
 
   const link = cta ? links[cta] : undefined
   const html = useMemo(() => hash ? trackRecordHtml(list, {
-    title, subtitle: subtitle || (scope ? scopeLabel(scope, infos) : ''), brand: profile.brand, logo, accent: profile.accent,
+    title, subtitle: subtitle || (scope ? scopeLabel(scope, infos) : ''), brand: profile.brand, logo, website: siteUrl(profile.website ?? ''), accent: profile.accent,
     hideMoney, currency, ctaLabel: link?.cta || (link?.name ? `Mở tài khoản ${link.name}` : ''), ctaUrl: link?.url || profile.link, disclaimer: profile.disclaimer, recent,
   }, hash) : '', [list, hash, logo, title, subtitle, scope, hideMoney, recent, link, profile, currency])
 
