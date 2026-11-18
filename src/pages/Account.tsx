@@ -230,6 +230,9 @@ function AddAccount({ bridge, groups, onAdded, role }: { bridge: BridgeState; gr
   const [password, setPassword] = useState('')
   const [server, setServer] = useState('')
   const [path, setPath] = useState('')
+  // Mặc định bridge tự tạo bản MT5 riêng cho tài khoản này (khách chỉ cần cài MT5 một lần).
+  const [auto, setAuto] = useState(true)
+  const [template, setTemplate] = useState('')
   const [trading, setTrading] = useState(false)
   const [maxLot, setMaxLot] = useState(0.1)
   const [terminals, setTerminals] = useState<{ path: string; usedBy: string | null }[] | null>(null)
@@ -248,12 +251,13 @@ function AddAccount({ bridge, groups, onAdded, role }: { bridge: BridgeState; gr
     setBusy(true)
     try {
       const r = await bridgePost<{ id: string }>('/accounts/add', {
-        label: info.label || login, type: bridgeType(info), login, password, server, terminal_path: path,
+        label: info.label || login, type: bridgeType(info), login, password, server,
+        ...(auto ? { auto_terminal: true, terminal_path: template } : { terminal_path: path }),
         allow_trading: trading && !view, max_lot: maxLot,
       })
       onAdded(r.id, { ...info, label: info.label || login })
       setInfo(blank); setLogin(''); setPassword(''); setServer(''); setPath(''); setTrading(false)
-      setMsg({ ok: true, text: 'Đã thêm. Bridge đang kết nối, tài khoản sẽ hiện sau vài giây.' })
+      setMsg({ ok: true, text: auto ? 'Đã thêm. Bridge đã tạo bản MT5 riêng cho tài khoản này và đang đăng nhập: vài giây tới một phút sẽ hiện.' : 'Đã thêm. Bridge đang kết nối, tài khoản sẽ hiện sau vài giây.' })
       bridge.refresh()
     } catch (e) { setMsg({ ok: false, text: errText(e) }) }
     finally { setBusy(false) }
@@ -274,23 +278,39 @@ function AddAccount({ bridge, groups, onAdded, role }: { bridge: BridgeState; gr
           <Field label="Số tài khoản"><input inputMode="numeric" value={login} onChange={(e) => setLogin(e.target.value.replace(/\D/g, ''))} /></Field>
           <Field label={view ? 'Mật khẩu view (investor)' : 'Mật khẩu'} hint={view ? 'Người đó lấy trong MT5: Tools → Options → Server → Change (investor). Chỉ xem được, không đặt lệnh được.' : 'Mật khẩu view chỉ xem được; mật khẩu giao dịch mới vào lệnh được'}><input type="password" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
           <Field label="Máy chủ" hint="Chép đúng như trong MT5: File → Login to Trade Account"><input value={server} placeholder="Exness-MT5Real29" onChange={(e) => setServer(e.target.value.trim())} /></Field>
-          <Field label="Bản MT5 dùng cho tài khoản này">
-            <select value={path} onChange={(e) => setPath(e.target.value)}>
-              <option value="">Chọn…</option>
-              {(terminals ?? []).map((t) => <option key={t.path} value={t.path} disabled={!!t.usedBy}>{t.path}{t.usedBy ? ` (đang dùng cho ${t.usedBy})` : ''}</option>)}
-            </select>
-          </Field>
+          {auto ? (
+            <Field label="Bản MT5 mẫu" hint="Bridge chép bản này thành một bản riêng cho tài khoản. Nên chọn bản MT5 của đúng sàn hoặc quỹ">
+              <select value={template} onChange={(e) => setTemplate(e.target.value)}>
+                <option value="">Tự chọn theo tên máy chủ</option>
+                {(terminals ?? []).map((t) => <option key={t.path} value={t.path}>{t.path}</option>)}
+              </select>
+            </Field>
+          ) : (
+            <Field label="Bản MT5 dùng cho tài khoản này">
+              <select value={path} onChange={(e) => setPath(e.target.value)}>
+                <option value="">Chọn…</option>
+                {(terminals ?? []).map((t) => <option key={t.path} value={t.path} disabled={!!t.usedBy}>{t.path}{t.usedBy ? ` (đang dùng cho ${t.usedBy})` : ''}</option>)}
+              </select>
+            </Field>
+          )}
         </div>
-        {terminals && free.length === 0 && (
+        <label className="inline wrap" style={{ marginTop: 8 }}>
+          <input type="checkbox" className="check" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> Tự tạo bản MT5 riêng cho tài khoản này (khuyên dùng: chỉ cần cài MT5 một lần, không phải cài thêm)
+        </label>
+        {auto && <p className="muted small">Bridge tự mở bản MT5 riêng đó và đăng nhập (khoảng 200 MB ổ cứng, 300–500 MB RAM mỗi tài khoản). Cứ để cửa sổ MT5 đó chạy, đừng đổi tài khoản trong đó. Bạn vẫn dùng MT5 của mình hoặc trên điện thoại như bình thường. Đăng nhập báo sai máy chủ thì cài bộ MT5 của đúng sàn/quỹ đó một lần rồi chọn làm bản mẫu.</p>}
+        {terminals && terminals.length === 0 && auto && (
+          <div className="warn">⚠ Chưa thấy MT5 nào trên máy. Cài MT5 một lần (bộ cài của sàn, ví dụ Exness), rồi bấm <button className="ghost" onClick={loadTerminals}>Tìm lại</button></div>
+        )}
+        {!auto && terminals && free.length === 0 && (
           <div className="warn">
             ⚠ {terminals.length ? 'Mọi bản MT5 trên máy đều đã có tài khoản.' : 'Không tìm thấy bản MT5 nào ở thư mục cài đặt thông thường.'} Mỗi tài khoản cần một bản MT5 riêng.
             Cách thêm một bản: chạy bộ cài MT5 của broker hoặc quỹ (FTMO, The5ers… đều có bộ cài riêng), ở màn hình đầu bấm <strong>Settings</strong> và đổi thư mục cài, ví dụ <code>C:\Program Files\MT5 FTMO</code>. Cài xong bấm <button className="ghost" onClick={loadTerminals}>Tìm lại</button>
           </div>
         )}
-        <details className="guide">
+        {!auto && <details className="guide">
           <summary>Bản MT5 nằm ở thư mục khác?</summary>
           <Field label="Đường dẫn tới terminal64.exe"><input value={path} placeholder="D:\MT5\terminal64.exe" onChange={(e) => setPath(e.target.value)} /></Field>
-        </details>
+        </details>}
       </section>
 
       <section className="card">
@@ -302,10 +322,10 @@ function AddAccount({ bridge, groups, onAdded, role }: { bridge: BridgeState; gr
         {view && <p className="muted small" style={{ marginTop: 12 }}>Chỉ theo dõi tài khoản mà chủ tài khoản đã đồng ý chia sẻ mật khẩu view với bạn.</p>}
         {!view && trading && <div className="row" style={{ marginTop: 8, maxWidth: 260 }}><Field label="Khối lượng tối đa mỗi lệnh (lot)"><Num value={maxLot} onChange={setMaxLot} step={0.01} min={0.01} /></Field></div>}
         <div className="actions" style={{ marginTop: 12 }}>
-          <button className="primary" disabled={busy || !login || !password || !server || !path} onClick={submit}>{busy ? 'Đang thêm…' : 'Thêm tài khoản'}</button>
+          <button className="primary" disabled={busy || !login || !password || !server || (!auto && !path) || (auto && terminals?.length === 0)} onClick={submit}>{busy ? 'Đang thêm…' : 'Thêm tài khoản'}</button>
         </div>
         {msg && <p className={msg.ok ? 'notice' : 'notice bad'}>{msg.ok ? '✓' : '⚠'} {msg.text}</p>}
-        <p className="muted small">Mật khẩu được lưu trong file <code>bridge/config.json</code> trên máy bạn, không gửi đi đâu khác.</p>
+        <p className="muted small">Mật khẩu được lưu trên máy chạy bridge, Golden Duck không lưu mật khẩu MT5 trên máy chủ.</p>
       </section>
     </>
   )

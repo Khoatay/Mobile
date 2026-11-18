@@ -37,6 +37,7 @@ from tgbot import TelegramBot
 from brain import Brain, Knowledge, Personas, chat
 from relay import ServerLink
 import desktop
+import mt5clone
 
 from paths import DATA
 CONFIG_PATH = DATA / "config.json"
@@ -549,15 +550,27 @@ class Registry:
             raise ValueError("Số tài khoản phải là số")
         password, server = str(body.get("password") or ""), str(body.get("server") or "").strip()
         path = str(body.get("terminal_path") or "").strip().strip('"')
+        auto = bool(body.get("auto_terminal"))
         if not password or not server:
             raise ValueError("Cần nhập mật khẩu và tên máy chủ")
-        if not path.lower().endswith("terminal64.exe") or not os.path.isfile(path):
+        if auto:
+            # Tự tạo bản MT5 riêng từ một bản đã cài (bản mẫu): khách chỉ cần cài MT5 một lần.
+            template = path or mt5clone.pick_template([t for t in find_terminals() if not mt5clone.is_clone(t)], server)
+            if not template:
+                raise ValueError("Chưa thấy MT5 nào trên máy. Cài MT5 (bộ cài của sàn, ví dụ Exness) một lần rồi thử lại")
+            if any(a.id == str(login) for a in self.items):
+                raise ValueError(f"Tài khoản {login} đã có trong danh sách")
+            print(f"[mt5] Tạo bản MT5 riêng cho {login} từ {template}…")
+            path = mt5clone.clone_terminal(template, login)
+        elif not path.lower().endswith("terminal64.exe") or not os.path.isfile(path):
             raise ValueError(f"Không thấy file terminal64.exe tại: {path}")
         cfg = {
             "id": str(login), "label": str(body.get("label") or login).strip()[:40],
             "type": body.get("type") if body.get("type") in Account.TYPES else "real",
             "login": login, "password": password, "server": server, "terminal_path": path,
         }
+        if auto:
+            cfg.update(portable=True, auto_terminal=True)
         if body.get("allow_trading"):
             cfg["allow_trading"] = True
             cfg["max_lot"] = max(0.01, float(body.get("max_lot") or 0.1))
@@ -581,12 +594,15 @@ class Registry:
             self.items.remove(account)
             self._persist()
         account.stop()
+        if account.cfg.get("auto_terminal"):
+            mt5clone.remove_clone(account.cfg.get("terminal_path", ""))  # bản MT5 do bridge tự tạo: tắt và xoá luôn
         print(f"[mt5] Đã gỡ {account.label}")
         return {"removed": account_id}
 
     def terminals(self):
         used = {str(a.cfg.get("terminal_path", "")).lower(): a.label for a in self.list()}
-        return [{"path": p, "usedBy": used.get(p.lower())} for p in find_terminals()]
+        # Bản MT5 do bridge tự tạo không hiện ở đây (không dùng làm bản mẫu hay chọn tay).
+        return [{"path": p, "usedBy": used.get(p.lower())} for p in find_terminals() if not mt5clone.is_clone(p)]
 
 
 # ------------------------------------------------------------------------ Telegram

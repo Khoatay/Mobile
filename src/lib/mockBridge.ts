@@ -428,7 +428,8 @@ export async function mockPost(path: string, body: Record<string, unknown>): Pro
     const id = String(body.login)
     if (!/^\d+$/.test(id)) throw new Error('Số tài khoản phải là số')
     if (accounts.some((a) => a.id === id)) throw new Error(`Tài khoản ${id} đã có trong danh sách`)
-    const terminal = String(body.terminal_path)
+    // Tự tạo bản MT5 riêng (như bridge thật): đường dẫn nằm trong thư mục dữ liệu của bridge.
+    const terminal = body.auto_terminal ? `C:\\Users\\ban\\AppData\\Roaming\\GoldenDuck\\mt5\\${id}\\terminal64.exe` : String(body.terminal_path)
     const owner = accounts.find((a) => a.terminal === terminal)
     if (owner) throw new Error(`Bản MT5 này đang dùng cho "${owner.label}". Mỗi tài khoản cần một bản MT5 riêng`)
     const type = (body.type as AccountType) || 'real'
