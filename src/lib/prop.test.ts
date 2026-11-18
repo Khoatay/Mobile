@@ -61,7 +61,7 @@ describe('evaluateProp', () => {
   it('giới hạn ngày theo số dư đầu ngày', () => {
     const c = { ...cfg, ...PRESETS.find((p) => p.id === '5ers-hs-1')!.rules }
     const s = evaluateProp([mk(5, 8000 - 1), mk(9, -100)], c, now)
-    expect(s.dailyLimit).toBeCloseTo(107999 * 0.05)
+    expect(s.dailyLimit).toBeCloseTo(107999 * 0.04)  // High Stakes Classic: lỗ ngày 4% trên số dư đầu ngày
   })
   it('không có giới hạn ngày (Bootcamp) và ngày bắt đầu', () => {
     const c = { ...cfg, ...PRESETS.find((p) => p.id === '5ers-bc')!.rules, startDate: '2026-01-06' }
