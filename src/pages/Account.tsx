@@ -468,6 +468,18 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
     })
   }
 
+  /** Xoá hẳn tài khoản khỏi app: gỡ khỏi bridge (nếu còn) và xoá mọi lệnh của nó trong Nhật ký. */
+  const forgetAccount = async (id: string) => {
+    const n = trades.filter((t) => t.account === id).length
+    if (!(await ask(`Xoá hẳn "${name(id)}" khỏi app?${metas.some((m) => m.id === id) ? ' Bridge sẽ ngừng kết nối tài khoản này.' : ''} ${n} lệnh của tài khoản này trong Nhật ký và Thống kê cũng bị xoá. Không hoàn tác được (lấy lại lịch sử bằng cách thêm lại tài khoản và bấm "Đưa lịch sử vào Nhật ký").`, 'Xoá hẳn', true))) return
+    run(async () => {
+      if (metas.some((m) => m.id === id)) { await bridgePost('/accounts/remove', { account: id }); bridge.refresh() }
+      setTrades(trades.filter((t) => t.account !== id))
+      setSel('')
+      return `Đã xoá ${name(id)} và ${n} lệnh của nó.`
+    })
+  }
+
   const syncControls = (list: LiveAccount[], label: string) => (
     <div className="actions">
       <PeriodPicker value={period} onChange={setPeriod} nowServer={Date.now() + settings.serverOffset * 3_600_000} label="Lấy lịch sử trong khoảng" />
@@ -679,13 +691,15 @@ export default function Account({ bridge, trades, setTrades, settings, patch, in
         </section>
       )}
       {a?.tradable && !view && <OrderTicket accounts={[a]} trades={trades} settings={settings} onDone={bridge.refresh} infos={infos} />}
-      {meta && (
-        <section className="card">
-          <h3>Gỡ tài khoản</h3>
-          <p className="muted small">Ngừng kết nối và xoá khỏi <code>config.json</code>.{!view && ' Lệnh trong Nhật ký và nhãn vẫn giữ.'}</p>
-          <button className="ghost danger" disabled={busy} onClick={() => removeAccount(id)}>Gỡ khỏi bridge</button>
-        </section>
-      )}
+      <section className="card">
+        <h3>Gỡ hoặc xoá tài khoản</h3>
+        {meta && <p className="muted small"><strong>Gỡ khỏi bridge:</strong> ngừng kết nối MT5, giữ lại lệnh trong Nhật ký và nhãn để xem lại thống kê.</p>}
+        <p className="muted small"><strong>Xoá hẳn:</strong> {meta ? 'gỡ khỏi bridge và ' : ''}xoá cả {count} lệnh của tài khoản này trong Nhật ký. Tài khoản biến mất khỏi danh sách.</p>
+        <div className="actions">
+          {meta && <button className="ghost danger" disabled={busy} onClick={() => removeAccount(id)}>Gỡ khỏi bridge</button>}
+          <button className="ghost danger" disabled={busy} onClick={() => forgetAccount(id)}>Xoá hẳn khỏi app</button>
+        </div>
+      </section>
     </>
   )
 }

@@ -154,6 +154,13 @@ export default function Journal({ trades, setTrades, settings, patch, labels, in
         </div>
       )}
 
+      {trades.length > 0 && (
+        <div className="period-row">
+          <span className="muted small">Khoảng thời gian của bảng lệnh:</span>
+          <PeriodPicker value={period} onChange={(p) => { setPeriod(p); setShown(PAGE) }} nowServer={nowServer} />
+        </div>
+      )}
+
       {scoped.length > 0 && (
         <RatingPanel
           cacheKey={`journal:${scope}`}
@@ -221,7 +228,6 @@ export default function Journal({ trades, setTrades, settings, patch, labels, in
         <div className="card-head">
           <h3>{rows.length} lệnh đã đóng{scope !== 'all' && <span className="muted small"> · {scopeName}</span>}{!(period.kind === 'days' && period.days === 0) && <span className="muted small"> · {periodLabel(period)}</span>}</h3>
           <div className="actions">
-            <PeriodPicker value={period} onChange={(p) => { setPeriod(p); setShown(PAGE) }} nowServer={nowServer} />
             <input className="search" placeholder="Lọc theo cặp, tài khoản, setup, ghi chú" value={filter} onChange={(e) => { setFilter(e.target.value); setShown(PAGE) }} />
             <label className="inline">Múi giờ máy chủ: UTC+
               <input className="tiny" type="number" value={settings.serverOffset} onChange={(e) => patch({ serverOffset: e.target.valueAsNumber || 0 })} />

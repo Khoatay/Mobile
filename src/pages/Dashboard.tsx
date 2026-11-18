@@ -7,18 +7,15 @@ import { Tile } from '../components/Field'
 import { duration, money, pct, signed } from '../lib/format'
 import { computeStats } from '../lib/stats'
 import { computeInsights } from '../lib/insights'
+import PeriodPicker from '../components/PeriodPicker'
+import { inPeriod, type Period } from '../lib/period'
+import { usePersistent } from '../lib/store'
 import type { Settings, Trade } from '../lib/types'
 
-const RANGES = [
-  { id: 'all', label: 'Tất cả', days: 0 },
-  { id: '7', label: '7 ngày', days: 7 },
-  { id: '30', label: '30 ngày', days: 30 },
-  { id: '90', label: '90 ngày', days: 90 },
-  { id: '365', label: '1 năm', days: 365 },
-]
 
 export default function Dashboard({ trades, settings, infos, goJournal }: { trades: Trade[]; settings: Settings; infos: InfoMap; goJournal: () => void }) {
-  const [range, setRange] = useState('all')
+  const [period, setPeriod] = usePersistent<Period>('fx.stats.period', { kind: 'days', days: 0 })
+  const nowServer = Date.now() + settings.serverOffset * 3_600_000
   const [symbol, setSymbol] = useState('')
   const [side, setSide] = useState('')
   const [scope, setScope] = useState('')
@@ -29,12 +26,9 @@ export default function Dashboard({ trades, settings, infos, goJournal }: { trad
   const symbols = useMemo(() => [...new Set(trades.map((t) => t.symbol))].sort(), [trades])
   // Lọc theo thời gian, cặp và chiều lệnh; chưa lọc theo tài khoản (bảng so sánh cần cả).
   const base = useMemo(() => {
-    const days = RANGES.find((r) => r.id === range)!.days
-    // Mốc tính từ lệnh gần nhất, để file lịch sử cũ vẫn lọc được.
-    const latest = Math.max(0, ...trades.map((t) => t.closeTime))
-    const from = days ? latest - days * 86_400_000 : -Infinity
-    return trades.filter((t) => t.closeTime >= from && (!symbol || t.symbol === symbol) && (!side || t.side === side))
-  }, [trades, range, symbol, side])
+    const within = inPeriod(period, nowServer)
+    return trades.filter((t) => within(t) && (!symbol || t.symbol === symbol) && (!side || t.side === side))
+  }, [trades, period, symbol, side, Math.floor(nowServer / 60_000)])
   const filtered = useMemo(() => base.filter((t) => inScope(scope, t.account, infos)), [base, scope, infos])
 
   // Bảng so sánh: mỗi nhóm và mỗi tài khoản một dòng.
@@ -69,11 +63,7 @@ export default function Dashboard({ trades, settings, infos, goJournal }: { trad
     <>
       <h1>Thống kê</h1>
       <div className="filters">
-        <div className="seg">
-          {RANGES.map((r) => (
-            <button key={r.id} className={range === r.id ? 'active' : ''} aria-pressed={range === r.id} onClick={() => setRange(r.id)}>{r.label}</button>
-          ))}
-        </div>
+        <PeriodPicker value={period} onChange={setPeriod} nowServer={nowServer} />
         <ScopeSelect value={scope} onChange={setScope} infos={infos} ids={accountIds} />
         <select aria-label="Cặp tiền" value={symbol} onChange={(e) => setSymbol(e.target.value)}>
           <option value="">Mọi cặp</option>
