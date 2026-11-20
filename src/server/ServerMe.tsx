@@ -3,6 +3,7 @@ import { BRAND_NAME } from '../lib/brand'
 import { PREVIEW } from '../lib/bridge'
 import { api, type Me } from '../lib/server'
 import BridgeLink from './BridgeLink'
+import { IbCard } from './IbPanels'
 import { MyAiCard } from './AiPicker'
 
 /** Tài khoản: gói, lượt AI hôm nay, nối Telegram một chạm, đăng xuất. */
@@ -40,6 +41,8 @@ export default function ServerMe({ me, setMe }: { me: Me; setMe: (m: Me | null) 
           <li>Hỏi AI: <strong>{me.chatToday}/{me.limits.chatPerDay}</strong> tin hôm nay</li>
         </ul>
       </section>
+
+      <IbCard me={me} setMe={setMe} />
 
       <BridgeLink />
 

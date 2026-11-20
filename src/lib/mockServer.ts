@@ -6,6 +6,7 @@ import { ApiError, type ChannelRow, type Me } from './server'
 
 let items: (Persona & { knowledge?: string; preset?: boolean })[] = PERSONA_TEMPLATES.map((t) => ({ id: t.id, ...t.p, playbooks: [], preset: true })).sort((a) => (a.name === DUCK_NAME ? -1 : 0))
 const st = {
+  ibMember: false,
   me: null as Me | null,
   channels: [] as ChannelRow[],
   chats: {} as PersonaStore['chats'],
@@ -53,6 +54,9 @@ export async function mockApi(path: string, body?: unknown): Promise<unknown> {
     }
     case '/auth/logout': st.me = null; return { ok: true }
     case '/me': return need()
+    case '/me/ib': need(); return { available: true, member: !!st.ibMember, checked: Date.now(), accounts: st.ibMember ? ['77001234'] : [], link: 'https://one.exness-track.com/a/vidu', rebates: st.ibMember ? [{ account: '77001234', status: 'PROCESSED', rebateUsd: 12.4, lots: 3.1, date: '2026-11-18' }, { account: '77001234', status: 'PROCESSED', rebateUsd: 8.9, lots: 2.2, date: '2026-11-11' }] : [] }
+    case '/me/ib/check': { const m = need(); st.ibMember = true; m.plan = 'pro'; m.ib = { member: true, checked: Date.now(), available: true }; return { ...m } }
+    case '/admin/exness': need(); return { configured: true, ready: true, ibUsers: 12, link: 'https://one.exness-track.com/a/vidu', summary: { clients_count: 57, summary_reward: { amount: '2140.50', currency: 'USD' } }, rewards: { totals: { reward_usd: '386.20', volume_lots: 154.3, orders_count: 812 } }, payments: { totals: { processed_rebate_usd: 310.4, rejected_rebate_usd: 0, error_rebate_usd: 0 } }, groups: { data: [{ id: 1, group_title: 'Hoàn 100% (Golden Duck)', group_type: 'AUTO', clients_count: 41, rebate_percent: 100, link_code: 'vidu', is_default: false }] } }
     case '/bridge/status': need(); return { online: true, lastSeen: Date.now(), hasToken: true, telegram: true, outages: [{ start: Date.now() - 26 * 3_600_000, end: Date.now() - 25.6 * 3_600_000 }] }
     case '/bridge/token': need(); return { token: 'gdb_ban_xem_truoc_khong_dung_that' }
     case '/me/telegram/unlink': need().telegram = { ...need().telegram, linked: false, name: '' }; return need()

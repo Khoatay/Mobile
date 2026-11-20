@@ -37,6 +37,9 @@ const COLUMNS: [string, string, string][] = [
   ['ai_usage', 'tokens_out', 'integer not null default 0'],
   ['ai_usage', 'own_calls', 'integer not null default 0'],
   ['ai_usage', 'bridge_calls', 'integer not null default 0'],
+  ['users', 'ib', 'integer not null default 0'],
+  ['users', 'ib_checked', 'integer not null default 0'],
+  ['users', 'ib_accounts', "text not null default ''"],
 ]
 
 export function openDb(dir: string, file = 'golden-duck.db'): DB {

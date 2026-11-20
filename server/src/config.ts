@@ -22,6 +22,8 @@ export const config = {
   chatPerDay: { free: num('FREE_CHAT_PER_DAY', 15), pro: num('PRO_CHAT_PER_DAY', 200) } as Record<string, number>,
   /** Số lượt AI học trade và AI phân tích (qua bridge) mỗi ngày theo gói. */
   bridgeAiPerDay: { free: num('FREE_BRIDGE_AI_PER_DAY', 3), pro: num('PRO_BRIDGE_AI_PER_DAY', 50) } as Record<string, number>,
+  /** Exness Partnership API: host ở ô DNS trong Key Management, API key và khoá bí mật (128 ký tự hex hoặc PEM). */
+  exness: { baseUrl: env('EXN_API_BASE_URL'), apiKey: env('EXN_API_KEY'), privateKey: env('EXN_PRIVATE_KEY') },
   /** Số kênh mỗi khách được thêm theo gói. */
   channelsMax: { free: num('FREE_CHANNELS', 3), pro: num('PRO_CHANNELS', 20) } as Record<string, number>,
 }

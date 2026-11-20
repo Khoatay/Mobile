@@ -5,7 +5,9 @@ import { HttpError } from './http'
 
 const DAY = 86_400_000
 export const SESSION_DAYS = 30
-export interface User { id: number; email: string; name: string; plan: string; plan_until: number | null; tg_chat: number | null; tg_name: string; link_code: string; created: number }
+export interface User { id: number; email: string; name: string; plan: string; plan_until: number | null; tg_chat: number | null; tg_name: string; link_code: string; created: number
+  /** Khách mở Exness dưới link IB của chủ app (kiểm tra qua Exness Partnership API): được Pro. */
+  ib?: number; ib_checked?: number; ib_accounts?: string }
 
 export function hashPassword(pass: string): string {
   const salt = randomBytes(16)
@@ -41,11 +43,11 @@ export function login(db: DB, body: { email?: unknown; password?: unknown }): Us
 }
 
 export function getUser(db: DB, id: number): User | null {
-  return (db.prepare('select id, email, name, plan, plan_until, tg_chat, tg_name, link_code, created from users where id = ?').get(id) as unknown as User) ?? null
+  return (db.prepare('select id, email, name, plan, plan_until, tg_chat, tg_name, link_code, created, ib, ib_checked, ib_accounts from users where id = ?').get(id) as unknown as User) ?? null
 }
 
-/** Gói đang có hiệu lực: Pro hết hạn thì về Free. */
-export const planOf = (u: Pick<User, 'plan' | 'plan_until'>, now = Date.now()) => (u.plan === 'pro' && (!u.plan_until || u.plan_until > now) ? 'pro' : 'free')
+/** Gói đang có hiệu lực: Pro hết hạn thì về Free. Khách thuộc nhánh IB của chủ app luôn được Pro. */
+export const planOf = (u: Pick<User, 'plan' | 'plan_until'> & { ib?: number }, now = Date.now()) => (u.ib === 1 || (u.plan === 'pro' && (!u.plan_until || u.plan_until > now)) ? 'pro' : 'free')
 
 export function createSession(db: DB, userId: number): string {
   const token = randomBytes(32).toString('base64url')

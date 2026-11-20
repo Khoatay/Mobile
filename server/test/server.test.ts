@@ -11,6 +11,8 @@ import { createHandler } from '../src/http'
 import { initSecrets, open as openSecret, seal } from '../src/secrets'
 import { complete, listModels } from '../src/llm'
 import { Relay, toOpenAi, fromOpenAi, Watchdog, ensureTable, newToken, outages } from '../src/relay'
+import { ExnessPartner, parsePrivateKey, signedHeaders } from '../src/exness'
+import { generateKeyPairSync, verify, createHash } from 'node:crypto'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -435,5 +437,81 @@ describe('canh máy MT5 mất kết nối', () => {
     expect(sent[1]).toMatch(/kết nối lại sau 10 phút/)
     expect(outages(db, 1).length).toBe(0)       // mốc thời gian giả quá cũ so với 7 ngày gần đây
     expect((db.prepare('select start, end from bridge_outages').get() as { start: number; end: number })).toEqual({ start: 200_000, end: 800_000 })
+  })
+})
+
+describe('Exness Partnership API', () => {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519')
+  const pubHex = Buffer.from(publicKey.export({ format: 'jwk' }).x!, 'base64url').toString('hex')
+  const seedHex = Buffer.from(privateKey.export({ format: 'jwk' }).d!, 'base64url').toString('hex')
+  const exnHex = seedHex + pubHex  // dạng 128 ký tự hex Exness đưa khi tạo khoá
+
+  it('ký đúng chuẩn: EXN-DATA giải ra đúng trường, chữ ký kiểm được bằng khoá công khai', () => {
+    const h = signedHeaders('exnsk-abc', parsePrivateKey(exnHex), 'post', '/v1/partnership/affiliation', Buffer.from('{"email":"a@b.c"}'), 1773656070123)
+    const data = JSON.parse(Buffer.from(h['EXN-DATA'], 'base64url').toString())
+    expect(data).toEqual({ api_key: 'exnsk-abc', idempotency_key: '', timestamp: 1773656070123, sign_version: 1, method: 'POST', path: '/v1/partnership/affiliation', body_hash: createHash('sha256').update('{"email":"a@b.c"}').digest('base64url') })
+    expect(h['EXN-DATA']).not.toMatch(/=/)
+    expect(verify(null, Buffer.from(h['EXN-DATA'], 'base64url'), publicKey, Buffer.from(h['EXN-SIGN'], 'base64url'))).toBe(true)
+    expect(signedHeaders('k', parsePrivateKey(seedHex), 'GET', '/x')['EXN-SIGN']).toBeTruthy()  // chỉ seed 64 hex cũng đọc được
+    expect(JSON.parse(Buffer.from(signedHeaders('k', parsePrivateKey(exnHex), 'GET', '/x')['EXN-DATA'], 'base64url').toString()).body_hash).toBe('47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU')
+    expect(new ExnessPartner({ baseUrl: 'https://x', apiKey: 'k', privateKey: 'sai' }).error).toMatch(/128 ký tự hex/)
+  })
+
+  it('khách đăng ký bằng email Exness thuộc nhánh IB: tự lên Pro, thấy hoàn phí của mình; chủ app xem báo cáo', async () => {
+    const affiliated = new Set(['khach@ib.com'])
+    const calls: string[] = []
+    const fakeFetch = (async (url: string, init?: RequestInit) => {
+      const u = new URL(String(url)); calls.push(`${init?.method} ${u.pathname}`)
+      const h = init?.headers as Record<string, string>
+      if (!verify(null, Buffer.from(h['EXN-DATA'], 'base64url'), publicKey, Buffer.from(h['EXN-SIGN'], 'base64url'))) return new Response('{"code":1001,"error_message":"AUTH_INVALID_SIGNATURE"}', { status: 401 })
+      const signedPath = JSON.parse(Buffer.from(h['EXN-DATA'], 'base64url').toString()).path
+      if (signedPath !== u.pathname + u.search) return new Response('{}', { status: 401 })
+      if (u.pathname === '/v1/partnership/affiliation') {
+        const email = JSON.parse(String(init?.body)).email
+        return new Response(JSON.stringify(affiliated.has(email) ? { affiliation: true, accounts: ['77001'], client_uid: 'c1' } : { affiliation: false, accounts: [], client_uid: null }))
+      }
+      if (u.pathname.endsWith('/default-link')) return new Response(JSON.stringify({ full_default_link: 'https://one.exness-track.com/a/abc', domain: 'x', code: 'abc', path: '/a', url: 'u' }))
+      if (u.pathname.endsWith('/autorebates/payments')) return new Response(JSON.stringify({ data: [{ id: 1, status: 'PROCESSED', client_account: '77001', rebate_usd: 12.5, reward_usd: 12.5, volume_lots: 3, processed_date: '2026-11-19' }, { id: 2, status: 'PROCESSED', client_account: '99999', rebate_usd: 4, reward_usd: 4, volume_lots: 1, processed_date: '2026-11-19' }], totals: { processed_rebate_usd: 16.5, rejected_rebate_usd: 0, error_rebate_usd: 0 } }))
+      if (u.pathname.endsWith('/partner/summary')) return new Response(JSON.stringify({ clients_count: 42, summary_reward: { amount: '1234.5', currency: 'USD' } }))
+      if (u.pathname.endsWith('/reports/rewards')) return new Response(JSON.stringify({ data: [], totals: { reward_usd: '300', volume_lots: 120, orders_count: 500 } }))
+      if (u.pathname.endsWith('/autorebates/groups')) return new Response(JSON.stringify({ data: [{ id: 5, group_title: 'Hoàn 100%', group_type: 'AUTO', clients_count: 40, rebate_percent: 100, link_code: 'abc', is_default: false }] }))
+      return new Response('{}', { status: 404 })
+    }) as typeof fetch
+    const db = openDb('', ':memory:')
+    const deps: AppDeps = {
+      db, reader: { ready: () => false, join: async () => { throw new Error('x') } }, bot: { username: '', configured: () => false, send: async () => false },
+      ai: { envKey: '', envModel: 'claude-haiku-5-5', perDay: { free: 2, pro: 200 } }, channelsMax: { free: 2, pro: 20 }, secure: false,
+      relay: new Relay(), webDir: '/nonexistent', bridgeAiPerDay: { free: 1, pro: 50 },
+      exness: new ExnessPartner({ baseUrl: 'https://partner.example', apiKey: 'exnsk-abc', privateKey: exnHex }, fakeFetch),
+    }
+    const server = createServer(createHandler(routes(deps), '/nonexistent'))
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+    const jar: Record<string, string> = {}
+    const call = async (who: string, method: string, p: string, body?: unknown) => {
+      const res = await fetch(base + p, { method, headers: { 'content-type': 'application/json', cookie: jar[who] ?? '' }, body: body === undefined ? undefined : JSON.stringify(body) })
+      const c = res.headers.get('set-cookie'); if (c) jar[who] = c.split(';')[0]
+      return { status: res.status, body: await res.json() }
+    }
+    try {
+      const owner = await call('o', 'POST', '/api/auth/register', { email: 'chu@app.com', password: '12345678' })
+      expect(owner.body.plan).toBe('free')
+      const k = await call('k', 'POST', '/api/auth/register', { email: 'khach@ib.com', password: '12345678' })
+      expect(k.body).toMatchObject({ plan: 'pro', ib: { member: true, available: true } })
+      const mine = await call('k', 'GET', '/api/me/ib')
+      expect(mine.body).toMatchObject({ member: true, accounts: ['77001'], link: 'https://one.exness-track.com/a/abc' })
+      expect(mine.body.rebates).toEqual([{ account: '77001', status: 'PROCESSED', rebateUsd: 12.5, lots: 3, date: '2026-11-19' }])  // không thấy hoàn phí của khách khác
+      // khách chưa thuộc nhánh: mở tài khoản qua link rồi bấm kiểm tra lại
+      const n = await call('n', 'POST', '/api/auth/register', { email: 'moi@vidu.com', password: '12345678' })
+      expect(n.body.plan).toBe('free')
+      affiliated.add('moi@vidu.com')
+      expect((await call('n', 'POST', '/api/me/ib/check')).body.plan).toBe('pro')
+      expect((await call('n', 'POST', '/api/me/ib/check')).status).toBe(429)
+      // báo cáo IB chỉ cho chủ app
+      expect((await call('k', 'GET', '/api/admin/exness')).status).toBe(403)
+      const rep = await call('o', 'GET', '/api/admin/exness')
+      expect(rep.body).toMatchObject({ ready: true, ibUsers: 2, summary: { clients_count: 42 }, rewards: { totals: { reward_usd: '300' } }, groups: { data: [{ rebate_percent: 100 }] } })
+      expect(calls.filter((c) => c === 'GET /v1/partnership/autorebates/payments')).toHaveLength(1)  // giữ kết quả một lúc, không gọi lặp
+    } finally { server.close() }
   })
 })

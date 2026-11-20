@@ -7,6 +7,7 @@ import { config, secureCookies } from './config'
 import { openDb } from './db'
 import { createHandler } from './http'
 import { Relay, Watchdog, ensureTable } from './relay'
+import { ExnessPartner } from './exness'
 import { initSecrets } from './secrets'
 import { TgReader } from './tg'
 
@@ -23,7 +24,9 @@ const deps: AppDeps = {
   relay: new Relay(),
   webDir: config.webDir,
   bridgeAiPerDay: config.bridgeAiPerDay,
+  exness: new ExnessPartner(config.exness),
 }
+if (deps.exness?.configured) console.log(deps.exness.ready ? '[exness] đã nối Partnership API' : `[exness] khoá chưa dùng được: ${deps.exness.error}`)
 const reader = new TgReader(config.tgApiId, config.tgApiHash, path.join(config.dataDir, 'tg.session'), (tgId, m) => {
   const row = db.prepare("select id from channels where tg_id = ? and status = 'ok'").get(tgId) as { id: number } | undefined
   if (row) onChannelMessage(deps, row.id, m)

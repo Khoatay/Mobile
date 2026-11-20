@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { IbAdmin } from './IbPanels'
 import { ADMIN_EXTRA, api, type AdminAi, type MyAi, type ProviderOpt, type SlotCfg } from '../lib/server'
 
 const err = (e: unknown) => (e instanceof Error ? e.message : 'Lỗi không rõ')
@@ -152,6 +153,7 @@ export function AdminPage() {
     <>
       <h1>Quản trị</h1>
       <p className="muted">Chỉ bạn thấy trang này. Khách dùng AI của Golden Duck theo 2 ô dưới đây, tiền tính vào khoá của bạn.</p>
+      <IbAdmin />
       <section className="lite-card">
         <div className="lite-label">Chi phí AI</div>
         <div className="srv-usage">

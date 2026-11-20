@@ -11,6 +11,8 @@ export const SERVER = import.meta.env.VITE_SERVER === '1'
 export interface Me {
   id: number; email: string; name: string; plan: 'free' | 'pro'; planUntil: number | null; admin?: boolean; advanced?: boolean
   telegram: { linked: boolean; name: string; link: string }
+  /** Khách mở Exness dưới link IB của chủ app (máy chủ kiểm tra qua Exness Partnership API). */
+  ib?: { member: boolean; checked: number; available: boolean }
   limits: { channels: number; chatPerDay: number }
   chatToday: number
 }
